@@ -45,10 +45,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','list_kintone_records','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','get_kot_daily','get_kot_monthly','list_drive_files','read_drive_file','list_calendar_events','fetch_corp_api','fetch_corp_page']),
-  eigyo:   new Set(['list_kintone_records','search_hotprofile','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','list_drive_files','read_drive_file','list_calendar_events','fetch_corp_api','fetch_corp_page']),
-  recruit: new Set(['list_kintone_records','search_hotprofile','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','list_drive_files','read_drive_file','list_calendar_events','fetch_corp_api','fetch_corp_page']),
-  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','list_drive_files','read_drive_file','list_calendar_events'])
+  gyoumu:  new Set(['query_corp_db','list_kintone_records','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','get_kot_daily','get_kot_monthly','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page']),
+  eigyo:   new Set(['list_kintone_records','search_hotprofile','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page']),
+  recruit: new Set(['list_kintone_records','search_hotprofile','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page']),
+  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages'])
 };
 
 app.set('trust proxy', 1);
@@ -142,6 +142,13 @@ db.exec(`
     refresh_token TEXT,
     updated_at TEXT DEFAULT (datetime('now','localtime'))
   );
+
+  CREATE TABLE IF NOT EXISTS user_gmail_tokens (
+    email TEXT PRIMARY KEY,
+    access_token TEXT,
+    refresh_token TEXT,
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+  );
 `);
 
 function audit(email, name, action, details = {}) {
@@ -204,6 +211,7 @@ function requireAuth(req, res, next) {
   if (req.path === '/auth/kintone/callback') return next();
   if (req.path === '/auth/chatwork/callback') return next();
   if (req.path === '/auth/calendar/callback') return next();
+  if (req.path === '/auth/gmail/callback') return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'ログインが必要です' });
   res.redirect('/login');
 }
@@ -281,6 +289,49 @@ app.get('/auth/calendar/callback', async (req, res) => {
   } catch(e) {
     console.error('[calendar/callback] error:', e.message);
     res.redirect('/?calendar_error=1');
+  }
+});
+
+// ── Gmail 個人OAuth連携 ──
+app.get('/auth/gmail', requireAuth, (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).send('GOOGLE_CLIENT_IDが未設定です');
+  const callbackUrl = (process.env.CALLBACK_URL || '').replace('/auth/google/callback', '/auth/gmail/callback');
+  const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, callbackUrl);
+  const state = Buffer.from(req.user.email).toString('base64url');
+  const authUrl = oauth2.generateAuthUrl({
+    access_type: 'offline',
+    prompt: 'consent',
+    scope: ['https://www.googleapis.com/auth/gmail.readonly'],
+    state
+  });
+  res.redirect(authUrl);
+});
+
+app.get('/auth/gmail/callback', async (req, res) => {
+  const { code, error, state } = req.query;
+  if (error || !code) return res.redirect('/?gmail_error=1');
+  let userEmail = req.user?.email;
+  if (!userEmail && state) {
+    try { userEmail = Buffer.from(state, 'base64url').toString('utf8'); } catch(e) {}
+  }
+  if (!userEmail || !userEmail.endsWith('@' + ALLOWED_DOMAIN)) return res.redirect('/login');
+  try {
+    const callbackUrl = (process.env.CALLBACK_URL || '').replace('/auth/google/callback', '/auth/gmail/callback');
+    const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, callbackUrl);
+    const { tokens } = await oauth2.getToken(code);
+    db.prepare(`
+      INSERT INTO user_gmail_tokens (email, access_token, refresh_token)
+      VALUES (?, ?, ?)
+      ON CONFLICT(email) DO UPDATE SET
+        access_token = excluded.access_token,
+        refresh_token = COALESCE(excluded.refresh_token, refresh_token),
+        updated_at = datetime('now','localtime')
+    `).run(userEmail, tokens.access_token, tokens.refresh_token || null);
+    audit(userEmail, '', 'gmail.oauth.connect');
+    res.redirect('/?gmail_connected=1');
+  } catch(e) {
+    console.error('[gmail/callback] error:', e.message);
+    res.redirect('/?gmail_error=1');
   }
 });
 
@@ -586,6 +637,17 @@ const TOOLS = [
         max_results: { type: 'number', description: '最大件数（デフォルト20）' }
       }
     }
+  },
+  {
+    name: 'list_gmail_messages',
+    description: 'Gmailの受信トレイのメール一覧を取得する。件名・差出人・日時・スニペットを返す。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        max_results: { type: 'number', description: '最大件数（デフォルト20）' },
+        query: { type: 'string', description: 'Gmail検索クエリ（例: "from:xxx@example.com", "subject:見積", "is:unread"）' }
+      }
+    }
   }
 ];
 
@@ -800,6 +862,24 @@ async function executeTool(name, input, user) {
         location: e.location,
         description: e.description?.slice(0, 200)
       }));
+    }
+    case 'list_gmail_messages': {
+      audit(user.email, user.name, 'tool.gmail', { query: input.query });
+      const gmail = getGmailClientForUser(user);
+      const listRes = await gmail.users.messages.list({
+        userId: 'me',
+        labelIds: ['INBOX'],
+        maxResults: input.max_results || 20,
+        q: input.query || ''
+      });
+      const msgs = listRes.data.messages || [];
+      const details = await Promise.all(msgs.map(m =>
+        gmail.users.messages.get({ userId: 'me', id: m.id, format: 'metadata', metadataHeaders: ['Subject','From','Date'] })
+      ));
+      return details.map(d => {
+        const headers = Object.fromEntries((d.data.payload?.headers || []).map(h => [h.name, h.value]));
+        return { id: d.data.id, subject: headers['Subject'] || '', from: headers['From'] || '', date: headers['Date'] || '', snippet: d.data.snippet || '' };
+      });
     }
     default:
       throw new Error(`Unknown tool: ${name}`);
@@ -1764,6 +1844,97 @@ app.get('/api/drive/read/:id', async (req, res) => {
     }
 
     res.json({ id: req.params.id, name, mimeType, content: content.slice(0, 60000) });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Gmail API ──
+function getGmailClientForUser(user) {
+  const tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_gmail_tokens WHERE email=?').get(user.email);
+  if (!tokenRow?.refresh_token) {
+    throw new Error('Gmailが未連携です。GmailボタンからGmailに連携してください');
+  }
+  const oauth2 = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET
+  );
+  oauth2.setCredentials({ access_token: tokenRow.access_token, refresh_token: tokenRow.refresh_token });
+  oauth2.on('tokens', tokens => {
+    if (tokens.access_token) {
+      db.prepare("UPDATE user_gmail_tokens SET access_token=?, updated_at=datetime('now','localtime') WHERE email=?")
+        .run(tokens.access_token, user.email);
+    }
+  });
+  return google.gmail({ version: 'v1', auth: oauth2 });
+}
+
+function extractGmailBody(payload) {
+  if (payload.body?.data) return Buffer.from(payload.body.data, 'base64url').toString('utf8');
+  if (payload.parts) {
+    for (const part of payload.parts) {
+      if (part.mimeType === 'text/plain' && part.body?.data) {
+        return Buffer.from(part.body.data, 'base64url').toString('utf8');
+      }
+    }
+    for (const part of payload.parts) {
+      const body = extractGmailBody(part);
+      if (body) return body;
+    }
+  }
+  return '';
+}
+
+// GET /api/gmail/status
+app.get('/api/gmail/status', (req, res) => {
+  const row = db.prepare('SELECT refresh_token, updated_at FROM user_gmail_tokens WHERE email=?').get(req.user.email);
+  res.json({ connected: !!(row?.refresh_token), updatedAt: row?.updated_at || null });
+});
+
+// DELETE /api/gmail/disconnect
+app.delete('/api/gmail/disconnect', (req, res) => {
+  db.prepare('DELETE FROM user_gmail_tokens WHERE email=?').run(req.user.email);
+  audit(req.user.email, req.user.name, 'gmail.oauth.disconnect');
+  res.json({ ok: true });
+});
+
+// GET /api/gmail/messages?maxResults=20&q=
+app.get('/api/gmail/messages', async (req, res) => {
+  audit(req.user.email, req.user.name, 'gmail.messages');
+  try {
+    const gmail = getGmailClientForUser(req.user);
+    const maxResults = parseInt(req.query.maxResults || '20');
+    const q = req.query.q || '';
+    const listRes = await gmail.users.messages.list({ userId: 'me', labelIds: ['INBOX'], maxResults, q });
+    const msgs = listRes.data.messages || [];
+    const details = await Promise.all(msgs.map(m =>
+      gmail.users.messages.get({ userId: 'me', id: m.id, format: 'metadata', metadataHeaders: ['Subject','From','Date'] })
+    ));
+    res.json(details.map(d => {
+      const headers = Object.fromEntries((d.data.payload?.headers || []).map(h => [h.name, h.value]));
+      return { id: d.data.id, subject: headers['Subject'] || '', from: headers['From'] || '', date: headers['Date'] || '', snippet: d.data.snippet || '' };
+    }));
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/gmail/messages/:id
+app.get('/api/gmail/messages/:id', async (req, res) => {
+  audit(req.user.email, req.user.name, 'gmail.message.read', { id: req.params.id });
+  try {
+    const gmail = getGmailClientForUser(req.user);
+    const msg = await gmail.users.messages.get({ userId: 'me', id: req.params.id, format: 'full' });
+    const headers = Object.fromEntries((msg.data.payload?.headers || []).map(h => [h.name, h.value]));
+    const body = extractGmailBody(msg.data.payload || {});
+    res.json({
+      id: msg.data.id,
+      subject: headers['Subject'] || '',
+      from: headers['From'] || '',
+      to: headers['To'] || '',
+      date: headers['Date'] || '',
+      body: body.slice(0, 20000)
+    });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }

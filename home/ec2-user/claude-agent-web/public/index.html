@@ -448,6 +448,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
     <button class="header-btn" id="cwToggleBtn" onclick="toggleCw()">💬 Chatwork</button>
     <button class="header-btn" id="driveToggleBtn" onclick="toggleDrive()">📁 Drive</button>
     <button class="header-btn" id="calendarToggleBtn" onclick="toggleCalendar()">📅 Calendar</button>
+    <button class="header-btn" id="gmailToggleBtn" onclick="toggleGmail()">✉️ Gmail</button>
     <button class="header-btn" id="historyToggleBtn" onclick="toggleHistory()">📋 実行履歴</button>
     <span id="userBadge" style="font-size:12px;color:#718096;"></span>
     <span id="roleBadge" style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;display:none;"></span>
@@ -565,6 +566,26 @@ textarea:focus { border-color: var(--primary); background: #fff; }
     <button onclick="loadCalendarEvents()" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">表示</button>
   </div>
   <div id="calendarContent" style="flex:1;overflow-y:auto;padding:8px;">
+    <div class="drive-empty">読み込み中...</div>
+  </div>
+</div>
+
+<!-- ─ Gmail Panel ─ -->
+<div class="drive-panel" id="gmailPanel">
+  <div class="drive-panel-header">
+    <h3>✉️ Gmail</h3>
+    <button class="panel-close-btn" onclick="toggleGmail()">✕</button>
+  </div>
+  <div id="gmailStatusArea" style="border-bottom:1px solid var(--border);"></div>
+  <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;">
+    <input id="gmailQuery" type="text" placeholder="検索（例: from:xxx is:unread）" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;outline:none;">
+    <select id="gmailMax" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;outline:none;">
+      <option value="20">20件</option>
+      <option value="50">50件</option>
+    </select>
+    <button onclick="loadGmailMessages()" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">表示</button>
+  </div>
+  <div id="gmailContent" style="flex:1;overflow-y:auto;padding:8px;">
     <div class="drive-empty">読み込み中...</div>
   </div>
 </div>
@@ -828,6 +849,7 @@ async function send() {
             list_drive_files: 'Driveファイル一覧を取得中',
             read_drive_file: 'Driveファイルを読み取り中',
             list_calendar_events: 'カレンダーを取得中',
+            list_gmail_messages: 'メールを取得中',
           };
           let toolCallsEl = aiBubble.querySelector('.tool-calls');
           if (!toolCallsEl) {
@@ -1268,8 +1290,8 @@ async function attachCwMessages() {
 }
 
 // ─ パネル共通クローズ ─
-const ALL_PANELS = ['cwPanel','kotPanel','kintonePanel','drivePanel','calendarPanel','historyPanel'];
-const ALL_BTNS   = ['cwToggleBtn','kotToggleBtn','kintoneToggleBtn','driveToggleBtn','calendarToggleBtn','historyToggleBtn'];
+const ALL_PANELS = ['cwPanel','kotPanel','kintonePanel','drivePanel','calendarPanel','gmailPanel','historyPanel'];
+const ALL_BTNS   = ['cwToggleBtn','kotToggleBtn','kintoneToggleBtn','driveToggleBtn','calendarToggleBtn','gmailToggleBtn','historyToggleBtn'];
 function closeAllPanels(except) {
   ALL_PANELS.forEach((id, i) => { if (id !== except) { document.getElementById(id)?.classList.remove('open'); document.getElementById(ALL_BTNS[i])?.classList.remove('active'); } });
 }
@@ -1353,6 +1375,91 @@ async function loadCalendarEvents() {
       </div>`;
     }).join('');
   } catch(e) { content.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`; }
+}
+
+// ─ Gmail ─
+async function toggleGmail() {
+  const panel = document.getElementById('gmailPanel');
+  const btn = document.getElementById('gmailToggleBtn');
+  const isOpen = panel.classList.contains('open');
+  closeAllPanels('gmailPanel');
+  panel.classList.toggle('open', !isOpen);
+  btn.classList.toggle('active', !isOpen);
+  if (!isOpen) await loadGmailStatus();
+}
+
+async function loadGmailStatus() {
+  const statusArea = document.getElementById('gmailStatusArea');
+  try {
+    const status = await fetch('/api/gmail/status').then(r => r.json());
+    if (status.connected) {
+      statusArea.innerHTML = `
+        <div style="text-align:center;padding:14px 16px;">
+          <div style="font-size:28px;margin-bottom:6px;">✅</div>
+          <div style="font-size:14px;font-weight:700;color:#276749;margin-bottom:2px;">Gmail連携済み</div>
+          <div style="font-size:11px;color:#718096;margin-bottom:10px;">最終更新: ${esc(status.updatedAt || '')}</div>
+          <button onclick="disconnectGmail()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
+        </div>`;
+      await loadGmailMessages();
+    } else {
+      statusArea.innerHTML = `
+        <div style="text-align:center;padding:20px 16px;">
+          <div style="font-size:28px;margin-bottom:8px;">✉️</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">Gmail未連携</div>
+          <div style="font-size:12px;color:#718096;margin-bottom:16px;line-height:1.6;">連携するとAIエージェントがメールを確認できます</div>
+          <a href="/auth/gmail" style="display:inline-block;background:var(--primary);color:#fff;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;text-decoration:none;">Gmailに連携する</a>
+        </div>`;
+      document.getElementById('gmailContent').innerHTML = '';
+    }
+  } catch(e) {
+    statusArea.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`;
+  }
+}
+
+async function disconnectGmail() {
+  if (!confirm('Gmail連携を解除しますか？')) return;
+  await fetch('/api/gmail/disconnect', { method: 'DELETE' });
+  await loadGmailStatus();
+}
+
+async function loadGmailMessages() {
+  const content = document.getElementById('gmailContent');
+  const q = document.getElementById('gmailQuery')?.value || '';
+  const maxResults = document.getElementById('gmailMax')?.value || '20';
+  content.innerHTML = '<div class="drive-empty">読み込み中...</div>';
+  try {
+    const qs = new URLSearchParams({ maxResults, q });
+    const msgs = await fetch(`/api/gmail/messages?${qs}`).then(r => r.json());
+    if (msgs.error) { content.innerHTML = `<div class="drive-error">${esc(msgs.error)}</div>`; return; }
+    if (msgs.length === 0) { content.innerHTML = '<div class="drive-empty">メールがありません</div>'; return; }
+    content.innerHTML = msgs.map(m => {
+      const dateLabel = m.date ? new Date(m.date).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+      const fromName = m.from.replace(/<[^>]+>/, '').trim() || m.from;
+      return `<div class="drive-file-item" style="flex-direction:column;align-items:flex-start;gap:3px;border-bottom:1px solid var(--border);padding:10px 12px;cursor:pointer;" onclick="viewGmailMessage(${JSON.stringify(m.id)}, this)">
+        <div style="display:flex;align-items:center;gap:8px;width:100%;">
+          <span style="font-size:15px;">✉️</span>
+          <div style="flex:1;min-width:0;">
+            <div class="drive-file-name" style="white-space:normal;font-weight:600;">${esc(m.subject || '(件名なし)')}</div>
+            <div class="drive-file-meta">${esc(fromName)} · ${esc(dateLabel)}</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-light);padding-left:24px;line-height:1.5;">${esc(m.snippet)}</div>
+        <div class="gmail-body-area" style="display:none;margin-top:8px;padding:10px;background:#f7fafc;border-radius:8px;font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word;"></div>
+      </div>`;
+    }).join('');
+  } catch(e) { content.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`; }
+}
+
+async function viewGmailMessage(id, el) {
+  const bodyArea = el.querySelector('.gmail-body-area');
+  if (bodyArea.style.display !== 'none') { bodyArea.style.display = 'none'; return; }
+  bodyArea.style.display = 'block';
+  bodyArea.textContent = '読み込み中...';
+  try {
+    const msg = await fetch(`/api/gmail/messages/${encodeURIComponent(id)}`).then(r => r.json());
+    if (msg.error) { bodyArea.textContent = msg.error; return; }
+    bodyArea.textContent = msg.body || '(本文なし)';
+  } catch(e) { bodyArea.textContent = e.message; }
 }
 
 // ─ Kintone 連携 ─
