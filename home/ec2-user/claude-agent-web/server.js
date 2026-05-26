@@ -1482,6 +1482,12 @@ function getCorpDb() {
 
 // POST /api/db/query  body: { sql, params }
 // アロウリスト方式: 明示的に許可されたテーブルのみ照会可能。未定義テーブルはすべて拒否。
+//
+// ⚠️ 同期注意: このアロウリストは corp 側 PHP にも同じ内容が定義されています。
+//   多層防御のため両方に同じテーブル名を維持する必要があります。
+//   対応箇所: corp-dev-ec2/home/acrovision/www/corp.acrovision.jp/api/agent.php
+//             の case 'query': 内 $ALLOWED_TABLES（同じ6テーブル）
+//   テーブルを追加・削除する場合は必ず両方を更新してください。
 const DB_BLOCKED_KEYWORDS = /\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE|DESCRIBE|SHOW)\b/i;
 const DB_ALLOWED_TABLES = new Set([
   'kintone_employees',
@@ -2001,10 +2007,21 @@ async function runSkillBackground(task, ownerEmail) {
     .run(ownerEmail, task.skill_name || task.name, task.skill_title || task.title, 'running');
   const runId = runRow.lastInsertRowid;
 
+  const bgSystemPrompt = getSystemPromptForUser(role, ownerEmail) + `
+
+## 【バックグラウンド自動実行モード】
+スケジューラーがこのタスクを自動実行しています。以下のルールを厳守してください：
+- タスクの手順を「今すぐ」実行してください。スケジュール登録は不要です
+- register_task は使わない（スケジューリングはすでに完了しています）
+- Chatworkへの送信は send_system_notification を使用し、ユーザー確認なしで即送信
+- send_chatwork_message は使わない
+- 実行が完了したら結果のみ返してください`;
+
   let resultBuffer = '';
   try {
     const allowedToolNames = TOOLS_FOR_ROLE[role];
-    const activeTools = allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS;
+    const activeTools = (allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS)
+      .filter(t => t.name !== 'register_task');
     const messages = [{ role: 'user', content: prompt }];
     let toolRound = 0;
 
@@ -2012,7 +2029,7 @@ async function runSkillBackground(task, ownerEmail) {
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 4096,
-        system: getSystemPromptForUser(role, ownerEmail),
+        system: bgSystemPrompt,
         tools: activeTools,
         messages
       });
