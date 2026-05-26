@@ -1113,10 +1113,18 @@ app.get('/auth/chatwork/callback', async (req, res) => {
 });
 
 // GET /api/chatwork/status
-app.get('/api/chatwork/status', (req, res) => {
-  const row = db.prepare('SELECT expires_at, updated_at FROM user_chatwork_tokens WHERE email=?').get(req.user.email);
+app.get('/api/chatwork/status', async (req, res) => {
+  const row = db.prepare('SELECT * FROM user_chatwork_tokens WHERE email=?').get(req.user.email);
   if (!row) return res.json({ connected: false });
   const expired = row.expires_at ? new Date(row.expires_at) <= new Date() : false;
+  if (expired && row.refresh_token) {
+    try {
+      await refreshChatworkToken(row.refresh_token, req.user.email);
+      return res.json({ connected: true, expired: false, updatedAt: new Date().toISOString() });
+    } catch(e) {
+      return res.json({ connected: true, expired: true, updatedAt: row.updated_at });
+    }
+  }
   res.json({ connected: true, expired, updatedAt: row.updated_at });
 });
 
@@ -1347,10 +1355,18 @@ app.get('/auth/kintone/callback', async (req, res) => {
 });
 
 // GET /api/kintone/status
-app.get('/api/kintone/status', (req, res) => {
-  const row = db.prepare('SELECT expires_at, updated_at FROM user_kintone_tokens WHERE email=?').get(req.user.email);
+app.get('/api/kintone/status', async (req, res) => {
+  const row = db.prepare('SELECT * FROM user_kintone_tokens WHERE email=?').get(req.user.email);
   if (!row) return res.json({ connected: false });
   const expired = row.expires_at ? new Date(row.expires_at) <= new Date() : false;
+  if (expired && row.refresh_token) {
+    try {
+      await refreshKintoneToken(row.refresh_token, req.user.email);
+      return res.json({ connected: true, expired: false, updatedAt: new Date().toISOString() });
+    } catch(e) {
+      return res.json({ connected: true, expired: true, updatedAt: row.updated_at });
+    }
+  }
   res.json({ connected: true, expired, updatedAt: row.updated_at });
 });
 
