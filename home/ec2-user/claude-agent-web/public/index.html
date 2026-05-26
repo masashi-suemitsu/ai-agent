@@ -443,6 +443,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
     <h1>AI エージェント<small>仕事を任せる</small></h1>
   </div>
   <div class="header-right">
+    <button class="header-btn" id="kintoneToggleBtn" onclick="toggleKintone()">🔗 Kintone</button>
     <button class="header-btn" id="kotToggleBtn" onclick="toggleKot()">⏰ KoT</button>
     <button class="header-btn" id="cwToggleBtn" onclick="toggleCw()">💬 Chatwork</button>
     <button class="header-btn" id="driveToggleBtn" onclick="toggleDrive()">📁 Drive</button>
@@ -537,6 +538,17 @@ textarea:focus { border-color: var(--primary); background: #fff; }
   </div>
 </div>
 
+<!-- ─ Kintone Panel ─ -->
+<div class="drive-panel" id="kintonePanel">
+  <div class="drive-panel-header">
+    <h3>🔗 Kintone連携</h3>
+    <button class="panel-close-btn" onclick="toggleKintone()">✕</button>
+  </div>
+  <div id="kintoneContent" style="flex:1;overflow-y:auto;padding:24px 20px;">
+    <div class="drive-empty">読み込み中...</div>
+  </div>
+</div>
+
 <!-- ─ History Panel ─ -->
 <div class="history-panel" id="historyPanel">
   <div class="history-panel-header">
@@ -568,6 +580,16 @@ let driveAttachments = [];  // [{ name, content }]
     rb.style.display = 'inline-block';
   }
   await loadSidebar();
+
+  // Kintone OAuth コールバック後の通知
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('kintone_connected')) {
+    history.replaceState({}, '', '/');
+    setTimeout(() => toggleKintone(), 300);
+  } else if (urlParams.get('kintone_error')) {
+    history.replaceState({}, '', '/');
+    alert('Kintone連携に失敗しました。再度お試しください。');
+  }
 })();
 
 // ─ Sidebar: 会話履歴 + スキル ─
@@ -1000,6 +1022,8 @@ function toggleKot() {
   document.getElementById('cwToggleBtn').classList.remove('active');
   document.getElementById('drivePanel').classList.remove('open');
   document.getElementById('driveToggleBtn').classList.remove('active');
+  document.getElementById('kintonePanel').classList.remove('open');
+  document.getElementById('kintoneToggleBtn').classList.remove('active');
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
   if (!isOpen) {
@@ -1094,6 +1118,8 @@ async function toggleCw() {
   document.getElementById('driveToggleBtn').classList.remove('active');
   document.getElementById('kotPanel').classList.remove('open');
   document.getElementById('kotToggleBtn').classList.remove('active');
+  document.getElementById('kintonePanel').classList.remove('open');
+  document.getElementById('kintoneToggleBtn').classList.remove('active');
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
   if (!isOpen && cwRooms.length === 0) await loadCwRooms();
@@ -1189,8 +1215,65 @@ function toggleDrive() {
   document.getElementById('cwToggleBtn').classList.remove('active');
   document.getElementById('kotPanel').classList.remove('open');
   document.getElementById('kotToggleBtn').classList.remove('active');
+  document.getElementById('kintonePanel').classList.remove('open');
+  document.getElementById('kintoneToggleBtn').classList.remove('active');
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
+}
+
+// ─ Kintone 連携 ─
+async function toggleKintone() {
+  const panel = document.getElementById('kintonePanel');
+  const btn = document.getElementById('kintoneToggleBtn');
+  const isOpen = panel.classList.contains('open');
+  ['cwPanel','drivePanel','kotPanel','historyPanel'].forEach(id => document.getElementById(id).classList.remove('open'));
+  ['cwToggleBtn','driveToggleBtn','kotToggleBtn','historyToggleBtn'].forEach(id => document.getElementById(id).classList.remove('active'));
+  panel.classList.toggle('open', !isOpen);
+  btn.classList.toggle('active', !isOpen);
+  if (!isOpen) await loadKintoneStatus();
+}
+
+async function loadKintoneStatus() {
+  const content = document.getElementById('kintoneContent');
+  try {
+    const status = await fetch('/api/kintone/status').then(r => r.json());
+    if (status.connected) {
+      content.innerHTML = `
+        <div style="text-align:center;padding:16px 0;">
+          <div style="font-size:40px;margin-bottom:12px;">✅</div>
+          <div style="font-size:15px;font-weight:700;color:#276749;margin-bottom:4px;">Kintone連携済み</div>
+          <div style="font-size:12px;color:#718096;margin-bottom:20px;">最終更新: ${esc(status.updatedAt || '')}</div>
+          ${status.expired ? '<div style="background:#fff5f5;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:10px;font-size:12px;margin-bottom:16px;">トークンが期限切れです。再連携してください。</div>' : ''}
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <a href="/auth/kintone" style="display:block;background:var(--primary);color:#fff;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:600;text-decoration:none;text-align:center;">再連携する</a>
+            <button onclick="disconnectKintone()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;">連携を解除する</button>
+          </div>
+          <div style="margin-top:24px;padding:16px;background:#f7f8fc;border-radius:10px;text-align:left;">
+            <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;">AIエージェントで使うには</div>
+            <div style="font-size:12px;color:#718096;line-height:1.7;">チャットで「KintoneのアプリID 123 のレコードを見せて」のように話しかけると、あなたの権限でデータを取得します。</div>
+          </div>
+        </div>`;
+    } else {
+      content.innerHTML = `
+        <div style="text-align:center;padding:16px 0;">
+          <div style="font-size:40px;margin-bottom:12px;">🔗</div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Kintoneを連携する</div>
+          <div style="font-size:13px;color:#718096;line-height:1.7;margin-bottom:24px;">
+            自分のKintoneアカウントで連携すると、<br>あなたの権限で見えるデータにアクセスできます。<br><br>
+            <span style="font-size:11px;background:#f0f4ff;padding:6px 10px;border-radius:6px;display:inline-block;">ログインはGoogleと同じメールアドレスが使えます</span>
+          </div>
+          <a href="/auth/kintone" style="display:block;background:var(--primary);color:#fff;border-radius:10px;padding:13px 16px;font-size:14px;font-weight:600;text-decoration:none;text-align:center;">Kintoneでログインして連携する</a>
+        </div>`;
+    }
+  } catch(e) {
+    content.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`;
+  }
+}
+
+async function disconnectKintone() {
+  if (!confirm('Kintone連携を解除しますか？')) return;
+  await fetch('/api/kintone/disconnect', { method: 'DELETE' });
+  await loadKintoneStatus();
 }
 
 async function listDriveFiles() {
