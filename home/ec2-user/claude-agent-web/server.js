@@ -48,9 +48,9 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','list_kintone_records','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
-  eigyo:   new Set(['list_kintone_records','search_hotprofile','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
-  recruit: new Set(['list_kintone_records','search_hotprofile','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
+  eigyo:   new Set(['search_hotprofile','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
+  recruit: new Set(['search_hotprofile','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
   user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','register_task'])
 };
 
@@ -144,14 +144,6 @@ db.exec(`
     updated_at TEXT DEFAULT (datetime('now','localtime'))
   );
 
-  CREATE TABLE IF NOT EXISTS user_kintone_tokens (
-    email TEXT PRIMARY KEY,
-    access_token TEXT,
-    refresh_token TEXT,
-    expires_at TEXT,
-    updated_at TEXT DEFAULT (datetime('now','localtime'))
-  );
-
   CREATE TABLE IF NOT EXISTS user_chatwork_tokens (
     email TEXT PRIMARY KEY,
     access_token TEXT,
@@ -171,6 +163,12 @@ db.exec(`
     email TEXT PRIMARY KEY,
     access_token TEXT,
     refresh_token TEXT,
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+  );
+
+  CREATE TABLE IF NOT EXISTS user_settings (
+    email TEXT PRIMARY KEY,
+    custom_rules TEXT DEFAULT '',
     updated_at TEXT DEFAULT (datetime('now','localtime'))
   );
 `);
@@ -232,7 +230,6 @@ passport.deserializeUser((u, done) => done(null, u));
 
 function requireAuth(req, res, next) {
   if (req.isAuthenticated()) return next();
-  if (req.path === '/auth/kintone/callback') return next();
   if (req.path === '/auth/chatwork/callback') return next();
   if (req.path === '/auth/calendar/callback') return next();
   if (req.path === '/auth/gmail/callback') return next();
@@ -430,7 +427,10 @@ app.get('/api/admin/logs', (req, res) => {
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 function getSystemPrompt(role) {
+  const jstNow = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', weekday: 'short' });
   const base = `あなたは「仕事を任せるAIエージェント」です。ユーザーが依頼した業務を実際に実行します。
+
+現在の日本時間: ${jstNow}（タスク登録・時刻計算はこの時刻を基準にすること）
 
 ## 基本姿勢
 - ユーザーが何かを聞いたら、まずツールでデータを取得してから回答する
@@ -525,6 +525,17 @@ function getSystemPrompt(role) {
   return base + (roleContext[role] || roleContext.user);
 }
 
+function getSystemPromptForUser(role, email) {
+  let prompt = getSystemPrompt(role);
+  try {
+    const row = db.prepare('SELECT custom_rules FROM user_settings WHERE email=?').get(email);
+    if (row?.custom_rules?.trim()) {
+      prompt += `\n\n## あなたへの個人指示（${email} 専用・最優先で守ること）\n${row.custom_rules.trim()}`;
+    }
+  } catch(e) { /* テーブル未作成時など無視 */ }
+  return prompt;
+}
+
 // ── Tool Definitions ──
 const TOOLS = [
   {
@@ -537,18 +548,6 @@ const TOOLS = [
         params: { type: 'array', description: '?に対応するパラメータ配列', items: {} }
       },
       required: ['sql']
-    }
-  },
-  {
-    name: 'list_kintone_records',
-    description: 'KintoneアプリからレコードをAPIで取得する。',
-    input_schema: {
-      type: 'object',
-      properties: {
-        app_id: { type: 'string', description: 'KintoneアプリID' },
-        query: { type: 'string', description: 'Kintoneクエリ文字列（例: "status = \\"稼働中\\" limit 20"）' }
-      },
-      required: ['app_id']
     }
   },
   {
@@ -766,12 +765,6 @@ async function executeTool(name, input, user) {
       audit(user.email, user.name, 'tool.db', { preview: sql.slice(0, 100) });
       const [rows] = await pool.execute(sql, params);
       return { rows: rows.slice(0, 200), count: rows.length };
-    }
-    case 'list_kintone_records': {
-      if (!process.env.KINTONE_DOMAIN) throw new Error('Kintone未設定');
-      audit(user.email, user.name, 'tool.kintone', { appId: input.app_id });
-      const qs = new URLSearchParams({ app: input.app_id, query: input.query || 'limit 20' });
-      return await kintoneRequest(`/records.json?${qs}`, {}, user.email);
     }
     case 'search_hotprofile': {
       if (!process.env.HOTPROFILE_API_KEY) throw new Error('HotProfile未設定');
@@ -1067,7 +1060,7 @@ app.post('/api/chat', async (req, res) => {
     const role = user.role || getUserRole(user.email);
     const allowedToolNames = TOOLS_FOR_ROLE[role];
     const activeTools = allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS;
-    const systemPrompt = getSystemPrompt(role);
+    const systemPrompt = getSystemPromptForUser(role, user.email);
 
     const messages = history.map(m => ({ role: m.role, content: m.content }));
     let fullAssistantText = '';
@@ -1263,6 +1256,24 @@ app.post('/api/skills/:id/run', async (req, res) => {
     res.write(`data: ${JSON.stringify({ done: true, code: 1, runId })}\n\n`);
   }
   res.end();
+});
+
+// ── User Settings API ──
+
+app.get('/api/user-settings', (req, res) => {
+  const row = db.prepare('SELECT custom_rules FROM user_settings WHERE email=?').get(req.user.email);
+  res.json({ custom_rules: row?.custom_rules || '' });
+});
+
+app.put('/api/user-settings', (req, res) => {
+  const { custom_rules = '' } = req.body;
+  db.prepare(`
+    INSERT INTO user_settings (email, custom_rules, updated_at)
+    VALUES (?, ?, datetime('now','localtime'))
+    ON CONFLICT(email) DO UPDATE SET custom_rules=excluded.custom_rules, updated_at=excluded.updated_at
+  `).run(req.user.email, custom_rules.slice(0, 2000));
+  audit(req.user.email, req.user.name, 'user_settings.update');
+  res.json({ ok: true });
 });
 
 // ── Task Runs API ──
@@ -1509,180 +1520,6 @@ app.get('/api/db/tables', async (req, res) => {
     const [rows] = await pool.execute('SHOW TABLES');
     const all = rows.map(r => Object.values(r)[0]);
     res.json(all.filter(t => DB_ALLOWED_TABLES.has(String(t).toLowerCase())));
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── Kintone API ──
-async function refreshKintoneToken(refreshToken, email) {
-  const domain = process.env.KINTONE_DOMAIN;
-  const basicAuth = Buffer.from(`${process.env.KINTONE_OAUTH_CLIENT_ID}:${process.env.KINTONE_OAUTH_CLIENT_SECRET}`).toString('base64');
-  const r = await fetch(`https://${domain}.cybozu.com/oauth2/token`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Authorization': `Basic ${basicAuth}`
-    },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken
-    })
-  });
-  if (!r.ok) throw new Error('Kintoneトークンの更新に失敗しました。再連携してください。');
-  const data = await r.json();
-  const expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
-  db.prepare(`UPDATE user_kintone_tokens SET access_token=?, refresh_token=?, expires_at=?, updated_at=datetime('now','localtime') WHERE email=?`)
-    .run(data.access_token, data.refresh_token || refreshToken, expiresAt, email);
-  return data.access_token;
-}
-
-async function kintoneRequest(path, options = {}, userEmail = null) {
-  const domain = process.env.KINTONE_DOMAIN;
-  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
-
-  if (userEmail) {
-    const tokenRow = db.prepare('SELECT * FROM user_kintone_tokens WHERE email=?').get(userEmail);
-    if (tokenRow?.access_token) {
-      if (tokenRow.expires_at && new Date(tokenRow.expires_at) <= new Date()) {
-        if (tokenRow.refresh_token) {
-          const newToken = await refreshKintoneToken(tokenRow.refresh_token, userEmail);
-          headers['Authorization'] = `Bearer ${newToken}`;
-        } else {
-          throw new Error('Kintoneの認証が切れています。再連携してください。');
-        }
-      } else {
-        headers['Authorization'] = `Bearer ${tokenRow.access_token}`;
-      }
-    }
-  }
-
-  if (!headers['Authorization']) {
-    if (!process.env.KINTONE_USER) throw new Error('Kintone未連携 — 画面右上のKintoneボタンから連携してください');
-    const token = Buffer.from(`${process.env.KINTONE_USER}:${process.env.KINTONE_PASS}`).toString('base64');
-    headers['X-Cybozu-Authorization'] = token;
-  }
-
-  const r = await fetch(`https://${domain}.cybozu.com/k/v1${path}`, { ...options, headers });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.message || `Kintone error ${r.status}`);
-  return data;
-}
-
-// ── Kintone OAuth ──
-app.get('/auth/kintone', (req, res) => {
-  const domain = process.env.KINTONE_DOMAIN;
-  const clientId = process.env.KINTONE_OAUTH_CLIENT_ID;
-  if (!clientId) return res.status(503).send('KINTONE_OAUTH_CLIENT_IDが未設定です。環境変数を確認してください。');
-  const callbackUrl = process.env.KINTONE_CALLBACK_URL;
-  const state = Buffer.from(req.user.email).toString('base64url');
-  // スコープは%20区切りで明示的にエンコード
-  const authUrl = `https://${domain}.cybozu.com/oauth2/authorization`
-    + `?client_id=${encodeURIComponent(clientId)}`
-    + `&redirect_uri=${encodeURIComponent(callbackUrl)}`
-    + `&response_type=code`
-    + `&scope=${encodeURIComponent('k:app_record:read')}`
-    + `&state=${state}`;
-  console.log('[auth/kintone] redirecting to:', authUrl);
-  res.redirect(authUrl);
-});
-
-app.get('/auth/kintone/callback', async (req, res) => {
-  const { code, error, state } = req.query;
-  console.log('[kintone/callback] called', { code: !!code, error, state: !!state, auth: req.isAuthenticated() });
-  if (error || !code) {
-    console.log('[kintone/callback] no code, error:', error);
-    return res.redirect('/?kintone_error=1');
-  }
-  // stateからメールアドレスを復元
-  let userEmail = req.user?.email;
-  if (!userEmail && state) {
-    try { userEmail = Buffer.from(state, 'base64url').toString('utf8'); } catch(e) {}
-  }
-  if (!userEmail || !userEmail.endsWith('@acrovision.co.jp')) {
-    console.log('[kintone/callback] invalid user email:', userEmail);
-    return res.redirect('/login');
-  }
-  const domain = process.env.KINTONE_DOMAIN;
-  const callbackUrl = process.env.KINTONE_CALLBACK_URL;
-  console.log('[kintone/callback] exchanging code for', userEmail);
-  try {
-    const clientId = process.env.KINTONE_OAUTH_CLIENT_ID;
-    const clientSecret = process.env.KINTONE_OAUTH_CLIENT_SECRET;
-    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-    const r = await fetch(`https://${domain}.cybozu.com/oauth2/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${basicAuth}`
-      },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: callbackUrl
-      })
-    });
-    const resText = await r.text();
-    console.log('[kintone/callback] token response:', r.status, resText.slice(0, 200));
-    if (!r.ok) throw new Error(`Token exchange failed: ${r.status} ${resText}`);
-    const data = JSON.parse(resText);
-    const expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
-    db.prepare(`
-      INSERT INTO user_kintone_tokens (email, access_token, refresh_token, expires_at)
-      VALUES (?,?,?,?)
-      ON CONFLICT(email) DO UPDATE SET
-        access_token=excluded.access_token,
-        refresh_token=excluded.refresh_token,
-        expires_at=excluded.expires_at,
-        updated_at=datetime('now','localtime')
-    `).run(userEmail, data.access_token, data.refresh_token || '', expiresAt);
-    audit(userEmail, '', 'kintone.oauth.connect');
-    res.redirect('/?kintone_connected=1');
-  } catch(e) {
-    console.error('[kintone/callback] error:', e.message);
-    res.redirect('/?kintone_error=1');
-  }
-});
-
-// GET /api/kintone/status
-app.get('/api/kintone/status', async (req, res) => {
-  const row = db.prepare('SELECT * FROM user_kintone_tokens WHERE email=?').get(req.user.email);
-  if (!row) return res.json({ connected: false });
-  const expired = row.expires_at ? new Date(row.expires_at) <= new Date() : false;
-  if (expired && row.refresh_token) {
-    try {
-      await refreshKintoneToken(row.refresh_token, req.user.email);
-      return res.json({ connected: true, expired: false, updatedAt: new Date().toISOString() });
-    } catch(e) {
-      return res.json({ connected: true, expired: true, updatedAt: row.updated_at });
-    }
-  }
-  res.json({ connected: true, expired, updatedAt: row.updated_at });
-});
-
-// DELETE /api/kintone/disconnect
-app.delete('/api/kintone/disconnect', (req, res) => {
-  db.prepare('DELETE FROM user_kintone_tokens WHERE email=?').run(req.user.email);
-  audit(req.user.email, req.user.name, 'kintone.oauth.disconnect');
-  res.json({ ok: true });
-});
-
-// GET /api/kintone/apps
-app.get('/api/kintone/apps', async (req, res) => {
-  if (!process.env.KINTONE_DOMAIN) return res.status(503).json({ error: 'Kintone未設定' });
-  audit(req.user.email, req.user.name, 'kintone.apps');
-  try { res.json(await kintoneRequest('/apps.json', {}, req.user.email)); }
-  catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// GET /api/kintone/apps/:id/records?query=xxx&fields=xxx
-app.get('/api/kintone/apps/:id/records', async (req, res) => {
-  if (!process.env.KINTONE_DOMAIN) return res.status(503).json({ error: 'Kintone未設定' });
-  const { query = '', fields = '' } = req.query;
-  const appId = req.params.id;
-  audit(req.user.email, req.user.name, 'kintone.records', { appId, query: query.slice(0, 50) });
-  try {
-    const qs = new URLSearchParams({ app: appId, query: query || 'limit 20' });
-    if (fields) qs.set('fields', fields);
-    res.json(await kintoneRequest(`/records.json?${qs}`, {}, req.user.email));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2164,7 +2001,7 @@ async function runSkillBackground(task, ownerEmail) {
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 4096,
-        system: getSystemPrompt(role),
+        system: getSystemPromptForUser(role, ownerEmail),
         tools: activeTools,
         messages
       });

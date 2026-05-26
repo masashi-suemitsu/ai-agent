@@ -150,6 +150,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 <div class="page">
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('tasks')">⏰ タスク</button>
+    <button class="tab-btn" onclick="switchTab('history')">📊 実行履歴</button>
     <button class="tab-btn" onclick="switchTab('skills')">⚙️ スキル</button>
     <button class="tab-btn" onclick="switchTab('rules')">🔒 権限・ルール</button>
   </div>
@@ -162,6 +163,17 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <button class="filter-btn" onclick="filterTasks('disabled', this)">停止中のみ</button>
     </div>
     <div id="taskList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+  </div>
+
+  <!-- ─ 実行履歴 ─ -->
+  <div class="tab-content" id="tab-history">
+    <div class="filter-bar">
+      <button class="filter-btn active" onclick="filterHistory('all', this)">すべて</button>
+      <button class="filter-btn" onclick="filterHistory('done', this)">成功</button>
+      <button class="filter-btn" onclick="filterHistory('error', this)">エラー</button>
+      <button class="filter-btn" onclick="filterHistory('running', this)">実行中</button>
+    </div>
+    <div id="historyList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
 
   <!-- ─ スキル ─ -->
@@ -226,6 +238,7 @@ let modalSkillId = null;
   renderUserBadge(currentUser);
   await Promise.all([loadTasks(), loadSkills()]);
   renderRules(currentUser.role);
+  loadCustomRules();
 })();
 
 function renderUserBadge(me) {
@@ -252,6 +265,8 @@ function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   event.currentTarget.classList.add('active');
+  if (name === 'history') loadHistory();
+  if (name === 'rules') loadCustomRules();
 }
 
 // ─ 定期タスク ─
@@ -469,7 +484,7 @@ function renderRules(role) {
   const ri = roleInfo[role] || roleInfo.user;
 
   const allTools = [
-    { name: 'query_corp_db',         label: '社内DBを直接照会',       roles: ['admin','gyoumu'] },
+    { name: 'query_corp_db',         label: '社内DBを直接照会（アロウリスト適用）', roles: ['admin','gyoumu'] },
     { name: 'list_kintone_records',  label: 'Kintoneレコード取得',     roles: ['admin','gyoumu','eigyo','recruit'] },
     { name: 'search_hotprofile',     label: 'HotProfile名刺検索',      roles: ['admin','eigyo','recruit'] },
     { name: 'list_wp_posts',         label: 'WP投稿一覧取得',          roles: ['admin','eigyo'] },
@@ -479,25 +494,19 @@ function renderRules(role) {
     { name: 'list_chatwork_rooms',   label: 'Chatworkルーム一覧',      roles: ['admin','gyoumu','eigyo','recruit','user'] },
     { name: 'get_chatwork_messages', label: 'Chatworkメッセージ取得',  roles: ['admin','gyoumu','eigyo','recruit','user'] },
     { name: 'send_chatwork_message', label: 'Chatworkメッセージ送信',  roles: ['admin','gyoumu','eigyo','recruit','user'] },
-    { name: 'get_kot_daily',         label: 'KoT日次勤怠取得',         roles: ['admin','gyoumu'] },
-    { name: 'get_kot_monthly',       label: 'KoT月次勤怠取得',         roles: ['admin','gyoumu'] },
     { name: 'list_drive_files',      label: 'Driveファイル一覧',       roles: ['admin','gyoumu','eigyo','recruit','user'] },
     { name: 'read_drive_file',       label: 'Driveファイル読取',        roles: ['admin','gyoumu','eigyo','recruit','user'] },
-    { name: 'fetch_corp_api',        label: '社員専用データAPI',        roles: ['admin','gyoumu','eigyo','recruit'] },
+    { name: 'fetch_corp_api',        label: '社員専用データAPI',        roles: ['admin','gyoumu','eigyo'] },
     { name: 'fetch_corp_page',       label: '社内管理画面の参照',       roles: ['admin','gyoumu','eigyo','recruit'] },
     { name: 'list_calendar_events',  label: 'Googleカレンダー取得',    roles: ['admin','gyoumu','eigyo','recruit','user'] },
     { name: 'list_gmail_messages',   label: 'Gmail受信トレイ取得',     roles: ['admin','gyoumu','eigyo','recruit','user'] },
   ];
 
   const corpApiActions = [
-    { action: 'employees',      label: '社員一覧',         roles: ['admin','gyoumu','eigyo','recruit'] },
     { action: 'cases',          label: '案件データ',        roles: ['admin','eigyo'] },
     { action: 'contracts',      label: '契約データ',        roles: ['admin','gyoumu'] },
     { action: 'geppo',          label: '月報データ',        roles: ['admin','gyoumu','eigyo'] },
-    { action: 'candidates',     label: '採用候補者',        roles: ['admin','recruit'] },
-    { action: 'attendance',     label: '勤怠サマリ',        roles: ['admin','gyoumu'] },
-    { action: 'follow_signals', label: 'フォローシグナル',  roles: ['admin','gyoumu'] },
-    { action: 'query',          label: '任意SQLクエリ',     roles: ['admin','gyoumu'] },
+    { action: 'query',          label: '任意SQLクエリ（アロウリスト適用）', roles: ['admin','gyoumu'] },
   ];
 
   const myTools = allTools.filter(t => t.roles.includes(role));
@@ -551,7 +560,51 @@ function renderRules(role) {
         <tr><td class="tool-desc">エラー時の動作</td><td>代替手段があれば自動で試みる。すべて失敗した場合のみ報告</td></tr>
         <tr><td class="tool-desc">不明点の確認</td><td>1〜2個だけ端的に確認。多くを聞かない</td></tr>
       </table>
+    </div>
+
+    <div class="rules-block">
+      <div class="rules-block-title">✏️ 個人ルール（自分専用の指示）</div>
+      <div style="padding:16px 18px;">
+        <p style="font-size:12px;color:var(--text-light);margin-bottom:10px;line-height:1.7;">
+          AIが自分とやりとりするときだけ適用される指示を自由に記述できます。<br>
+          例：「返答は必ず箇条書きで」「Chatworkに送る文は100字以内で要約して」「案件名には必ず担当者名も添えて」
+        </p>
+        <textarea id="customRulesInput" placeholder="例：&#10;・返答は常に日本語で箇条書きにして&#10;・Kintoneの案件はステータス「稼働中」のみ対象にして&#10;・Chatworkに送る前に必ず内容を一行で要約して見せて"
+          style="width:100%;height:130px;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.75;resize:vertical;outline:none;font-family:inherit;transition:border-color .15s;"
+          onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+          <button class="btn btn-primary" onclick="saveCustomRules()" id="saveRulesBtn">保存する</button>
+          <span id="saveRulesMsg" style="font-size:12px;color:var(--success);display:none;">✓ 保存しました</span>
+        </div>
+      </div>
     </div>`;
+}
+
+async function loadCustomRules() {
+  try {
+    const data = await fetch('/api/user-settings').then(r => r.json());
+    const el = document.getElementById('customRulesInput');
+    if (el) el.value = data.custom_rules || '';
+  } catch(e) {}
+}
+async function saveCustomRules() {
+  const el = document.getElementById('customRulesInput');
+  const btn = document.getElementById('saveRulesBtn');
+  const msg = document.getElementById('saveRulesMsg');
+  if (!el || !btn) return;
+  btn.disabled = true; btn.textContent = '保存中...';
+  try {
+    const resp = await fetch('/api/user-settings', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ custom_rules: el.value })
+    });
+    if (!resp.ok) throw new Error('保存失敗');
+    if (msg) { msg.style.display = 'inline'; setTimeout(() => { msg.style.display = 'none'; }, 3000); }
+  } catch(e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '保存する';
+  }
 }
 
 // ─ スケジュールモーダル ─
@@ -611,7 +664,59 @@ function switchTabByName(name) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  document.querySelectorAll('.tab-btn')[name === 'tasks' ? 0 : name === 'skills' ? 1 : 2].classList.add('active');
+  const idx = { tasks: 0, history: 1, skills: 2, rules: 3 };
+  const btns = document.querySelectorAll('.tab-btn');
+  if (btns[idx[name] ?? 0]) btns[idx[name] ?? 0].classList.add('active');
+  if (name === 'history') loadHistory();
+}
+
+// ─ 実行履歴 ─
+let allHistory = [];
+
+async function loadHistory() {
+  try {
+    allHistory = await fetch('/api/task-runs').then(r => r.json());
+    renderHistory(allHistory);
+  } catch(e) {
+    document.getElementById('historyList').innerHTML = `<div class="empty"><p>${esc(e.message)}</p></div>`;
+  }
+}
+
+function filterHistory(type, btn) {
+  document.querySelectorAll('#tab-history .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const filtered = type === 'all' ? allHistory : allHistory.filter(r => r.status === type);
+  renderHistory(filtered);
+}
+
+function renderHistory(runs) {
+  const el = document.getElementById('historyList');
+  if (!runs.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><h3>実行履歴がありません</h3><p>タスクが実行されると、ここに記録が表示されます。</p></div>`;
+    return;
+  }
+  el.innerHTML = runs.map(r => {
+    const statusColor = r.status === 'done' ? 'badge-green' : r.status === 'error' ? 'badge-red' : 'badge-orange';
+    const statusText  = r.status === 'done' ? '✓ 成功' : r.status === 'error' ? '✗ エラー' : '⟳ 実行中';
+    const started  = fmtDt(r.started_at);
+    const finished = fmtDt(r.finished_at);
+    const duration = r.started_at && r.finished_at
+      ? Math.round((new Date(r.finished_at.replace(' ','T')+'Z') - new Date(r.started_at.replace(' ','T')+'Z')) / 1000) + '秒'
+      : '─';
+    return `<div class="card">
+      <div class="card-header">
+        <div class="card-title">${esc(r.skill_title || r.skill_name)}</div>
+        <div class="card-badges"><span class="badge ${statusColor}">${statusText}</span></div>
+      </div>
+      <div class="card-meta">
+        <span>🕐 開始: ${started}</span>
+        <span>🏁 完了: ${finished}</span>
+        <span>⏱ 所要: ${duration}</span>
+        <span style="font-size:11px;color:#a0aec0;">スキル: ${esc(r.skill_name)}</span>
+      </div>
+      ${r.result ? `<div style="background:#f7f8fc;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.75;color:var(--text);white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;">${esc(r.result)}</div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 // ─ 指示内容の展開 ─
@@ -630,8 +735,10 @@ function esc(t) {
 }
 function fmtDt(dt) {
   if (!dt) return '─';
-  const d = new Date(String(dt).replace(' ', 'T'));
-  return d.toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+  const s = String(dt).replace(' ', 'T');
+  // UTC文字列として扱いJSTに変換（末尾にZがなければ付加）
+  const d = new Date(s.endsWith('Z') || s.includes('+') ? s : s + 'Z');
+  return d.toLocaleString('ja-JP', { timeZone:'Asia/Tokyo', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
 }
 function intervalLabel(min) {
   if (min < 60)   return `${min}分ごと`;

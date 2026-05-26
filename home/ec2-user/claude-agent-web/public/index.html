@@ -325,31 +325,6 @@ textarea:focus { border-color: var(--primary); background: #fff; }
 .send-btn:hover:not(:disabled) { background: var(--primary-dark); }
 .send-btn:disabled { background: #a0aec0; cursor: default; }
 
-/* ─ KoT Panel ─ */
-.kot-panel {
-  position: fixed; top: 52px; right: -440px; width: 420px; bottom: 0;
-  background: #fff; border-left: 1px solid var(--border); display: flex;
-  flex-direction: column; z-index: 101; transition: right .25s ease;
-  box-shadow: -4px 0 16px rgba(0,0,0,.08);
-}
-.kot-panel.open { right: 0; }
-.kot-panel-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-.kot-panel-header h3 { font-size: 15px; font-weight: 700; }
-.kot-controls { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.kot-controls input[type=date] { border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px; font-size: 12px; outline: none; }
-.kot-controls input[type=date]:focus { border-color: var(--primary); }
-.kot-controls select { border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px; font-size: 12px; outline: none; background: #fff; }
-.kot-controls button { background: var(--primary); color: #fff; border: none; border-radius: 7px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
-.kot-controls button:hover { background: var(--primary-dark); }
-.kot-table-wrap { flex: 1; overflow: auto; padding: 10px; }
-.kot-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-.kot-table th { background: #f4f6fb; padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); font-weight: 600; color: var(--text); position: sticky; top: 0; }
-.kot-table td { padding: 6px 8px; border-bottom: 1px solid #f0f2f5; color: var(--text); vertical-align: top; }
-.kot-table tr:hover td { background: #fafbff; }
-.kot-attach-bar { padding: 10px 12px; border-top: 1px solid var(--border); }
-.kot-attach-bar button { width: 100%; padding: 8px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
-.kot-attach-bar button:hover { background: var(--primary-dark); }
-
 /* ─ Chatwork Panel ─ */
 .cw-panel {
   position: fixed; top: 52px; right: -440px; width: 420px; bottom: 0;
@@ -521,7 +496,7 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
   <div class="header-right">
     <span id="userBadge" style="font-size:12px;color:#718096;"></span>
     <span id="roleBadge" style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;display:none;"></span>
-    <a href="/manage" class="header-btn" style="text-decoration:none;">⚙️ タスク管理</a>
+    <a href="/manage" class="header-btn" style="text-decoration:none;">⚙️ 管理</a>
     <a href="/logout" class="header-btn" style="text-decoration:none;">ログアウト</a>
   </div>
 </header>
@@ -596,7 +571,7 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
     </div>
     <div class="rs-footer">
       <button class="rs-footer-btn" id="rs-schedule-btn" onclick="toggleSchedule()">
-        <span>⏰</span> 定期タスク
+        <span>⏰</span> タスク
       </button>
       <button class="rs-footer-btn" id="rs-history-btn" onclick="toggleHistory()">
         <span>📋</span> 実行履歴
@@ -624,17 +599,6 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
   <div id="driveStatusArea"></div>
 </div>
 
-<!-- ─ Kintone Panel ─ -->
-<div class="drive-panel" id="kintonePanel">
-  <div class="drive-panel-header">
-    <h3>🔗 Kintone連携</h3>
-    <button class="panel-close-btn" onclick="toggleKintone()">✕</button>
-  </div>
-  <div id="kintoneContent" style="flex:1;overflow-y:auto;padding:24px 20px;">
-    <div class="drive-empty">読み込み中...</div>
-  </div>
-</div>
-
 <!-- ─ Calendar Panel ─ -->
 <div class="drive-panel" id="calendarPanel">
   <div class="drive-panel-header">
@@ -656,7 +620,7 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
 <!-- ─ Schedule Panel ─ -->
 <div class="schedule-panel" id="schedulePanel">
   <div class="schedule-panel-header">
-    <h3>⏰ 定期タスク</h3>
+    <h3>⏰ タスク一覧</h3>
     <button class="panel-close-btn" onclick="toggleSchedule()">✕</button>
   </div>
   <div class="schedule-list" id="scheduleList">
@@ -737,13 +701,7 @@ let driveAttachments = [];  // [{ name, content }]
 
   // OAuth コールバック後の通知
   const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get('kintone_connected')) {
-    history.replaceState({}, '', '/');
-    setTimeout(() => toggleKintone(), 300);
-  } else if (urlParams.get('kintone_error')) {
-    history.replaceState({}, '', '/');
-    alert('Kintone連携に失敗しました。再度お試しください。');
-  } else if (urlParams.get('chatwork_connected')) {
+  if (urlParams.get('chatwork_connected')) {
     history.replaceState({}, '', '/');
     setTimeout(() => toggleCw(), 300);
   } else if (urlParams.get('chatwork_error')) {
@@ -949,7 +907,6 @@ async function send() {
           }
           const TOOL_LABELS = {
             query_corp_db: 'DBを照会中',
-            list_kintone_records: 'Kintoneを参照中',
             search_hotprofile: 'HotProfileを検索中',
             list_wp_posts: 'WP投稿を取得中',
             create_wp_post: 'WP投稿を作成中',
@@ -1522,60 +1479,6 @@ async function viewGmailMessage(id, el) {
   } catch(e) { bodyArea.textContent = e.message; }
 }
 
-// ─ Kintone 連携 ─
-async function toggleKintone() {
-  const panel = document.getElementById('kintonePanel');
-  const btn = document.getElementById('rs-kintone');
-  const isOpen = panel.classList.contains('open');
-  closeAllPanels('kintonePanel');
-  panel.classList.toggle('open', !isOpen);
-  btn.classList.toggle('active', !isOpen);
-  if (!isOpen) await loadKintoneStatus();
-}
-
-async function loadKintoneStatus() {
-  const content = document.getElementById('kintoneContent');
-  try {
-    const status = await fetch('/api/kintone/status').then(r => r.json());
-    if (status.connected) {
-      content.innerHTML = `
-        <div style="text-align:center;padding:16px 0;">
-          <div style="font-size:40px;margin-bottom:12px;">✅</div>
-          <div style="font-size:15px;font-weight:700;color:#276749;margin-bottom:4px;">Kintone連携済み</div>
-          <div style="font-size:12px;color:#718096;margin-bottom:20px;">最終更新: ${esc(status.updatedAt || '')}</div>
-          ${status.expired ? '<div style="background:#fff5f5;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:10px;font-size:12px;margin-bottom:16px;">トークンが期限切れです。再連携してください。</div>' : ''}
-          <div style="display:flex;flex-direction:column;gap:8px;">
-            <a href="/auth/kintone" style="display:block;background:var(--primary);color:#fff;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:600;text-decoration:none;text-align:center;">再連携する</a>
-            <button onclick="disconnectKintone()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;">連携を解除する</button>
-          </div>
-          <div style="margin-top:24px;padding:16px;background:#f7f8fc;border-radius:10px;text-align:left;">
-            <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;">AIエージェントで使うには</div>
-            <div style="font-size:12px;color:#718096;line-height:1.7;">チャットで「KintoneのアプリID 123 のレコードを見せて」のように話しかけると、あなたの権限でデータを取得します。</div>
-          </div>
-        </div>`;
-    } else {
-      content.innerHTML = `
-        <div style="text-align:center;padding:16px 0;">
-          <div style="font-size:40px;margin-bottom:12px;">🔗</div>
-          <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Kintoneを連携する</div>
-          <div style="font-size:13px;color:#718096;line-height:1.7;margin-bottom:24px;">
-            自分のKintoneアカウントで連携すると、<br>あなたの権限で見えるデータにアクセスできます。<br><br>
-            <span style="font-size:11px;background:#f0f4ff;padding:6px 10px;border-radius:6px;display:inline-block;">ログインはGoogleと同じメールアドレスが使えます</span>
-          </div>
-          <a href="/auth/kintone" style="display:block;background:var(--primary);color:#fff;border-radius:10px;padding:13px 16px;font-size:14px;font-weight:600;text-decoration:none;text-align:center;">Kintoneでログインして連携する</a>
-        </div>`;
-    }
-  } catch(e) {
-    content.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`;
-  }
-}
-
-async function disconnectKintone() {
-  if (!confirm('Kintone連携を解除しますか？')) return;
-  await fetch('/api/kintone/disconnect', { method: 'DELETE' });
-  await loadKintoneStatus();
-}
-
 async function listDriveFiles() {
   const folderId = document.getElementById('driveFolderInput').value.trim();
   if (!folderId) return;
@@ -1670,12 +1573,12 @@ async function loadScheduledTasks() {
   try {
     const tasks = await fetch('/api/scheduled-tasks').then(r => r.json());
     if (!tasks.length) {
-      list.innerHTML = '<div class="history-empty">定期タスクがありません<br><small style="opacity:.7;display:block;margin-top:6px;">スキル一覧の ⏰ から登録できます</small></div>';
+      list.innerHTML = '<div class="history-empty">タスクがありません<br><small style="opacity:.7;display:block;margin-top:6px;">スキル一覧の ⏰ ボタンから登録、またはチャットで「〇〇して」と依頼できます</small></div>';
       return;
     }
     list.innerHTML = tasks.map(t => {
       const isOnce = t.task_type === 'once';
-      const nextRun = t.next_run_at ? new Date(t.next_run_at.replace(' ','T')).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '─';
+      const nextRun = t.next_run_at ? new Date(t.next_run_at.replace(' ','T') + 'Z').toLocaleString('ja-JP', { timeZone:'Asia/Tokyo', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '─';
       const typeBadge = isOnce
         ? `<span style="background:#e9d8fd;color:#6b46c1;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:600;">単発</span>`
         : `<span style="background:#bee3f8;color:#2b6cb0;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:600;">定期</span>`;
@@ -1783,7 +1686,7 @@ async function toggleScheduledTask(id, enabled) {
 }
 
 async function deleteScheduledTask(id) {
-  if (!confirm('この定期タスクを削除しますか？')) return;
+  if (!confirm('このタスクを削除しますか？')) return;
   await fetch(`/api/scheduled-tasks/${id}`, { method: 'DELETE' });
   await loadScheduledTasks();
 }
