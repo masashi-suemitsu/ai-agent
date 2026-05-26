@@ -522,6 +522,22 @@ function renderRules(role) {
     </div>
 
     <div class="rules-block">
+      <div class="rules-block-title">✏️ 個人ルール（自分専用の指示）</div>
+      <div style="padding:14px 18px 16px;">
+        <div style="background:var(--primary-light);border-left:3px solid var(--primary);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--text);line-height:1.6;">
+          自分とのやりとりにだけ適用される指示を自由に設定できます。保存するとAIが毎回自動で守ります。
+        </div>
+        <textarea id="customRulesInput" placeholder="例：&#10;・返答は常に箇条書きにして&#10;・Chatworkに送る前に内容を1行で要約して見せて&#10;・案件名には必ず担当者名も添えて"
+          style="width:100%;height:120px;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.75;resize:vertical;outline:none;font-family:inherit;transition:border-color .15s;"
+          onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+          <button class="btn btn-primary" onclick="saveCustomRules()" id="saveRulesBtn">保存する</button>
+          <span id="saveRulesMsg" style="font-size:12px;color:var(--success);display:none;">✓ 保存しました</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="rules-block">
       <div class="rules-block-title">🔧 利用可能なツール（${myTools.length} / ${allTools.length}）</div>
       <table class="rules-table">
         <tr><th>ツール名</th><th>機能</th><th>利用可否</th></tr>
@@ -560,23 +576,6 @@ function renderRules(role) {
         <tr><td class="tool-desc">エラー時の動作</td><td>代替手段があれば自動で試みる。すべて失敗した場合のみ報告</td></tr>
         <tr><td class="tool-desc">不明点の確認</td><td>1〜2個だけ端的に確認。多くを聞かない</td></tr>
       </table>
-    </div>
-
-    <div class="rules-block">
-      <div class="rules-block-title">✏️ 個人ルール（自分専用の指示）</div>
-      <div style="padding:16px 18px;">
-        <p style="font-size:12px;color:var(--text-light);margin-bottom:10px;line-height:1.7;">
-          AIが自分とやりとりするときだけ適用される指示を自由に記述できます。<br>
-          例：「返答は必ず箇条書きで」「Chatworkに送る文は100字以内で要約して」「案件名には必ず担当者名も添えて」
-        </p>
-        <textarea id="customRulesInput" placeholder="例：&#10;・返答は常に日本語で箇条書きにして&#10;・Kintoneの案件はステータス「稼働中」のみ対象にして&#10;・Chatworkに送る前に必ず内容を一行で要約して見せて"
-          style="width:100%;height:130px;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.75;resize:vertical;outline:none;font-family:inherit;transition:border-color .15s;"
-          onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
-          <button class="btn btn-primary" onclick="saveCustomRules()" id="saveRulesBtn">保存する</button>
-          <span id="saveRulesMsg" style="font-size:12px;color:var(--success);display:none;">✓ 保存しました</span>
-        </div>
-      </div>
     </div>`;
 }
 

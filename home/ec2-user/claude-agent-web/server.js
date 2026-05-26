@@ -49,8 +49,8 @@ const CORP_API_ALLOWED = {
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
   gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
-  eigyo:   new Set(['search_hotprofile','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
-  recruit: new Set(['search_hotprofile','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
+  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
   user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','register_task'])
 };
 
@@ -478,7 +478,16 @@ function getSystemPrompt(role) {
 **【重要制約】タスクの自動実行・スケジュール管理は必ず \`register_task\` ツールのみで行う。**
 - Google Apps Script・Zapier・cron・その他外部ツールの利用を提案しない
 - 「自分では予約送信できない」「タイマー機能がない」などの説明は不要。\`register_task\` で実現できる
-- ユーザーが自動実行・予約実行を求めたら、迷わず \`register_task\` を使う`;
+- ユーザーが自動実行・予約実行を求めたら、迷わず \`register_task\` を使う
+
+## 個人ルール機能
+ユーザーは /manage > 権限・ルール タブの「個人ルール」に、自分専用の指示を登録できます。
+登録されたルールはそのユーザーとのやりとりすべてに自動適用されます（毎回言わなくてよい）。
+
+以下の場面で積極的に案内してください：
+- ユーザーが「いつも〇〇してほしい」「毎回〜の形式で」と繰り返し同じ指示をしてきたとき
+- ユーザーが応答スタイルや動作の好みを伝えてきたとき
+→「/manage の個人ルールに登録しておくと、毎回自動で適用されます」と案内する`;
 
   const roleContext = {
     admin: `
@@ -540,7 +549,7 @@ function getSystemPromptForUser(role, email) {
 const TOOLS = [
   {
     name: 'query_corp_db',
-    description: '社内MySQL DB（corp_acro_jp）をSELECTで照会する。アロウリスト方式：照会可能なテーブルは kintone_employees / kintone_contract / kintone_anken_eigyo / geppo_data / kintone_customers / kintone_seikyu の6つのみ。これ以外のテーブルは拒否される。',
+    description: '社内MySQL DB（corp_acro_jp）をSELECTで照会する。アロウリスト方式：照会可能なテーブルは kintone_employees / kintone_contract / kintone_anken_eigyo / geppo_data / kintone_customers / kintone_seikyu / hotprofile_business_cards（名刺データ・18,134件）の7つのみ。これ以外のテーブルは拒否される。',
     input_schema: {
       type: 'object',
       properties: {
@@ -548,18 +557,6 @@ const TOOLS = [
         params: { type: 'array', description: '?に対応するパラメータ配列', items: {} }
       },
       required: ['sql']
-    }
-  },
-  {
-    name: 'search_hotprofile',
-    description: 'HotProfileで名刺・人脈データを検索する。',
-    input_schema: {
-      type: 'object',
-      properties: {
-        keyword: { type: 'string', description: 'フリーワード' },
-        company: { type: 'string', description: '会社名' },
-        name: { type: 'string', description: '氏名' }
-      }
     }
   },
   {
@@ -757,23 +754,23 @@ async function executeTool(name, input, user) {
       const pool = getCorpDb();
       if (!pool) throw new Error('Corp DB未設定');
       const dbRole = user.role || getUserRole(user.email);
-      if (!['admin','gyoumu'].includes(dbRole)) throw new Error('DBの直接照会は業務管理部・管理者のみ許可されています');
+      if (!['admin','gyoumu'].includes(dbRole)) {
+        audit(user.email, user.name, 'tool.db.denied', { reason: 'role', role: dbRole, preview: (input.sql || '').slice(0, 100) });
+        throw new Error('DBの直接照会は業務管理部・管理者のみ許可されています');
+      }
       const { sql, params = [] } = input;
-      if (DB_BLOCKED_KEYWORDS.test(sql)) throw new Error('SELECT のみ許可（SHOW/DESCRIBE等は不可）');
+      if (DB_BLOCKED_KEYWORDS.test(sql)) {
+        audit(user.email, user.name, 'tool.db.denied', { reason: 'keyword', preview: sql.slice(0, 100) });
+        throw new Error('SELECT のみ許可（SHOW/DESCRIBE等は不可）');
+      }
       const allowCheck = checkSqlAllowed(sql);
-      if (!allowCheck.ok) throw new Error(DB_DENIED_MESSAGE(sql));
+      if (!allowCheck.ok) {
+        audit(user.email, user.name, 'tool.db.denied', { reason: 'table', table: allowCheck.table, preview: sql.slice(0, 100) });
+        throw new Error(DB_DENIED_MESSAGE(sql));
+      }
       audit(user.email, user.name, 'tool.db', { preview: sql.slice(0, 100) });
       const [rows] = await pool.execute(sql, params);
       return { rows: rows.slice(0, 200), count: rows.length };
-    }
-    case 'search_hotprofile': {
-      if (!process.env.HOTPROFILE_API_KEY) throw new Error('HotProfile未設定');
-      audit(user.email, user.name, 'tool.hotprofile', { q: input.keyword });
-      const qs = new URLSearchParams();
-      if (input.keyword) qs.set('keyword', input.keyword);
-      if (input.company) qs.set('company_name', input.company);
-      if (input.name) qs.set('name', input.name);
-      return await hotprofileFetch(`contacts?${qs}`);
     }
     case 'list_wp_posts': {
       if (!process.env.WP_URL) throw new Error('WordPress未設定');
@@ -856,7 +853,10 @@ async function executeTool(name, input, user) {
       if (!corpToken) throw new Error('CORP_AGENT_TOKEN未設定');
       const role = user.role || getUserRole(user.email);
       const allowed = CORP_API_ALLOWED[role] || [];
-      if (!allowed.includes(input.action)) throw new Error(`このアクション(${input.action})へのアクセス権限がありません`);
+      if (!allowed.includes(input.action)) {
+        audit(user.email, user.name, 'tool.corp_api.denied', { reason: 'action', action: input.action, role });
+        throw new Error(`このアクション(${input.action})へのアクセス権限がありません`);
+      }
       audit(user.email, user.name, 'tool.corp_api', { action: input.action });
       const qs = new URLSearchParams({ action: input.action });
       if (input.month)    qs.set('month', input.month);
@@ -866,9 +866,15 @@ async function executeTool(name, input, user) {
       // Node.js native fetch overrides Host header — use http module directly
       const isQuery = (input.action === 'query' && input.sql);
       if (isQuery) {
-        if (DB_BLOCKED_KEYWORDS.test(input.sql)) throw new Error('SELECT のみ許可（SHOW/DESCRIBE等は不可）');
+        if (DB_BLOCKED_KEYWORDS.test(input.sql)) {
+          audit(user.email, user.name, 'tool.corp_api.denied', { reason: 'keyword', preview: input.sql.slice(0, 100) });
+          throw new Error('SELECT のみ許可（SHOW/DESCRIBE等は不可）');
+        }
         const allowCheck = checkSqlAllowed(input.sql);
-        if (!allowCheck.ok) throw new Error(DB_DENIED_MESSAGE(input.sql));
+        if (!allowCheck.ok) {
+          audit(user.email, user.name, 'tool.corp_api.denied', { reason: 'table', table: allowCheck.table, preview: input.sql.slice(0, 100) });
+          throw new Error(DB_DENIED_MESSAGE(input.sql));
+        }
       }
       const postBody = isQuery ? `action=query&sql=${encodeURIComponent(input.sql)}&params=${encodeURIComponent(JSON.stringify(input.params || []))}` : null;
       const data = await new Promise((resolve, reject) => {
@@ -975,6 +981,10 @@ async function executeTool(name, input, user) {
         run_at
       } = input;
       if (!skill_name || !steps) throw new Error('skill_name と steps は必須です');
+      const validation = await validateTaskSteps(steps, skill_title || skill_name);
+      if (!validation.ok) {
+        return { ok: false, validation_failed: true, issue: validation.issue, message: `⚠️ タスク登録前チェックで問題が見つかりました：${validation.issue}\n\n手順の記述を修正してから再度登録してください。` };
+      }
       let nextRunAt;
       if (task_type === 'once') {
         if (!run_at) throw new Error('単発タスクには run_at（実行日時）が必要です');
@@ -1246,11 +1256,11 @@ app.post('/api/skills/:id/run', async (req, res) => {
         }
       }
     }
-    db.prepare('UPDATE task_runs SET status=?, result=?, finished_at=datetime("now","localtime") WHERE id=?')
+    db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
       .run('done', resultBuffer.slice(0, 2000), runId);
     res.write(`data: ${JSON.stringify({ done: true, code: 0, runId })}\n\n`);
   } catch(e) {
-    db.prepare('UPDATE task_runs SET status=?, result=?, finished_at=datetime("now","localtime") WHERE id=?')
+    db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
       .run('error', e.message.slice(0, 2000), runId);
     res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
     res.write(`data: ${JSON.stringify({ done: true, code: 1, runId })}\n\n`);
@@ -1479,7 +1489,8 @@ const DB_ALLOWED_TABLES = new Set([
   'kintone_anken_eigyo',
   'geppo_data',
   'kintone_customers',
-  'kintone_seikyu'
+  'kintone_seikyu',
+  'hotprofile_business_cards'
 ]);
 // SQLからFROM/JOIN後のテーブル参照を抽出し、すべてアロウリストに含まれるか検査
 function checkSqlAllowed(sql) {
@@ -1502,9 +1513,15 @@ app.post('/api/db/query', async (req, res) => {
   if (!pool) return res.status(503).json({ error: 'Corp DB未設定' });
   const { sql, params = [] } = req.body;
   if (!sql) return res.status(400).json({ error: 'sql is required' });
-  if (DB_BLOCKED_KEYWORDS.test(sql)) return res.status(403).json({ error: '読み取り専用です（SELECT のみ許可、SHOW/DESCRIBE等は不可）' });
+  if (DB_BLOCKED_KEYWORDS.test(sql)) {
+    audit(req.user.email, req.user.name, 'db.query.denied', { reason: 'keyword', preview: sql.slice(0, 100) });
+    return res.status(403).json({ error: '読み取り専用です（SELECT のみ許可、SHOW/DESCRIBE等は不可）' });
+  }
   const allowCheck = checkSqlAllowed(sql);
-  if (!allowCheck.ok) return res.status(403).json({ error: DB_DENIED_MESSAGE(sql) });
+  if (!allowCheck.ok) {
+    audit(req.user.email, req.user.name, 'db.query.denied', { reason: 'table', table: allowCheck.table, preview: sql.slice(0, 100) });
+    return res.status(403).json({ error: DB_DENIED_MESSAGE(sql) });
+  }
   audit(req.user.email, req.user.name, 'db.query', { preview: sql.slice(0, 100) });
   try {
     const [rows] = await pool.execute(sql, params);
@@ -1521,43 +1538,6 @@ app.get('/api/db/tables', async (req, res) => {
     const all = rows.map(r => Object.values(r)[0]);
     res.json(all.filter(t => DB_ALLOWED_TABLES.has(String(t).toLowerCase())));
   } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── HotProfile API ──
-async function hotprofileFetch(path, options = {}) {
-  const base = process.env.HOTPROFILE_BASE_URL || 'https://hammock.hotprofile.biz/rest_api/v1/';
-  const r = await fetch(`${base}${path}`, {
-    ...options,
-    headers: {
-      'X-HP-API-KEY': process.env.HOTPROFILE_API_KEY,
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
-    }
-  });
-  if (!r.ok) throw new Error(`HotProfile error: ${r.status} ${await r.text()}`);
-  return r.json();
-}
-
-// GET /api/hotprofile/search?q=xxx
-app.get('/api/hotprofile/search', async (req, res) => {
-  if (!process.env.HOTPROFILE_API_KEY) return res.status(503).json({ error: 'HotProfile未設定' });
-  const { q, company, name } = req.query;
-  audit(req.user.email, req.user.name, 'hotprofile.search', { q });
-  try {
-    const qs = new URLSearchParams();
-    if (q) qs.set('keyword', q);
-    if (company) qs.set('company_name', company);
-    if (name) qs.set('name', name);
-    res.json(await hotprofileFetch(`contacts?${qs}`));
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// GET /api/hotprofile/contacts/:id
-app.get('/api/hotprofile/contacts/:id', async (req, res) => {
-  if (!process.env.HOTPROFILE_API_KEY) return res.status(503).json({ error: 'HotProfile未設定' });
-  audit(req.user.email, req.user.name, 'hotprofile.contact', { id: req.params.id });
-  try { res.json(await hotprofileFetch(`contacts/${req.params.id}`)); }
-  catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── WordPress REST API ──
@@ -1980,6 +1960,37 @@ app.delete('/api/scheduled-tasks/:id', (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Task Validator ──
+async function validateTaskSteps(steps, skillTitle) {
+  try {
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 256,
+      messages: [{
+        role: 'user',
+        content: `以下のタスク定義を評価してください。
+
+タイトル: ${skillTitle || '(未設定)'}
+実行手順:
+${steps}
+
+評価してください：
+1. 手順が具体的か（どのツールを使い、何を取得・出力するかが明確か）
+2. 実行可能か（曖昧な表現・未定義の変数・前提情報の欠落がないか）
+3. 意図しない副作用のリスク（誤送信・誤操作の可能性）
+
+必ずこのJSON形式のみで返答：
+{"ok":true} または {"ok":false,"issue":"問題点を1文で（日本語）"}`
+      }]
+    });
+    const text = resp.content[0]?.text?.trim() || '';
+    const m = text.match(/\{[\s\S]*\}/);
+    return m ? JSON.parse(m[0]) : { ok: true };
+  } catch(e) {
+    return { ok: true };
+  }
+}
+
 // ── Background Skill Runner ──
 async function runSkillBackground(task, ownerEmail) {
   const role = getUserRole(ownerEmail);
@@ -2026,12 +2037,12 @@ async function runSkillBackground(task, ownerEmail) {
       toolRound++;
     }
 
-    db.prepare('UPDATE task_runs SET status=?, result=?, finished_at=datetime("now","localtime") WHERE id=?')
+    db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
       .run('done', resultBuffer.slice(0, 2000), runId);
     audit(ownerEmail, '', 'scheduled_task.ran', { skillName: task.skill_name, runId });
     return { ok: true, runId };
   } catch(e) {
-    db.prepare('UPDATE task_runs SET status=?, result=?, finished_at=datetime("now","localtime") WHERE id=?')
+    db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
       .run('error', e.message.slice(0, 2000), runId);
     return { ok: false, error: e.message, runId };
   }

@@ -4,5 +4,10 @@ home/ec2-user/claude-agent-web/*.db
 home/ec2-user/claude-agent-web/*.sqlite
 home/ec2-user/claude-agent-web/*.log
 home/ec2-user/claude-agent-web/*.tmp
+home/ec2-user/claude-agent-web/analyze_cases.py
 .env
 .env.*
+
+# Claude Code / ローカル開発用
+.claude/
+_ul
