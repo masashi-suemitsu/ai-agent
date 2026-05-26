@@ -135,6 +135,13 @@ db.exec(`
     expires_at TEXT,
     updated_at TEXT DEFAULT (datetime('now','localtime'))
   );
+
+  CREATE TABLE IF NOT EXISTS user_calendar_tokens (
+    email TEXT PRIMARY KEY,
+    access_token TEXT,
+    refresh_token TEXT,
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+  );
 `);
 
 function audit(email, name, action, details = {}) {
@@ -196,6 +203,7 @@ function requireAuth(req, res, next) {
   if (req.isAuthenticated()) return next();
   if (req.path === '/auth/kintone/callback') return next();
   if (req.path === '/auth/chatwork/callback') return next();
+  if (req.path === '/auth/calendar/callback') return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'ログインが必要です' });
   res.redirect('/login');
 }
@@ -231,6 +239,49 @@ app.get('/auth/google/callback',
 app.get('/logout', (req, res) => {
   if (req.user) audit(req.user.email, req.user.name, 'logout');
   req.logout(() => res.redirect('/login'));
+});
+
+// ── Google Calendar 個人OAuth連携 ──
+app.get('/auth/calendar', requireAuth, (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).send('GOOGLE_CLIENT_IDが未設定です');
+  const callbackUrl = (process.env.CALLBACK_URL || '').replace('/auth/google/callback', '/auth/calendar/callback');
+  const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, callbackUrl);
+  const state = Buffer.from(req.user.email).toString('base64url');
+  const authUrl = oauth2.generateAuthUrl({
+    access_type: 'offline',
+    prompt: 'consent',
+    scope: ['https://www.googleapis.com/auth/calendar.readonly'],
+    state
+  });
+  res.redirect(authUrl);
+});
+
+app.get('/auth/calendar/callback', async (req, res) => {
+  const { code, error, state } = req.query;
+  if (error || !code) return res.redirect('/?calendar_error=1');
+  let userEmail = req.user?.email;
+  if (!userEmail && state) {
+    try { userEmail = Buffer.from(state, 'base64url').toString('utf8'); } catch(e) {}
+  }
+  if (!userEmail || !userEmail.endsWith('@' + ALLOWED_DOMAIN)) return res.redirect('/login');
+  try {
+    const callbackUrl = (process.env.CALLBACK_URL || '').replace('/auth/google/callback', '/auth/calendar/callback');
+    const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, callbackUrl);
+    const { tokens } = await oauth2.getToken(code);
+    db.prepare(`
+      INSERT INTO user_calendar_tokens (email, access_token, refresh_token)
+      VALUES (?, ?, ?)
+      ON CONFLICT(email) DO UPDATE SET
+        access_token = excluded.access_token,
+        refresh_token = COALESCE(excluded.refresh_token, refresh_token),
+        updated_at = datetime('now','localtime')
+    `).run(userEmail, tokens.access_token, tokens.refresh_token || null);
+    audit(userEmail, '', 'calendar.oauth.connect');
+    res.redirect('/?calendar_connected=1');
+  } catch(e) {
+    console.error('[calendar/callback] error:', e.message);
+    res.redirect('/?calendar_error=1');
+  }
 });
 
 app.get('/api/me', (req, res) => {
@@ -1580,9 +1631,9 @@ app.post('/api/ai/chat', async (req, res) => {
 
 // ── Google Calendar API ──
 function getCalendarClientForUser(user) {
-  const tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
+  const tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_calendar_tokens WHERE email=?').get(user.email);
   if (!tokenRow?.refresh_token) {
-    throw new Error('Googleカレンダーが未連携です。一度ログアウトして再ログインしてください');
+    throw new Error('Googleカレンダーが未連携です。カレンダーボタンから連携してください');
   }
   const oauth2 = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -1591,7 +1642,7 @@ function getCalendarClientForUser(user) {
   oauth2.setCredentials({ access_token: tokenRow.access_token, refresh_token: tokenRow.refresh_token });
   oauth2.on('tokens', tokens => {
     if (tokens.access_token) {
-      db.prepare("UPDATE user_drive_tokens SET access_token=?, updated_at=datetime('now','localtime') WHERE email=?")
+      db.prepare("UPDATE user_calendar_tokens SET access_token=?, updated_at=datetime('now','localtime') WHERE email=?")
         .run(tokens.access_token, user.email);
     }
   });
@@ -1600,8 +1651,15 @@ function getCalendarClientForUser(user) {
 
 // GET /api/calendar/status
 app.get('/api/calendar/status', (req, res) => {
-  const row = db.prepare('SELECT refresh_token, updated_at FROM user_drive_tokens WHERE email=?').get(req.user.email);
+  const row = db.prepare('SELECT refresh_token, updated_at FROM user_calendar_tokens WHERE email=?').get(req.user.email);
   res.json({ connected: !!(row?.refresh_token), updatedAt: row?.updated_at || null });
+});
+
+// DELETE /api/calendar/disconnect
+app.delete('/api/calendar/disconnect', (req, res) => {
+  db.prepare('DELETE FROM user_calendar_tokens WHERE email=?').run(req.user.email);
+  audit(req.user.email, req.user.name, 'calendar.oauth.disconnect');
+  res.json({ ok: true });
 });
 
 // GET /api/calendar/events?days=7&maxResults=20

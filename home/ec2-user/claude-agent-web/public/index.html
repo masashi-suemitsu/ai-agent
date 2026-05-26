@@ -555,6 +555,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
     <h3>📅 Googleカレンダー</h3>
     <button class="panel-close-btn" onclick="toggleCalendar()">✕</button>
   </div>
+  <div id="calendarStatusArea" style="border-bottom:1px solid var(--border);"></div>
   <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;">
     <select id="calendarDays" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;outline:none;">
       <option value="7">7日間</option>
@@ -1291,7 +1292,41 @@ async function toggleCalendar() {
   closeAllPanels('calendarPanel');
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
-  if (!isOpen) await loadCalendarEvents();
+  if (!isOpen) await loadCalendarStatus();
+}
+
+async function loadCalendarStatus() {
+  const statusArea = document.getElementById('calendarStatusArea');
+  try {
+    const status = await fetch('/api/calendar/status').then(r => r.json());
+    if (status.connected) {
+      statusArea.innerHTML = `
+        <div style="text-align:center;padding:14px 16px;">
+          <div style="font-size:28px;margin-bottom:6px;">✅</div>
+          <div style="font-size:14px;font-weight:700;color:#276749;margin-bottom:2px;">カレンダー連携済み</div>
+          <div style="font-size:11px;color:#718096;margin-bottom:10px;">最終更新: ${esc(status.updatedAt || '')}</div>
+          <button onclick="disconnectCalendar()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
+        </div>`;
+      await loadCalendarEvents();
+    } else {
+      statusArea.innerHTML = `
+        <div style="text-align:center;padding:20px 16px;">
+          <div style="font-size:28px;margin-bottom:8px;">📅</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">Googleカレンダー未連携</div>
+          <div style="font-size:12px;color:#718096;margin-bottom:16px;line-height:1.6;">連携するとAIエージェントが予定を確認できます</div>
+          <a href="/auth/calendar" style="display:inline-block;background:var(--primary);color:#fff;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;text-decoration:none;">Googleカレンダーに連携する</a>
+        </div>`;
+      document.getElementById('calendarContent').innerHTML = '';
+    }
+  } catch(e) {
+    statusArea.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`;
+  }
+}
+
+async function disconnectCalendar() {
+  if (!confirm('カレンダー連携を解除しますか？')) return;
+  await fetch('/api/calendar/disconnect', { method: 'DELETE' });
+  await loadCalendarStatus();
 }
 
 async function loadCalendarEvents() {
@@ -1299,11 +1334,6 @@ async function loadCalendarEvents() {
   const days = document.getElementById('calendarDays').value;
   content.innerHTML = '<div class="drive-empty">読み込み中...</div>';
   try {
-    const status = await fetch('/api/calendar/status').then(r => r.json());
-    if (!status.connected) {
-      content.innerHTML = '<div class="drive-error">Googleカレンダーに未接続です。<br>一度ログアウトして再ログインしてください。</div>';
-      return;
-    }
     const events = await fetch(`/api/calendar/events?days=${days}&maxResults=30`).then(r => r.json());
     if (events.error) { content.innerHTML = `<div class="drive-error">${esc(events.error)}</div>`; return; }
     if (events.length === 0) { content.innerHTML = '<div class="drive-empty">予定がありません</div>'; return; }
