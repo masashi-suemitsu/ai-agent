@@ -128,6 +128,14 @@ db.exec(`
     expires_at TEXT,
     updated_at TEXT DEFAULT (datetime('now','localtime'))
   );
+
+  CREATE TABLE IF NOT EXISTS user_chatwork_tokens (
+    email TEXT PRIMARY KEY,
+    access_token TEXT,
+    refresh_token TEXT,
+    expires_at TEXT,
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+  );
 `);
 
 function audit(email, name, action, details = {}) {
@@ -187,7 +195,8 @@ passport.deserializeUser((u, done) => done(null, u));
 
 function requireAuth(req, res, next) {
   if (req.isAuthenticated()) return next();
-  if (req.path === '/auth/kintone/callback') return next(); // Kintone OAuthコールバックは除外
+  if (req.path === '/auth/kintone/callback') return next();
+  if (req.path === '/auth/chatwork/callback') return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'ログインが必要です' });
   res.redirect('/login');
 }
@@ -583,22 +592,19 @@ async function executeTool(name, input, user) {
       return { content: data.choices?.[0]?.message?.content || '', usage: data.usage };
     }
     case 'list_chatwork_rooms': {
-      if (!CW_TOKEN) throw new Error('Chatwork未設定');
       audit(user.email, user.name, 'tool.cw_rooms');
-      return await cwFetch('/rooms');
+      return await cwFetch('/rooms', {}, user.email);
     }
     case 'get_chatwork_messages': {
-      if (!CW_TOKEN) throw new Error('Chatwork未設定');
       audit(user.email, user.name, 'tool.cw_msgs', { roomId: input.room_id });
       const force = input.force !== false ? '?force=1' : '';
-      const msgs = await cwFetch(`/rooms/${input.room_id}/messages${force}`);
+      const msgs = await cwFetch(`/rooms/${input.room_id}/messages${force}`, {}, user.email);
       return (Array.isArray(msgs) ? msgs : []).slice(-50);
     }
     case 'send_chatwork_message': {
-      if (!CW_TOKEN) throw new Error('Chatwork未設定');
       audit(user.email, user.name, 'tool.cw_send', { roomId: input.room_id, preview: input.body?.slice(0, 50) });
       const params = new URLSearchParams({ body: input.body });
-      return await cwFetch(`/rooms/${input.room_id}/messages`, { method: 'POST', body: params.toString() });
+      return await cwFetch(`/rooms/${input.room_id}/messages`, { method: 'POST', body: params.toString() }, user.email);
     }
     case 'get_kot_daily': {
       if (!KOT_TOKEN) throw new Error('KoT未設定');
@@ -954,59 +960,159 @@ app.get('/api/task-runs', (req, res) => {
 // ── Chatwork API ──
 const CW_TOKEN = process.env.CHATWORK_API_TOKEN;
 const CW_BASE = 'https://api.chatwork.com/v2';
+const CW_OAUTH_BASE = process.env.CHATWORK_OAUTH_BASE || 'https://kcw.kddi.ne.jp';
 
-async function cwFetch(path, options = {}) {
-  const res = await fetch(`${CW_BASE}${path}`, {
-    ...options,
-    headers: { 'X-ChatWorkToken': CW_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded', ...(options.headers || {}) }
+async function refreshChatworkToken(refreshToken, email) {
+  const clientId = process.env.CHATWORK_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.CHATWORK_OAUTH_CLIENT_SECRET;
+  const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const r = await fetch(`${CW_OAUTH_BASE}/packages/oauth2/token.php`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': `Basic ${basicAuth}` },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken })
   });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`Chatwork token refresh failed: ${r.status} ${text}`);
+  const data = JSON.parse(text);
+  const expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
+  db.prepare(`UPDATE user_chatwork_tokens SET access_token=?, expires_at=?, updated_at=datetime('now','localtime') WHERE email=?`)
+    .run(data.access_token, expiresAt, email);
+  return data.access_token;
+}
+
+async function cwFetch(path, options = {}, userEmail = null) {
+  const headers = { 'Content-Type': 'application/x-www-form-urlencoded', ...(options.headers || {}) };
+  if (userEmail) {
+    const tokenRow = db.prepare('SELECT * FROM user_chatwork_tokens WHERE email=?').get(userEmail);
+    if (tokenRow?.access_token) {
+      let token = tokenRow.access_token;
+      if (tokenRow.expires_at && new Date(tokenRow.expires_at) <= new Date()) {
+        if (tokenRow.refresh_token) {
+          token = await refreshChatworkToken(tokenRow.refresh_token, userEmail);
+        } else {
+          throw new Error('Chatworkの認証が切れています。再連携してください。');
+        }
+      }
+      headers['Authorization'] = `Bearer ${token}`;
+    } else if (CW_TOKEN) {
+      headers['X-ChatWorkToken'] = CW_TOKEN;
+    } else {
+      throw new Error('Chatwork未連携です。Chatworkボタンから個人連携してください。');
+    }
+  } else if (CW_TOKEN) {
+    headers['X-ChatWorkToken'] = CW_TOKEN;
+  } else {
+    throw new Error('Chatwork未設定');
+  }
+  const res = await fetch(`${CW_BASE}${path}`, { ...options, headers });
   if (!res.ok) throw new Error(`Chatwork API error: ${res.status} ${await res.text()}`);
   return res.json();
 }
 
 // GET /api/chatwork/rooms
 app.get('/api/chatwork/rooms', async (req, res) => {
-  if (!CW_TOKEN) return res.status(503).json({ error: 'Chatwork未設定' });
   audit(req.user.email, req.user.name, 'cw.rooms');
-  try { res.json(await cwFetch('/rooms')); }
+  try { res.json(await cwFetch('/rooms', {}, req.user.email)); }
   catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET /api/chatwork/rooms/:id/messages?force=1
 app.get('/api/chatwork/rooms/:id/messages', async (req, res) => {
-  if (!CW_TOKEN) return res.status(503).json({ error: 'Chatwork未設定' });
   audit(req.user.email, req.user.name, 'cw.messages', { roomId: req.params.id });
   try {
     const force = req.query.force === '1' ? '?force=1' : '';
-    res.json(await cwFetch(`/rooms/${req.params.id}/messages${force}`));
+    res.json(await cwFetch(`/rooms/${req.params.id}/messages${force}`, {}, req.user.email));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET /api/chatwork/rooms/:id (room info)
 app.get('/api/chatwork/rooms/:id', async (req, res) => {
-  if (!CW_TOKEN) return res.status(503).json({ error: 'Chatwork未設定' });
-  try { res.json(await cwFetch(`/rooms/${req.params.id}`)); }
+  try { res.json(await cwFetch(`/rooms/${req.params.id}`, {}, req.user.email)); }
   catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // POST /api/chatwork/rooms/:id/messages  body: { body }
 app.post('/api/chatwork/rooms/:id/messages', async (req, res) => {
-  if (!CW_TOKEN) return res.status(503).json({ error: 'Chatwork未設定' });
   const { body } = req.body;
   if (!body) return res.status(400).json({ error: 'bodyは必須' });
   audit(req.user.email, req.user.name, 'cw.send', { roomId: req.params.id, preview: body.slice(0, 50) });
   try {
     const params = new URLSearchParams({ body });
-    const result = await cwFetch(`/rooms/${req.params.id}/messages`, { method: 'POST', body: params.toString() });
-    res.json(result);
+    res.json(await cwFetch(`/rooms/${req.params.id}/messages`, { method: 'POST', body: params.toString() }, req.user.email));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET /api/chatwork/me
 app.get('/api/chatwork/me', async (req, res) => {
-  if (!CW_TOKEN) return res.status(503).json({ error: 'Chatwork未設定' });
-  try { res.json(await cwFetch('/me')); }
+  try { res.json(await cwFetch('/me', {}, req.user.email)); }
   catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Chatwork OAuth ──
+app.get('/auth/chatwork', (req, res) => {
+  const clientId = process.env.CHATWORK_OAUTH_CLIENT_ID;
+  if (!clientId) return res.status(503).send('CHATWORK_OAUTH_CLIENT_IDが未設定です。環境変数を確認してください。');
+  const callbackUrl = process.env.CHATWORK_CALLBACK_URL;
+  const state = Buffer.from(req.user.email).toString('base64url');
+  const scopes = 'offline_access rooms.all:read rooms.messages:write users.profile.me:read';
+  const authUrl = `${CW_OAUTH_BASE}/packages/oauth2/login.php`
+    + `?client_id=${encodeURIComponent(clientId)}`
+    + `&redirect_uri=${encodeURIComponent(callbackUrl)}`
+    + `&response_type=code`
+    + `&scope=${encodeURIComponent(scopes)}`
+    + `&state=${state}`;
+  console.log('[auth/chatwork] redirecting to:', authUrl);
+  res.redirect(authUrl);
+});
+
+app.get('/auth/chatwork/callback', async (req, res) => {
+  const { code, error, state } = req.query;
+  console.log('[chatwork/callback] called', { code: !!code, error, state: !!state, auth: req.isAuthenticated() });
+  if (error || !code) return res.redirect('/?chatwork_error=1');
+  let userEmail = req.user?.email;
+  if (!userEmail && state) {
+    try { userEmail = Buffer.from(state, 'base64url').toString('utf8'); } catch(e) {}
+  }
+  if (!userEmail || !userEmail.endsWith('@acrovision.co.jp')) return res.redirect('/login');
+  const callbackUrl = process.env.CHATWORK_CALLBACK_URL;
+  try {
+    const clientId = process.env.CHATWORK_OAUTH_CLIENT_ID;
+    const clientSecret = process.env.CHATWORK_OAUTH_CLIENT_SECRET;
+    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    const r = await fetch(`${CW_OAUTH_BASE}/packages/oauth2/token.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': `Basic ${basicAuth}` },
+      body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: callbackUrl })
+    });
+    const resText = await r.text();
+    if (!r.ok) throw new Error(`Token exchange failed: ${r.status} ${resText}`);
+    const data = JSON.parse(resText);
+    const expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
+    db.prepare(`INSERT INTO user_chatwork_tokens (email, access_token, refresh_token, expires_at) VALUES (?,?,?,?)
+      ON CONFLICT(email) DO UPDATE SET access_token=excluded.access_token, refresh_token=excluded.refresh_token,
+      expires_at=excluded.expires_at, updated_at=datetime('now','localtime')`)
+      .run(userEmail, data.access_token, data.refresh_token || '', expiresAt);
+    audit(userEmail, '', 'chatwork.oauth.connect');
+    res.redirect('/?chatwork_connected=1');
+  } catch(e) {
+    console.error('[chatwork/callback] error:', e.message);
+    res.redirect('/?chatwork_error=1');
+  }
+});
+
+// GET /api/chatwork/status
+app.get('/api/chatwork/status', (req, res) => {
+  const row = db.prepare('SELECT expires_at, updated_at FROM user_chatwork_tokens WHERE email=?').get(req.user.email);
+  if (!row) return res.json({ connected: false });
+  const expired = row.expires_at ? new Date(row.expires_at) <= new Date() : false;
+  res.json({ connected: true, expired, updatedAt: row.updated_at });
+});
+
+// DELETE /api/chatwork/disconnect
+app.delete('/api/chatwork/disconnect', (req, res) => {
+  db.prepare('DELETE FROM user_chatwork_tokens WHERE email=?').run(req.user.email);
+  audit(req.user.email, req.user.name, 'chatwork.oauth.disconnect');
+  res.json({ ok: true });
 });
 
 // ── King of Time API ──

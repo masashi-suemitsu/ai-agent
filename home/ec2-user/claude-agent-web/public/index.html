@@ -518,6 +518,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
     <h3>💬 Chatwork</h3>
     <button class="panel-close-btn" onclick="toggleCw()">✕</button>
   </div>
+  <div id="cwAuthBanner" style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px;display:none;"></div>
   <div id="cwContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
     <div class="cw-empty">読み込み中...</div>
   </div>
@@ -581,7 +582,7 @@ let driveAttachments = [];  // [{ name, content }]
   }
   await loadSidebar();
 
-  // Kintone OAuth コールバック後の通知
+  // OAuth コールバック後の通知
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('kintone_connected')) {
     history.replaceState({}, '', '/');
@@ -589,6 +590,12 @@ let driveAttachments = [];  // [{ name, content }]
   } else if (urlParams.get('kintone_error')) {
     history.replaceState({}, '', '/');
     alert('Kintone連携に失敗しました。再度お試しください。');
+  } else if (urlParams.get('chatwork_connected')) {
+    history.replaceState({}, '', '/');
+    setTimeout(() => toggleCw(), 300);
+  } else if (urlParams.get('chatwork_error')) {
+    history.replaceState({}, '', '/');
+    alert('Chatwork連携に失敗しました。再度お試しください。');
   }
 })();
 
@@ -1122,7 +1129,43 @@ async function toggleCw() {
   document.getElementById('kintoneToggleBtn').classList.remove('active');
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
-  if (!isOpen && cwRooms.length === 0) await loadCwRooms();
+  if (!isOpen) {
+    await loadChatworkStatus();
+    if (cwRooms.length === 0) await loadCwRooms();
+  }
+}
+
+async function loadChatworkStatus() {
+  const banner = document.getElementById('cwAuthBanner');
+  try {
+    const status = await fetch('/api/chatwork/status').then(r => r.json());
+    if (status.connected && !status.expired) {
+      banner.style.display = 'flex';
+      banner.style.justifyContent = 'space-between';
+      banner.style.alignItems = 'center';
+      banner.innerHTML = `<span style="color:#276749;">✅ 個人連携済み <span style="opacity:.6;font-size:11px;">${status.updatedAt || ''}</span></span>
+        <button onclick="disconnectChatwork()" style="font-size:11px;color:#c53030;background:none;border:1px solid #feb2b2;border-radius:4px;padding:2px 8px;cursor:pointer;">解除</button>`;
+    } else if (status.connected && status.expired) {
+      banner.style.display = 'block';
+      banner.innerHTML = `<span style="color:#c53030;">⚠️ 連携期限切れ</span> <a href="/auth/chatwork" style="color:var(--primary);font-weight:600;">再連携</a>`;
+    } else {
+      banner.style.display = 'flex';
+      banner.style.justifyContent = 'space-between';
+      banner.style.alignItems = 'center';
+      banner.innerHTML = `<span style="opacity:.7;">個人アカウントで連携</span>
+        <a href="/auth/chatwork" style="font-size:12px;font-weight:600;color:#fff;background:var(--primary);border-radius:4px;padding:3px 10px;text-decoration:none;">🔗 連携する</a>`;
+    }
+  } catch(e) {
+    banner.style.display = 'none';
+  }
+}
+
+async function disconnectChatwork() {
+  if (!confirm('Chatwork個人連携を解除しますか？')) return;
+  await fetch('/api/chatwork/disconnect', { method: 'DELETE' });
+  cwRooms = [];
+  await loadChatworkStatus();
+  await loadCwRooms();
 }
 
 async function loadCwRooms() {
