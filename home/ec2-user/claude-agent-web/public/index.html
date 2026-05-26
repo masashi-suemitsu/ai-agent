@@ -632,7 +632,7 @@ async function loadSidebar() {
           <div class="skill-desc">${esc(s.description || '')}</div>
         </div>
         <div class="skill-actions">
-          <button class="skill-run-btn" onclick="runSkill(${s.id}, '${esc(s.title)}')">実行</button>
+          <button class="skill-run-btn" onclick="runSkill(${s.id}, ${JSON.stringify(s.title)})">実行</button>
           <button class="skill-del-btn" onclick="deleteSkill(${s.id})" title="削除">✕</button>
         </div>
       </div>`).join('');
@@ -1183,7 +1183,7 @@ function renderCwRooms() {
   if (cwRooms.length === 0) { content.innerHTML = '<div class="cw-empty">ルームがありません</div>'; return; }
   const typeIcon = { my: '👤', direct: '👤', group: '👥' };
   content.innerHTML = `<div class="cw-room-list">${cwRooms.map(r => `
-    <div class="cw-room-item" onclick="loadCwMessages(${r.room_id}, '${esc(r.name).replace(/'/g,"\\'")}')">
+    <div class="cw-room-item" onclick="loadCwMessages(${r.room_id}, ${JSON.stringify(r.name)})">
       <div class="cw-room-icon">${typeIcon[r.type] || '💬'}</div>
       <div class="cw-room-info">
         <div class="cw-room-name">${esc(r.name)}</div>
@@ -1351,7 +1351,7 @@ async function listDriveFiles() {
           <div class="drive-file-meta">${date}</div>
         </div>
         <div class="drive-file-actions">
-          ${canRead ? `<button class="drive-attach-btn" onclick="attachDriveFile('${f.id}','${esc(f.name).replace(/'/g,"\\'")}')">添付</button>` : '<span style="font-size:10px;color:#a0aec0;">非対応</span>'}
+          ${canRead ? `<button class="drive-attach-btn" onclick="attachDriveFile('${f.id}', ${JSON.stringify(f.name)})">添付</button>` : '<span style="font-size:10px;color:#a0aec0;">非対応</span>'}
         </div>
       </div>`;
     }).join('');

@@ -934,9 +934,16 @@ app.post('/api/skills/:id/run', async (req, res) => {
             res.write(`data: ${JSON.stringify({ tool: block.name, status: 'running' })}\n\n`);
           }
         }
-      } else if (msg.type === 'result' && msg.subtype !== 'success') {
-        const errMsg = (msg.errors || []).join(', ') || msg.subtype;
-        res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
+      } else if (msg.type === 'result') {
+        if (msg.subtype === 'success') {
+          if (msg.result && !resultBuffer) {
+            resultBuffer = msg.result;
+            res.write(`data: ${JSON.stringify({ text: msg.result })}\n\n`);
+          }
+        } else {
+          const errMsg = (msg.errors || []).join(', ') || msg.subtype;
+          res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
+        }
       }
     }
     db.prepare('UPDATE task_runs SET status=?, result=?, finished_at=datetime("now","localtime") WHERE id=?')
