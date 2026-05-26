@@ -138,8 +138,11 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 .sidebar-empty { color: var(--sidebar-text); font-size: 11px; text-align: center; padding: 14px 12px; line-height: 1.6; opacity: .7; }
 
 /* ─ Chat Area ─ */
-.chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
 .messages { flex: 1; overflow-y: auto; padding: 24px 24px 8px; display: flex; flex-direction: column; gap: 14px; }
+
+/* ─ Right spacer ─ */
+.sidebar-right { width: 256px; flex-shrink: 0; background: var(--bg); border-left: 1px solid var(--border); }
 
 /* Empty state */
 .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-light); text-align: center; padding: 40px 24px; }
@@ -468,6 +471,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
 
   <!-- ─ Chat Area ─ -->
   <div class="chat-area">
+
     <div class="messages" id="messages">
       <div class="empty-state" id="emptyState">
         <div class="empty-icon">🤖</div>
@@ -489,6 +493,9 @@ textarea:focus { border-color: var(--primary); background: #fff; }
       <button class="send-btn" id="sendBtn" onclick="send()">依頼する</button>
     </div>
   </div>
+
+  <!-- ─ Right Spacer ─ -->
+  <div class="sidebar-right"></div>
 </div>
 
 <!-- ─ KoT Panel ─ -->
