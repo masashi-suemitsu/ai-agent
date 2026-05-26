@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI エージェント — 仕事を任せる</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #5b6eff;
+  --primary-dark: #4a5ce8;
+  --primary-light: #edf2ff;
+  --sidebar-bg: #12141f;
+  --sidebar-section: #1a1d2e;
+  --sidebar-text: #8a95a8;
+  --sidebar-active: #252840;
+  --sidebar-hover: #1e2133;
+  --chat-bg: #f4f6fb;
+  --msg-ai-bg: #ffffff;
+  --msg-user-bg: #5b6eff;
+  --border: #e2e8f0;
+  --text: #2d3748;
+  --text-light: #718096;
+  --success: #48bb78;
+  --danger: #e53e3e;
+  --warn: #ed8936;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; background: var(--chat-bg); color: var(--text); }
+
+/* ─ Header ─ */
+header {
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  z-index: 10;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+}
+.header-left { display: flex; align-items: center; gap: 10px; }
+.header-logo { width: 28px; height: 28px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 800; }
+header h1 { font-size: 15px; font-weight: 700; color: var(--text); }
+header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); display: block; margin-top: 1px; }
+.header-right { display: flex; align-items: center; gap: 8px; }
+.header-btn { background: none; border: 1px solid var(--border); border-radius: 7px; padding: 5px 12px; font-size: 12px; cursor: pointer; color: var(--text-light); transition: all .15s; display: flex; align-items: center; gap: 5px; }
+.header-btn:hover { border-color: var(--primary); color: var(--primary); }
+.header-btn.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+
+/* ─ Layout ─ */
+.layout { display: flex; flex: 1; overflow: hidden; }
+
+/* ─ Sidebar ─ */
+.sidebar { width: 256px; background: var(--sidebar-bg); display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; }
+.new-task-btn {
+  margin: 12px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.new-task-btn:hover { background: var(--primary-dark); }
+
+.sidebar-section { flex: 1; overflow-y: auto; min-height: 0; }
+.sidebar-section-header {
+  padding: 10px 14px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  color: var(--sidebar-text);
+  opacity: .7;
+  border-top: 1px solid rgba(255,255,255,.05);
+}
+.sidebar-section-header:first-child { border-top: none; }
+
+/* 会話履歴 */
+.conv-item {
+  padding: 8px 12px;
+  margin: 1px 6px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background .12s;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.conv-item:hover { background: var(--sidebar-hover); }
+.conv-item.active { background: var(--sidebar-active); }
+.conv-item .conv-title {
+  color: #d0d6e0;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+.conv-item .conv-date { color: var(--sidebar-text); font-size: 10px; flex-shrink: 0; }
+.conv-del-btn { background: none; border: none; color: #e53e3e; cursor: pointer; font-size: 12px; padding: 2px; opacity: 0; transition: opacity .15s; flex-shrink: 0; }
+.conv-item:hover .conv-del-btn { opacity: .6; }
+.conv-del-btn:hover { opacity: 1 !important; }
+
+/* スキル一覧 */
+.skill-item {
+  padding: 9px 12px;
+  margin: 1px 6px;
+  border-radius: 7px;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  transition: background .12s;
+}
+.skill-item:hover { background: var(--sidebar-hover); }
+.skill-item .skill-info { flex: 1; min-width: 0; }
+.skill-item .skill-title { color: #d0d6e0; font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.skill-item .skill-desc { color: var(--sidebar-text); font-size: 10px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.skill-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.skill-run-btn { background: var(--primary); color: #fff; border: none; border-radius: 5px; padding: 3px 9px; font-size: 11px; cursor: pointer; transition: background .12s; }
+.skill-run-btn:hover { background: var(--primary-dark); }
+.skill-del-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 12px; padding: 2px; opacity: 0; }
+.skill-item:hover .skill-del-btn { opacity: .6; }
+.skill-del-btn:hover { opacity: 1 !important; }
+
+.sidebar-empty { color: var(--sidebar-text); font-size: 11px; text-align: center; padding: 14px 12px; line-height: 1.6; opacity: .7; }
+
+/* ─ Chat Area ─ */
+.chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.messages { flex: 1; overflow-y: auto; padding: 24px 24px 8px; display: flex; flex-direction: column; gap: 14px; }
+
+/* Empty state */
+.empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-light); text-align: center; padding: 40px 24px; }
+.empty-icon { width: 64px; height: 64px; background: var(--primary-light); border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 30px; margin-bottom: 20px; }
+.empty-state h2 { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.empty-state p { font-size: 14px; line-height: 1.7; max-width: 340px; }
+.examples { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; width: 100%; max-width: 400px; }
+.example-btn {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.example-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+.example-btn .ex-icon { font-size: 16px; flex-shrink: 0; }
+
+/* Messages */
+.msg { display: flex; gap: 10px; max-width: 82%; }
+.msg.user { align-self: flex-end; flex-direction: row-reverse; }
+.msg.ai { align-self: flex-start; }
+.avatar { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; margin-top: 2px; }
+.msg.ai .avatar { background: var(--primary); color: #fff; }
+.msg.user .avatar { background: #e2e8f0; color: var(--text); font-size: 11px; }
+.bubble { background: var(--msg-ai-bg); border-radius: 16px; padding: 11px 15px; font-size: 14px; line-height: 1.65; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.07); max-width: 100%; word-break: break-word; }
+.msg.user .bubble { background: var(--msg-user-bg); color: #fff; border-top-right-radius: 4px; }
+.msg.ai .bubble { border-top-left-radius: 4px; }
+.bubble p + p { margin-top: 8px; }
+.bubble strong { font-weight: 600; }
+.bubble code { background: #f1f3f8; border-radius: 4px; padding: 1px 5px; font-size: 12px; font-family: 'SF Mono', monospace; }
+.msg.user .bubble code { background: rgba(255,255,255,.2); }
+
+/* Skill card in chat */
+.skill-card {
+  background: var(--primary-light);
+  border: 1px solid #c3d0ff;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-top: 12px;
+}
+.skill-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.skill-card-icon { font-size: 18px; }
+.skill-card-title { font-size: 14px; font-weight: 700; color: var(--primary-dark); }
+.skill-card-desc { font-size: 13px; color: var(--text-light); margin-bottom: 12px; }
+.skill-card-actions { display: flex; gap: 8px; }
+.save-btn {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+.save-btn:hover { background: var(--primary-dark); }
+.save-btn:disabled { background: #a0aec0; cursor: default; }
+.saved-badge { display: inline-flex; align-items: center; gap: 5px; background: var(--success); color: #fff; border-radius: 7px; padding: 6px 14px; font-size: 12px; font-weight: 600; }
+
+/* Run output */
+.run-output {
+  background: #1a1d2e;
+  color: #a8ff78;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-top: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* Typing indicator */
+.typing { display: flex; gap: 4px; padding: 4px 2px; }
+.typing span { width: 7px; height: 7px; background: var(--primary); border-radius: 50%; animation: bounce .8s infinite; }
+.typing span:nth-child(2) { animation-delay: .15s; }
+.typing span:nth-child(3) { animation-delay: .3s; }
+@keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+
+/* Thinking indicator */
+.thinking-indicator { display: flex; align-items: center; gap: 10px; }
+.thinking-label { font-size: 12px; color: var(--text-light); font-style: italic; }
+
+/* Tool call indicator */
+.tool-calls { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.tool-call {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #f0f4ff; border: 1px solid #c3d0ff; border-radius: 6px;
+  padding: 3px 10px; font-size: 11px; color: #3a4fd0;
+}
+.tool-call.running::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; border: 2px solid #5b6eff; border-top-color: transparent; animation: spin .6s linear infinite; }
+.tool-call.done { background: #f0fff4; border-color: #9ae6b4; color: #276749; }
+.tool-call.done::before { content: '✓'; font-size: 10px; }
+.tool-call.error { background: #fff5f5; border-color: #feb2b2; color: #c53030; }
+.tool-call.error::before { content: '✕'; font-size: 10px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Input area */
+.input-area {
+  background: #fff;
+  border-top: 1px solid var(--border);
+  padding: 14px 20px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+.input-wrapper { flex: 1; position: relative; }
+textarea {
+  width: 100%;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  min-height: 44px;
+  max-height: 140px;
+  line-height: 1.5;
+  transition: border .15s;
+  color: var(--text);
+  background: #f9fafb;
+}
+textarea:focus { border-color: var(--primary); background: #fff; }
+.send-btn {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  height: 44px;
+  flex-shrink: 0;
+  transition: background .15s;
+}
+.send-btn:hover:not(:disabled) { background: var(--primary-dark); }
+.send-btn:disabled { background: #a0aec0; cursor: default; }
+
+/* ─ KoT Panel ─ */
+.kot-panel {
+  position: fixed; top: 52px; right: -440px; width: 420px; bottom: 0;
+  background: #fff; border-left: 1px solid var(--border); display: flex;
+  flex-direction: column; z-index: 101; transition: right .25s ease;
+  box-shadow: -4px 0 16px rgba(0,0,0,.08);
+}
+.kot-panel.open { right: 0; }
+.kot-panel-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.kot-panel-header h3 { font-size: 15px; font-weight: 700; }
+.kot-controls { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.kot-controls input[type=date] { border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px; font-size: 12px; outline: none; }
+.kot-controls input[type=date]:focus { border-color: var(--primary); }
+.kot-controls select { border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px; font-size: 12px; outline: none; background: #fff; }
+.kot-controls button { background: var(--primary); color: #fff; border: none; border-radius: 7px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.kot-controls button:hover { background: var(--primary-dark); }
+.kot-table-wrap { flex: 1; overflow: auto; padding: 10px; }
+.kot-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.kot-table th { background: #f4f6fb; padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); font-weight: 600; color: var(--text); position: sticky; top: 0; }
+.kot-table td { padding: 6px 8px; border-bottom: 1px solid #f0f2f5; color: var(--text); vertical-align: top; }
+.kot-table tr:hover td { background: #fafbff; }
+.kot-attach-bar { padding: 10px 12px; border-top: 1px solid var(--border); }
+.kot-attach-bar button { width: 100%; padding: 8px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.kot-attach-bar button:hover { background: var(--primary-dark); }
+
+/* ─ Chatwork Panel ─ */
+.cw-panel {
+  position: fixed; top: 52px; right: -440px; width: 420px; bottom: 0;
+  background: #fff; border-left: 1px solid var(--border); display: flex;
+  flex-direction: column; z-index: 101; transition: right .25s ease;
+  box-shadow: -4px 0 16px rgba(0,0,0,.08);
+}
+.cw-panel.open { right: 0; }
+.cw-panel-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.cw-panel-header h3 { font-size: 15px; font-weight: 700; }
+.cw-room-list { flex: 1; overflow-y: auto; padding: 8px; }
+.cw-room-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; transition: background .12s; }
+.cw-room-item:hover { background: #f4f6fb; }
+.cw-room-item.active { background: var(--primary-light); }
+.cw-room-icon { width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); display: flex; align-items: center; justify-content: font-size: 16px; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.cw-room-info { flex: 1; min-width: 0; }
+.cw-room-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cw-room-last { font-size: 11px; color: var(--text-light); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cw-room-unread { background: var(--danger); color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.cw-msg-area { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.cw-msg { padding: 8px 10px; border-radius: 8px; background: #f7f8fc; font-size: 12px; line-height: 1.6; }
+.cw-msg-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.cw-msg-name { font-weight: 600; font-size: 12px; color: var(--primary-dark); }
+.cw-msg-time { font-size: 10px; color: var(--text-light); }
+.cw-msg-body { color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.cw-toolbar { padding: 10px 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+.cw-toolbar button { flex: 1; padding: 7px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; cursor: pointer; background: #fff; transition: all .12s; }
+.cw-toolbar button:hover { border-color: var(--primary); color: var(--primary); }
+.cw-back-btn { background: none; border: none; font-size: 13px; cursor: pointer; color: var(--primary); padding: 4px 0; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
+.cw-empty { text-align: center; color: var(--text-light); padding: 40px 20px; font-size: 13px; line-height: 1.7; }
+.cw-error { background: #fff5f5; border: 1px solid #feb2b2; color: #c53030; border-radius: 8px; padding: 10px 14px; font-size: 12px; margin: 8px; }
+
+/* ─ Drive attachment badge ─ */
+.attach-bar { background: #f0f4ff; border-top: 1px solid #c3d0ff; padding: 6px 20px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.attach-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--primary-light); border: 1px solid #c3d0ff; border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--primary-dark); }
+.attach-badge .remove-attach { background: none; border: none; cursor: pointer; color: #a0aec0; font-size: 13px; line-height: 1; padding: 0 2px; }
+.attach-badge .remove-attach:hover { color: var(--danger); }
+
+/* ─ Drive Panel ─ */
+.drive-panel {
+  position: fixed;
+  top: 52px;
+  right: -440px;
+  width: 420px;
+  bottom: 0;
+  background: #fff;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  transition: right .25s ease;
+  box-shadow: -4px 0 16px rgba(0,0,0,.08);
+}
+.drive-panel.open { right: 0; }
+.drive-panel-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.drive-panel-header h3 { font-size: 15px; font-weight: 700; }
+.drive-folder-input { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; }
+.drive-folder-input input { flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 12px; outline: none; font-family: monospace; }
+.drive-folder-input input:focus { border-color: var(--primary); }
+.drive-folder-input button { background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.drive-folder-input button:hover { background: var(--primary-dark); }
+.drive-file-list { flex: 1; overflow-y: auto; padding: 8px; }
+.drive-file-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; transition: background .12s; cursor: default; }
+.drive-file-item:hover { background: #f4f6fb; }
+.drive-file-icon { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
+.drive-file-info { flex: 1; min-width: 0; }
+.drive-file-name { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drive-file-meta { font-size: 10px; color: var(--text-light); margin-top: 1px; }
+.drive-file-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.drive-read-btn { background: none; border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; font-size: 11px; cursor: pointer; color: var(--text); transition: all .12s; }
+.drive-read-btn:hover { border-color: var(--primary); color: var(--primary); }
+.drive-attach-btn { background: var(--primary); color: #fff; border: none; border-radius: 5px; padding: 3px 8px; font-size: 11px; cursor: pointer; transition: background .12s; }
+.drive-attach-btn:hover { background: var(--primary-dark); }
+.drive-empty { text-align: center; color: var(--text-light); padding: 40px 20px; font-size: 13px; line-height: 1.7; }
+.drive-error { background: #fff5f5; border: 1px solid #feb2b2; color: #c53030; border-radius: 8px; padding: 10px 14px; font-size: 12px; margin: 8px; }
+
+/* ─ History Panel (right overlay) ─ */
+.history-panel {
+  position: fixed;
+  top: 52px;
+  right: -420px;
+  width: 400px;
+  bottom: 0;
+  background: #fff;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  transition: right .25s ease;
+  box-shadow: -4px 0 16px rgba(0,0,0,.08);
+}
+.history-panel.open { right: 0; }
+.history-panel-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.history-panel-header h3 { font-size: 15px; font-weight: 700; }
+.panel-close-btn { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-light); padding: 2px 6px; border-radius: 5px; }
+.panel-close-btn:hover { background: #f0f2f5; }
+.history-list { flex: 1; overflow-y: auto; padding: 12px; }
+.run-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  transition: border-color .12s;
+}
+.run-card:hover { border-color: var(--primary); }
+.run-card-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.run-card-meta { font-size: 11px; color: var(--text-light); display: flex; align-items: center; gap: 10px; }
+.run-status { display: inline-block; border-radius: 4px; padding: 1px 8px; font-size: 11px; font-weight: 600; }
+.run-status.done { background: #d4f5e2; color: #276749; }
+.run-status.running { background: #fef3cd; color: #92400e; }
+.run-status.error { background: #fde8e8; color: #9b1c1c; }
+.run-card-result { font-size: 12px; color: var(--text-light); margin-top: 8px; line-height: 1.5; white-space: pre-wrap; max-height: 80px; overflow: hidden; }
+.history-empty { text-align: center; color: var(--text-light); padding: 40px 20px; font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <div class="header-logo">A</div>
+    <h1>AI エージェント<small>仕事を任せる</small></h1>
+  </div>
+  <div class="header-right">
+    <button class="header-btn" id="kotToggleBtn" onclick="toggleKot()">⏰ KoT</button>
+    <button class="header-btn" id="cwToggleBtn" onclick="toggleCw()">💬 Chatwork</button>
+    <button class="header-btn" id="driveToggleBtn" onclick="toggleDrive()">📁 Drive</button>
+    <button class="header-btn" id="historyToggleBtn" onclick="toggleHistory()">📋 実行履歴</button>
+    <span id="userBadge" style="font-size:12px;color:#718096;"></span>
+    <span id="roleBadge" style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;display:none;"></span>
+    <a href="/logout" class="header-btn" style="text-decoration:none;">ログアウト</a>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- ─ Sidebar ─ -->
+  <aside class="sidebar">
+    <button class="new-task-btn" onclick="newTask()">＋ 新しい依頼</button>
+
+    <div class="sidebar-section" id="sidebarContent">
+      <!-- 会話履歴とスキルが動的に入る -->
+    </div>
+  </aside>
+
+  <!-- ─ Chat Area ─ -->
+  <div class="chat-area">
+    <div class="messages" id="messages">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">🤖</div>
+        <h2>どんな仕事を任せますか？</h2>
+        <p>日々の繰り返し業務を伝えてください。<br>一緒に自動化の仕組みを作ります。</p>
+        <div class="examples">
+          <button class="example-btn" onclick="setExample(this.dataset.text)" data-text="毎月末に勤務表を確認して残業の多い人を教えてほしい"><span class="ex-icon">📊</span>毎月末に勤務表を確認して残業の多い人を教えてほしい</button>
+          <button class="example-btn" onclick="setExample(this.dataset.text)" data-text="毎週月曜に先週の案件状況をまとめてChatworkに送ってほしい"><span class="ex-icon">📅</span>毎週月曜に先週の案件状況をまとめてChatworkに送ってほしい</button>
+          <button class="example-btn" onclick="setExample(this.dataset.text)" data-text="サーバーの状態を毎日チェックして異常があればすぐ知らせてほしい"><span class="ex-icon">🖥️</span>サーバーの状態を毎日チェックして異常があればすぐ知らせてほしい</button>
+        </div>
+      </div>
+    </div>
+    <div class="attach-bar" id="attachBar" style="display:none;"></div>
+    <div class="input-area">
+      <div class="input-wrapper">
+        <textarea id="input" placeholder="どんな仕事を任せますか？" rows="1"
+          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      </div>
+      <button class="send-btn" id="sendBtn" onclick="send()">依頼する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─ KoT Panel ─ -->
+<div class="kot-panel" id="kotPanel">
+  <div class="kot-panel-header">
+    <h3>⏰ King of Time</h3>
+    <button class="panel-close-btn" onclick="toggleKot()">✕</button>
+  </div>
+  <div class="kot-controls">
+    <select id="kotMode" onchange="kotModeChange()">
+      <option value="daily">日次勤怠</option>
+      <option value="monthly">月次勤怠</option>
+    </select>
+    <input type="date" id="kotDate" />
+    <input type="month" id="kotMonth" style="display:none;" />
+    <button onclick="loadKot()">表示</button>
+  </div>
+  <div class="kot-table-wrap" id="kotTableWrap">
+    <div class="cw-empty">日付を選んで「表示」を押してください</div>
+  </div>
+  <div class="kot-attach-bar">
+    <button onclick="attachKot()">📎 添付してAIに質問</button>
+  </div>
+</div>
+
+<!-- ─ Chatwork Panel ─ -->
+<div class="cw-panel" id="cwPanel">
+  <div class="cw-panel-header">
+    <h3>💬 Chatwork</h3>
+    <button class="panel-close-btn" onclick="toggleCw()">✕</button>
+  </div>
+  <div id="cwContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+    <div class="cw-empty">読み込み中...</div>
+  </div>
+</div>
+
+<!-- ─ Drive Panel ─ -->
+<div class="drive-panel" id="drivePanel">
+  <div class="drive-panel-header">
+    <h3>📁 Google Drive</h3>
+    <button class="panel-close-btn" onclick="toggleDrive()">✕</button>
+  </div>
+  <div class="drive-folder-input">
+    <input type="text" id="driveFolderInput" placeholder="フォルダID を貼り付け" />
+    <button onclick="listDriveFiles()">表示</button>
+  </div>
+  <div class="drive-file-list" id="driveFileList">
+    <div class="drive-empty">フォルダIDを入力してファイルを表示<br><small style="font-size:11px;opacity:.7;">GoogleドライブのURL末尾の文字列がIDです</small></div>
+  </div>
+</div>
+
+<!-- ─ History Panel ─ -->
+<div class="history-panel" id="historyPanel">
+  <div class="history-panel-header">
+    <h3>実行履歴</h3>
+    <button class="panel-close-btn" onclick="toggleHistory()">✕</button>
+  </div>
+  <div class="history-list" id="historyList">
+    <div class="history-empty">実行履歴がありません</div>
+  </div>
+</div>
+
+<script>
+let currentConvId = null;
+let sending = false;
+let driveAttachments = [];  // [{ name, content }]
+
+// ─ 初期化 ─
+(async () => {
+  const me = await fetch('/api/me').then(r => r.json());
+  if (me) {
+    document.getElementById('userBadge').textContent = me.name || me.email;
+    const roleLabels = { admin: ['管理者','#e53e3e','#fff5f5'], gyoumu: ['業務管理部','#2b6cb0','#ebf8ff'], eigyo: ['営業','#276749','#f0fff4'], recruit: ['採用','#6b46c1','#faf5ff'], user: ['一般','#718096','#f7fafc'] };
+    const rl = roleLabels[me.role] || roleLabels.user;
+    const rb = document.getElementById('roleBadge');
+    rb.textContent = rl[0];
+    rb.style.color = rl[1];
+    rb.style.background = rl[2];
+    rb.style.border = `1px solid ${rl[1]}40`;
+    rb.style.display = 'inline-block';
+  }
+  await loadSidebar();
+})();
+
+// ─ Sidebar: 会話履歴 + スキル ─
+async function loadSidebar() {
+  const [convs, skills] = await Promise.all([
+    fetch('/api/conversations').then(r => r.json()),
+    fetch('/api/skills').then(r => r.json())
+  ]);
+
+  const container = document.getElementById('sidebarContent');
+  let html = '';
+
+  // 会話履歴
+  html += `<div class="sidebar-section-header">最近の依頼</div>`;
+  if (convs.length === 0) {
+    html += `<div class="sidebar-empty">依頼履歴がここに表示されます</div>`;
+  } else {
+    html += convs.map(c => `
+      <div class="conv-item ${c.id === currentConvId ? 'active' : ''}" data-id="${c.id}" onclick="loadConversation(${c.id})">
+        <div class="conv-title">${esc(c.title || '無題')}</div>
+        <div class="conv-date">${formatDate(c.updated_at)}</div>
+        <button class="conv-del-btn" onclick="event.stopPropagation();deleteConversation(${c.id})" title="削除">✕</button>
+      </div>`).join('');
+  }
+
+  // マイスキル
+  html += `<div class="sidebar-section-header" style="margin-top:8px;">マイスキル</div>`;
+  if (skills.length === 0) {
+    html += `<div class="sidebar-empty">保存したスキルがここに表示されます</div>`;
+  } else {
+    html += skills.map(s => `
+      <div class="skill-item">
+        <div class="skill-info">
+          <div class="skill-title">${esc(s.title)}</div>
+          <div class="skill-desc">${esc(s.description || '')}</div>
+        </div>
+        <div class="skill-actions">
+          <button class="skill-run-btn" onclick="runSkill(${s.id}, '${esc(s.title)}')">実行</button>
+          <button class="skill-del-btn" onclick="deleteSkill(${s.id})" title="削除">✕</button>
+        </div>
+      </div>`).join('');
+  }
+
+  container.innerHTML = html;
+}
+
+// ─ 会話を読み込む ─
+async function loadConversation(id) {
+  currentConvId = id;
+  const msgs = await fetch(`/api/conversations/${id}/messages`).then(r => r.json());
+  const messagesEl = document.getElementById('messages');
+  messagesEl.innerHTML = '';
+
+  for (const m of msgs) {
+    appendMessage(m.role === 'user' ? 'user' : 'ai', m.content);
+  }
+
+  if (msgs.length === 0) {
+    messagesEl.appendChild(createEmptyState());
+  }
+
+  // サイドバー active 更新
+  document.querySelectorAll('.conv-item').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.id) === id);
+  });
+}
+
+// ─ 新しい依頼 ─
+function newTask() {
+  currentConvId = null;
+  const messagesEl = document.getElementById('messages');
+  messagesEl.innerHTML = '';
+  messagesEl.appendChild(createEmptyState());
+  document.getElementById('input').value = '';
+  autoResize(document.getElementById('input'));
+  document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+}
+
+function createEmptyState() {
+  const d = document.createElement('div');
+  d.className = 'empty-state'; d.id = 'emptyState';
+  d.innerHTML = `<div class="empty-icon">🤖</div><h2>どんな仕事を任せますか？</h2><p>日々の繰り返し業務を伝えてください。<br>一緒に自動化の仕組みを作ります。</p>`;
+  return d;
+}
+
+function removeEmptyState() {
+  const e = document.getElementById('emptyState');
+  if (e) e.remove();
+}
+
+// ─ メッセージ追加 ─
+function appendMessage(role, content, skillData) {
+  removeEmptyState();
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const avatarText = role === 'ai' ? 'AI' : '私';
+
+  let bubbleContent = formatText(content);
+  if (skillData) {
+    bubbleContent += `<div class="skill-card" data-skill='${JSON.stringify(skillData).replace(/'/g, "&#39;")}'>
+      <div class="skill-card-header"><span class="skill-card-icon">⚙️</span><span class="skill-card-title">${esc(skillData.title)}</span></div>
+      <div class="skill-card-desc">${esc(skillData.description || '')}</div>
+      <div class="skill-card-actions">
+        <button class="save-btn" onclick="saveSkill(this)">このスキルを保存</button>
+      </div>
+    </div>`;
+  }
+
+  div.innerHTML = `<div class="avatar">${avatarText}</div><div class="bubble">${bubbleContent}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+// ─ 送信 ─
+function setExample(text) {
+  document.getElementById('input').value = text;
+  autoResize(document.getElementById('input'));
+  send();
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+}
+
+async function send() {
+  if (sending) return;
+  const input = document.getElementById('input');
+  const msg = input.value.trim();
+  if (!msg && driveAttachments.length === 0) return;
+
+  sending = true;
+  document.getElementById('sendBtn').disabled = true;
+
+  // Driveファイルをコンテキストとしてメッセージ先頭に付加
+  let fullMsg = msg;
+  if (driveAttachments.length > 0) {
+    const ctx = driveAttachments.map(a => `【ファイル: ${a.name}】\n${a.content}`).join('\n\n---\n\n');
+    fullMsg = ctx + (msg ? '\n\n---\n\n' + msg : '');
+    driveAttachments = [];
+    renderAttachBar();
+  }
+
+  input.value = ''; input.style.height = 'auto';
+  appendMessage('user', msg || '（添付ファイルを確認してください）');
+
+  // 思考インジケーター（最初のテキストが届くまで表示し続ける）
+  removeEmptyState();
+  const msgsEl = document.getElementById('messages');
+  const aiDiv = document.createElement('div');
+  aiDiv.className = 'msg ai';
+  const aiBubble = document.createElement('div');
+  aiBubble.className = 'bubble';
+  aiBubble.innerHTML = `<div class="thinking-indicator"><div class="typing"><span></span><span></span><span></span></div><span class="thinking-label">考え中...</span></div>`;
+  aiDiv.innerHTML = `<div class="avatar">AI</div>`;
+  aiDiv.appendChild(aiBubble);
+  msgsEl.appendChild(aiDiv);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+
+  const resp = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: fullMsg, conversationId: currentConvId })
+  });
+
+  // ストリーミング受信（typing indicator はここでは消さない）
+  let fullText = '';
+  let firstChunk = true;
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n'); buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      try {
+        const d = JSON.parse(line.slice(5));
+        if (d.conversationId) {
+          currentConvId = d.conversationId;
+        }
+        if (d.tool) {
+          // ツール呼び出しインジケーター
+          if (firstChunk) {
+            aiBubble.innerHTML = '';
+            firstChunk = false;
+          }
+          const TOOL_LABELS = {
+            query_corp_db: 'DBを照会中',
+            list_kintone_records: 'Kintoneを参照中',
+            search_hotprofile: 'HotProfileを検索中',
+            list_wp_posts: 'WP投稿を取得中',
+            create_wp_post: 'WP投稿を作成中',
+            send_email: 'メールを送信中',
+            call_oss_ai: 'OSS AIを呼び出し中',
+            list_chatwork_rooms: 'Chatworkルームを取得中',
+            get_chatwork_messages: 'Chatworkメッセージを取得中',
+            send_chatwork_message: 'Chatworkに送信中',
+            get_kot_daily: '日次勤怠を取得中',
+            get_kot_monthly: '月次勤怠を取得中',
+            list_drive_files: 'Driveファイル一覧を取得中',
+            read_drive_file: 'Driveファイルを読み取り中',
+          };
+          let toolCallsEl = aiBubble.querySelector('.tool-calls');
+          if (!toolCallsEl) {
+            toolCallsEl = document.createElement('div');
+            toolCallsEl.className = 'tool-calls';
+            aiBubble.appendChild(toolCallsEl);
+          }
+          const label = TOOL_LABELS[d.tool] || d.tool;
+          if (d.status === 'running') {
+            const el = document.createElement('div');
+            el.className = 'tool-call running';
+            el.id = `tool-${d.tool}-${Date.now()}`;
+            el.dataset.tool = d.tool;
+            el.textContent = label;
+            toolCallsEl.appendChild(el);
+          } else {
+            // done or error — update last running element for this tool
+            const running = [...toolCallsEl.querySelectorAll(`.tool-call.running`)].reverse().find(e => e.dataset.tool === d.tool);
+            if (running) {
+              running.classList.remove('running');
+              running.classList.add(d.status);
+              if (d.status === 'done') running.textContent = label.replace('中', '完了');
+              else running.textContent = label.replace('中', '失敗') + (d.error ? `: ${d.error}` : '');
+            }
+          }
+          msgsEl.scrollTop = msgsEl.scrollHeight;
+        }
+        if (d.text) {
+          if (firstChunk) {
+            aiBubble.innerHTML = '';
+            firstChunk = false;
+          }
+          // テキストはtool-calls要素の前に挿入
+          let textNode = aiBubble.querySelector('.ai-text');
+          if (!textNode) {
+            textNode = document.createElement('div');
+            textNode.className = 'ai-text';
+            aiBubble.insertBefore(textNode, aiBubble.querySelector('.tool-calls'));
+          }
+          fullText += d.text;
+          textNode.innerHTML = formatText(fullText);
+          msgsEl.scrollTop = msgsEl.scrollHeight;
+        }
+        if (d.done) {
+          // tool-calls要素を最後に移動
+          const toolCallsEl = aiBubble.querySelector('.tool-calls');
+          const { clean, skill } = extractSkill(fullText);
+          let textNode = aiBubble.querySelector('.ai-text');
+          if (textNode) textNode.innerHTML = formatText(clean);
+          else if (!toolCallsEl) aiBubble.innerHTML = formatText(clean);
+          if (skill) {
+            const card = document.createElement('div');
+            card.className = 'skill-card';
+            card.dataset.skill = JSON.stringify(skill);
+            card.innerHTML = `
+              <div class="skill-card-header"><span class="skill-card-icon">⚙️</span><span class="skill-card-title">${esc(skill.title)}</span></div>
+              <div class="skill-card-desc">${esc(skill.description || '')}</div>
+              <div class="skill-card-actions">
+                <button class="save-btn" onclick="saveSkill(this)">このスキルを保存</button>
+              </div>`;
+            aiBubble.appendChild(card);
+          }
+          msgsEl.scrollTop = msgsEl.scrollHeight;
+          await loadSidebar();
+        }
+      } catch {}
+    }
+  }
+
+  sending = false;
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('input').focus();
+}
+
+// ─ スキル保存 ─
+async function saveSkill(btn) {
+  const card = btn.closest('.skill-card');
+  const skill = JSON.parse(card.dataset.skill);
+  btn.disabled = true; btn.textContent = '保存中...';
+  const resp = await fetch('/api/skills', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(skill)
+  });
+  if (resp.ok) {
+    const actionsEl = card.querySelector('.skill-card-actions');
+    if (actionsEl) actionsEl.innerHTML = `<span class="saved-badge">✓ 保存しました</span>`;
+    await loadSidebar();
+  } else {
+    btn.disabled = false; btn.textContent = '再試行';
+  }
+}
+
+// ─ スキル削除 ─
+async function deleteSkill(id) {
+  if (!confirm('このスキルを削除しますか？')) return;
+  await fetch(`/api/skills/${id}`, { method: 'DELETE' });
+  await loadSidebar();
+}
+
+// ─ スキル実行 ─
+async function runSkill(id, title) {
+  removeEmptyState();
+  const msgsEl = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg ai';
+  const runId = `run-${id}-${Date.now()}`;
+  div.innerHTML = `<div class="avatar">AI</div><div class="bubble"><strong>▶ ${esc(title)} を実行中...</strong><div class="run-output" id="${runId}"></div></div>`;
+  msgsEl.appendChild(div);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+
+  const out = document.getElementById(runId);
+  const resp = await fetch(`/api/skills/${id}/run`, { method: 'POST' });
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n'); buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      try {
+        const d = JSON.parse(line.slice(5));
+        if (d.text) { out.textContent += d.text; msgsEl.scrollTop = msgsEl.scrollHeight; }
+        if (d.done) {
+          out.textContent += '\n\n✓ 実行完了';
+          div.querySelector('.bubble strong').textContent = `✓ ${title}`;
+        }
+      } catch {}
+    }
+  }
+}
+
+// ─ 会話削除 ─
+async function deleteConversation(id) {
+  if (!confirm('この依頼履歴を削除しますか？')) return;
+  await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
+  if (currentConvId === id) newTask();
+  await loadSidebar();
+}
+
+// ─ 実行履歴パネル ─
+async function toggleHistory() {
+  const panel = document.getElementById('historyPanel');
+  const btn = document.getElementById('historyToggleBtn');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    panel.classList.remove('open');
+    btn.classList.remove('active');
+  } else {
+    panel.classList.add('open');
+    btn.classList.add('active');
+    await loadHistory();
+  }
+}
+
+async function loadHistory() {
+  const runs = await fetch('/api/task-runs').then(r => r.json());
+  const list = document.getElementById('historyList');
+  if (runs.length === 0) {
+    list.innerHTML = '<div class="history-empty">実行履歴がありません</div>';
+    return;
+  }
+  list.innerHTML = runs.map(r => `
+    <div class="run-card">
+      <div class="run-card-title">${esc(r.skill_title || r.skill_name)}</div>
+      <div class="run-card-meta">
+        <span class="run-status ${r.status}">${statusLabel(r.status)}</span>
+        <span>${r.started_at || ''}</span>
+      </div>
+      ${r.result ? `<div class="run-card-result">${esc(r.result)}</div>` : ''}
+    </div>`).join('');
+}
+
+function statusLabel(s) {
+  return { done: '完了', running: '実行中', error: 'エラー' }[s] || s;
+}
+
+// ─ ユーティリティ ─
+function esc(text) {
+  return String(text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatText(text) {
+  return esc(text)
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\n/g, '<br>');
+}
+
+function extractSkill(text) {
+  const m = text.match(/<skill>([\s\S]*?)<\/skill>/);
+  if (!m) return { clean: text, skill: null };
+  try {
+    const skill = JSON.parse(m[1].trim());
+    const clean = text.replace(/<skill>[\s\S]*?<\/skill>/, '').trim();
+    return { clean, skill };
+  } catch { return { clean: text, skill: null }; }
+}
+
+// ─ King of Time ─
+let kotData = null;
+let kotLabel = '';
+
+function kotModeChange() {
+  const mode = document.getElementById('kotMode').value;
+  document.getElementById('kotDate').style.display = mode === 'daily' ? '' : 'none';
+  document.getElementById('kotMonth').style.display = mode === 'monthly' ? '' : 'none';
+}
+
+function toggleKot() {
+  const panel = document.getElementById('kotPanel');
+  const btn = document.getElementById('kotToggleBtn');
+  const isOpen = panel.classList.contains('open');
+  document.getElementById('cwPanel').classList.remove('open');
+  document.getElementById('cwToggleBtn').classList.remove('active');
+  document.getElementById('drivePanel').classList.remove('open');
+  document.getElementById('driveToggleBtn').classList.remove('active');
+  panel.classList.toggle('open', !isOpen);
+  btn.classList.toggle('active', !isOpen);
+  if (!isOpen) {
+    // デフォルト日付を今日にセット
+    const today = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Tokyo' });
+    document.getElementById('kotDate').value = today;
+    const ym = today.slice(0, 7);
+    document.getElementById('kotMonth').value = ym;
+  }
+}
+
+async function loadKot() {
+  const mode = document.getElementById('kotMode').value;
+  const wrap = document.getElementById('kotTableWrap');
+  wrap.innerHTML = '<div class="cw-empty">読み込み中...</div>';
+  kotData = null;
+
+  try {
+    let data, url;
+    if (mode === 'daily') {
+      const date = document.getElementById('kotDate').value;
+      if (!date) { wrap.innerHTML = '<div class="cw-empty">日付を選んでください</div>'; return; }
+      url = `/api/kot/attendances?date=${date}`;
+      kotLabel = `日次勤怠 ${date}`;
+    } else {
+      const month = document.getElementById('kotMonth').value;
+      if (!month) { wrap.innerHTML = '<div class="cw-empty">年月を選んでください</div>'; return; }
+      const [y, m] = month.split('-');
+      url = `/api/kot/monthly?year=${y}&month=${m}`;
+      kotLabel = `月次勤怠 ${month}`;
+    }
+
+    data = await fetch(url).then(r => r.json());
+    if (data.error) { wrap.innerHTML = `<div class="drive-error">${esc(data.error)}</div>`; return; }
+
+    kotData = data;
+    renderKotTable(data, mode);
+  } catch(e) {
+    wrap.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`;
+  }
+}
+
+function renderKotTable(data, mode) {
+  const wrap = document.getElementById('kotTableWrap');
+  const rows = Array.isArray(data) ? data : (data.daily_attendances || data.monthly_attendances || []);
+  if (!rows.length) { wrap.innerHTML = '<div class="cw-empty">データがありません</div>'; return; }
+
+  if (mode === 'daily') {
+    wrap.innerHTML = `<table class="kot-table">
+      <tr><th>社員名</th><th>出勤</th><th>退勤</th><th>残業</th><th>状態</th></tr>
+      ${rows.map(r => `<tr>
+        <td>${esc(r.employee?.name || r.name || '')}</td>
+        <td>${esc(r.start_time || r.clock_in_time || '−')}</td>
+        <td>${esc(r.end_time || r.clock_out_time || '−')}</td>
+        <td>${r.overtime_minutes != null ? Math.round(r.overtime_minutes/60*10)/10 + 'h' : '−'}</td>
+        <td>${esc(r.attendance_type_name || r.work_type || '')}</td>
+      </tr>`).join('')}
+    </table>`;
+  } else {
+    wrap.innerHTML = `<table class="kot-table">
+      <tr><th>社員名</th><th>出勤日数</th><th>残業時間</th><th>有休残</th></tr>
+      ${rows.map(r => `<tr>
+        <td>${esc(r.employee?.name || r.name || '')}</td>
+        <td>${r.working_days ?? '−'}</td>
+        <td>${r.overtime_minutes != null ? Math.round(r.overtime_minutes/60*10)/10 + 'h' : '−'}</td>
+        <td>${r.paid_leave_remaining != null ? r.paid_leave_remaining + '日' : '−'}</td>
+      </tr>`).join('')}
+    </table>`;
+  }
+}
+
+function attachKot() {
+  if (!kotData) { alert('先にデータを表示してください'); return; }
+  const text = `【KingOfTime: ${kotLabel}】\n${JSON.stringify(kotData, null, 2)}`;
+  driveAttachments.push({ name: `KoT: ${kotLabel}`, content: text });
+  renderAttachBar();
+  document.getElementById('kotPanel').classList.remove('open');
+  document.getElementById('kotToggleBtn').classList.remove('active');
+  document.getElementById('input').focus();
+}
+
+// ─ Chatwork ─
+let cwRooms = [];
+let cwCurrentRoom = null;
+
+async function toggleCw() {
+  const panel = document.getElementById('cwPanel');
+  const btn = document.getElementById('cwToggleBtn');
+  const isOpen = panel.classList.contains('open');
+  // 他パネルを閉じる
+  document.getElementById('drivePanel').classList.remove('open');
+  document.getElementById('driveToggleBtn').classList.remove('active');
+  document.getElementById('kotPanel').classList.remove('open');
+  document.getElementById('kotToggleBtn').classList.remove('active');
+  panel.classList.toggle('open', !isOpen);
+  btn.classList.toggle('active', !isOpen);
+  if (!isOpen && cwRooms.length === 0) await loadCwRooms();
+}
+
+async function loadCwRooms() {
+  const content = document.getElementById('cwContent');
+  content.innerHTML = '<div class="cw-empty">ルーム一覧を読み込み中...</div>';
+  try {
+    const rooms = await fetch('/api/chatwork/rooms').then(r => r.json());
+    if (rooms.error) { content.innerHTML = `<div class="cw-error">${esc(rooms.error)}</div>`; return; }
+    cwRooms = rooms.sort((a, b) => (b.unread_num > 0 ? 1 : 0) - (a.unread_num > 0 ? 1 : 0) || b.last_update_time - a.last_update_time);
+    renderCwRooms();
+  } catch(e) {
+    content.innerHTML = `<div class="cw-error">${esc(e.message)}</div>`;
+  }
+}
+
+function renderCwRooms() {
+  const content = document.getElementById('cwContent');
+  if (cwRooms.length === 0) { content.innerHTML = '<div class="cw-empty">ルームがありません</div>'; return; }
+  const typeIcon = { my: '👤', direct: '👤', group: '👥' };
+  content.innerHTML = `<div class="cw-room-list">${cwRooms.map(r => `
+    <div class="cw-room-item" onclick="loadCwMessages(${r.room_id}, '${esc(r.name).replace(/'/g,"\\'")}')">
+      <div class="cw-room-icon">${typeIcon[r.type] || '💬'}</div>
+      <div class="cw-room-info">
+        <div class="cw-room-name">${esc(r.name)}</div>
+        <div class="cw-room-last">${esc(r.last_chat_message_text || '')}</div>
+      </div>
+      ${r.unread_num > 0 ? `<span class="cw-room-unread">${r.unread_num}</span>` : ''}
+    </div>`).join('')}
+  </div>`;
+}
+
+async function loadCwMessages(roomId, roomName) {
+  cwCurrentRoom = { id: roomId, name: roomName };
+  const content = document.getElementById('cwContent');
+  content.innerHTML = `<div style="padding:10px 12px;border-bottom:1px solid var(--border)">
+    <button class="cw-back-btn" onclick="renderCwRooms()">← ルーム一覧</button>
+    <div style="font-size:13px;font-weight:700;">${esc(roomName)}</div>
+  </div><div class="cw-msg-area" id="cwMsgArea"><div class="cw-empty">メッセージを読み込み中...</div></div>
+  <div class="cw-toolbar">
+    <button onclick="attachCwMessages()">📎 添付してAIに質問</button>
+  </div>`;
+
+  try {
+    const msgs = await fetch(`/api/chatwork/rooms/${roomId}/messages?force=1`).then(r => r.json());
+    const area = document.getElementById('cwMsgArea');
+    if (!Array.isArray(msgs) || msgs.length === 0) { area.innerHTML = '<div class="cw-empty">メッセージがありません</div>'; return; }
+    const recent = msgs.slice(-50);
+    area.innerHTML = recent.map(m => {
+      const time = new Date(m.send_time * 1000).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+      return `<div class="cw-msg">
+        <div class="cw-msg-header">
+          <span class="cw-msg-name">${esc(m.account?.name || '')}</span>
+          <span class="cw-msg-time">${time}</span>
+        </div>
+        <div class="cw-msg-body">${esc(m.body)}</div>
+      </div>`;
+    }).join('');
+    area.scrollTop = area.scrollHeight;
+  } catch(e) {
+    document.getElementById('cwMsgArea').innerHTML = `<div class="cw-error">${esc(e.message)}</div>`;
+  }
+}
+
+async function attachCwMessages() {
+  if (!cwCurrentRoom) return;
+  try {
+    const msgs = await fetch(`/api/chatwork/rooms/${cwCurrentRoom.id}/messages?force=1`).then(r => r.json());
+    if (!Array.isArray(msgs) || msgs.length === 0) { alert('メッセージがありません'); return; }
+    const recent = msgs.slice(-50);
+    const text = `【Chatworkルーム: ${cwCurrentRoom.name}】\n` + recent.map(m => {
+      const time = new Date(m.send_time * 1000).toLocaleString('ja-JP');
+      return `[${time}] ${m.account?.name || ''}:\n${m.body}`;
+    }).join('\n\n');
+    driveAttachments.push({ name: `Chatwork: ${cwCurrentRoom.name}`, content: text });
+    renderAttachBar();
+    // パネルを閉じる
+    document.getElementById('cwPanel').classList.remove('open');
+    document.getElementById('cwToggleBtn').classList.remove('active');
+    document.getElementById('input').focus();
+  } catch(e) { alert(e.message); }
+}
+
+// ─ Google Drive ─
+function toggleDrive() {
+  const panel = document.getElementById('drivePanel');
+  const btn = document.getElementById('driveToggleBtn');
+  const isOpen = panel.classList.contains('open');
+  // 他パネルを閉じる
+  document.getElementById('cwPanel').classList.remove('open');
+  document.getElementById('cwToggleBtn').classList.remove('active');
+  document.getElementById('kotPanel').classList.remove('open');
+  document.getElementById('kotToggleBtn').classList.remove('active');
+  panel.classList.toggle('open', !isOpen);
+  btn.classList.toggle('active', !isOpen);
+}
+
+async function listDriveFiles() {
+  const folderId = document.getElementById('driveFolderInput').value.trim();
+  if (!folderId) return;
+  const list = document.getElementById('driveFileList');
+  list.innerHTML = '<div class="drive-empty">読み込み中...</div>';
+
+  const icons = {
+    'application/vnd.google-apps.document': '📄',
+    'application/vnd.google-apps.spreadsheet': '📊',
+    'application/vnd.google-apps.presentation': '📑',
+    'application/vnd.google-apps.folder': '📁',
+    'application/pdf': '📕',
+    'text/plain': '📝',
+    'text/csv': '📋',
+  };
+
+  try {
+    const files = await fetch(`/api/drive/list?folderId=${encodeURIComponent(folderId)}`).then(r => r.json());
+    if (files.error) { list.innerHTML = `<div class="drive-error">${esc(files.error)}</div>`; return; }
+    if (files.length === 0) { list.innerHTML = '<div class="drive-empty">ファイルがありません</div>'; return; }
+
+    const readable = ['application/vnd.google-apps.document','application/vnd.google-apps.spreadsheet',
+      'application/vnd.google-apps.presentation','text/plain','text/csv','application/json'];
+
+    list.innerHTML = files.map(f => {
+      const icon = icons[f.mimeType] || '📎';
+      const canRead = readable.includes(f.mimeType);
+      const date = f.modifiedTime ? new Date(f.modifiedTime).toLocaleDateString('ja-JP') : '';
+      return `<div class="drive-file-item">
+        <div class="drive-file-icon">${icon}</div>
+        <div class="drive-file-info">
+          <div class="drive-file-name" title="${esc(f.name)}">${esc(f.name)}</div>
+          <div class="drive-file-meta">${date}</div>
+        </div>
+        <div class="drive-file-actions">
+          ${canRead ? `<button class="drive-attach-btn" onclick="attachDriveFile('${f.id}','${esc(f.name).replace(/'/g,"\\'")}')">添付</button>` : '<span style="font-size:10px;color:#a0aec0;">非対応</span>'}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`;
+  }
+}
+
+async function attachDriveFile(fileId, fileName) {
+  const btn = event.target;
+  btn.textContent = '読込中...'; btn.disabled = true;
+  try {
+    const data = await fetch(`/api/drive/read/${fileId}`).then(r => r.json());
+    if (data.error) { alert(data.error); btn.textContent = '添付'; btn.disabled = false; return; }
+    driveAttachments.push({ name: data.name, content: data.content });
+    renderAttachBar();
+    btn.textContent = '✓添付済';
+  } catch(e) {
+    alert(e.message); btn.textContent = '添付'; btn.disabled = false;
+  }
+}
+
+function renderAttachBar() {
+  const bar = document.getElementById('attachBar');
+  if (driveAttachments.length === 0) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = '<span style="font-size:12px;color:#718096;flex-shrink:0;">添付:</span>' +
+    driveAttachments.map((a, i) => `
+      <span class="attach-badge">
+        📄 ${esc(a.name)}
+        <button class="remove-attach" onclick="removeAttach(${i})">✕</button>
+      </span>`).join('');
+}
+
+function removeAttach(i) {
+  driveAttachments.splice(i, 1);
+  renderAttachBar();
+}
+
+function formatDate(dt) {
+  if (!dt) return '';
+  const d = new Date(dt.replace(' ', 'T'));
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60 * 60 * 1000) return '今';
+  if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / 3600000)}時間前`;
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${m}/${day}`;
+}
+</script>
+</body>
+</html>

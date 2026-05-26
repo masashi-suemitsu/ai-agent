@@ -1,0 +1,8 @@
+node_modules/
+ecosystem.config.js
+*.db
+*.sqlite
+.env
+.env.*
+*.log
+*.tmp
