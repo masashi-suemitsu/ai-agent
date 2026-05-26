@@ -212,6 +212,7 @@ function requireAuth(req, res, next) {
   if (req.path === '/auth/chatwork/callback') return next();
   if (req.path === '/auth/calendar/callback') return next();
   if (req.path === '/auth/gmail/callback') return next();
+  if (req.path === '/auth/drive/callback') return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'ログインが必要です' });
   res.redirect('/login');
 }
@@ -289,6 +290,49 @@ app.get('/auth/calendar/callback', async (req, res) => {
   } catch(e) {
     console.error('[calendar/callback] error:', e.message);
     res.redirect('/?calendar_error=1');
+  }
+});
+
+// ── Google Drive 個人OAuth連携 ──
+app.get('/auth/drive', requireAuth, (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).send('GOOGLE_CLIENT_IDが未設定です');
+  const callbackUrl = (process.env.CALLBACK_URL || '').replace('/auth/google/callback', '/auth/drive/callback');
+  const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, callbackUrl);
+  const state = Buffer.from(req.user.email).toString('base64url');
+  const authUrl = oauth2.generateAuthUrl({
+    access_type: 'offline',
+    prompt: 'consent',
+    scope: ['https://www.googleapis.com/auth/drive.readonly'],
+    state
+  });
+  res.redirect(authUrl);
+});
+
+app.get('/auth/drive/callback', async (req, res) => {
+  const { code, error, state } = req.query;
+  if (error || !code) return res.redirect('/?drive_error=1');
+  let userEmail = req.user?.email;
+  if (!userEmail && state) {
+    try { userEmail = Buffer.from(state, 'base64url').toString('utf8'); } catch(e) {}
+  }
+  if (!userEmail || !userEmail.endsWith('@' + ALLOWED_DOMAIN)) return res.redirect('/login');
+  try {
+    const callbackUrl = (process.env.CALLBACK_URL || '').replace('/auth/google/callback', '/auth/drive/callback');
+    const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, callbackUrl);
+    const { tokens } = await oauth2.getToken(code);
+    db.prepare(`
+      INSERT INTO user_drive_tokens (email, access_token, refresh_token, updated_at)
+      VALUES (?, ?, ?, datetime('now','localtime'))
+      ON CONFLICT(email) DO UPDATE SET
+        access_token = excluded.access_token,
+        refresh_token = COALESCE(excluded.refresh_token, refresh_token),
+        updated_at = excluded.updated_at
+    `).run(userEmail, tokens.access_token, tokens.refresh_token || null);
+    audit(userEmail, '', 'drive.oauth.connect');
+    res.redirect('/?drive_connected=1');
+  } catch(e) {
+    console.error('[drive/callback] error:', e.message);
+    res.redirect('/?drive_error=1');
   }
 });
 
@@ -1796,10 +1840,17 @@ const DRIVE_MIME_LABELS = {
   'text/csv': 'CSV',
 };
 
-// GET /api/drive/status — Drive連携確認
+// GET /api/drive/status
 app.get('/api/drive/status', (req, res) => {
   const row = db.prepare('SELECT updated_at FROM user_drive_tokens WHERE email=? AND refresh_token IS NOT NULL').get(req.user.email);
-  res.json({ connected: !!row, updated_at: row?.updated_at || null });
+  res.json({ connected: !!row, updatedAt: row?.updated_at || null });
+});
+
+// DELETE /api/drive/disconnect
+app.delete('/api/drive/disconnect', (req, res) => {
+  db.prepare('DELETE FROM user_drive_tokens WHERE email=?').run(req.user.email);
+  audit(req.user.email, req.user.name, 'drive.oauth.disconnect');
+  res.json({ ok: true });
 });
 
 // GET /api/drive/list?folderId=xxx

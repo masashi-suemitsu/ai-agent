@@ -530,12 +530,15 @@ textarea:focus { border-color: var(--primary); background: #fff; }
     <h3>📁 Google Drive</h3>
     <button class="panel-close-btn" onclick="toggleDrive()">✕</button>
   </div>
-  <div class="drive-folder-input">
-    <input type="text" id="driveFolderInput" placeholder="フォルダID を貼り付け" />
-    <button onclick="listDriveFiles()">表示</button>
-  </div>
-  <div class="drive-file-list" id="driveFileList">
-    <div class="drive-empty">フォルダIDを入力してファイルを表示<br><small style="font-size:11px;opacity:.7;">GoogleドライブのURL末尾の文字列がIDです</small></div>
+  <div id="driveStatusArea" style="border-bottom:1px solid var(--border);"></div>
+  <div id="driveMainArea" style="display:none;flex:1;overflow:hidden;display:flex;flex-direction:column;">
+    <div class="drive-folder-input">
+      <input type="text" id="driveFolderInput" placeholder="フォルダID を貼り付け" />
+      <button onclick="listDriveFiles()">表示</button>
+    </div>
+    <div class="drive-file-list" id="driveFileList">
+      <div class="drive-empty">フォルダIDを入力してファイルを表示<br><small style="font-size:11px;opacity:.7;">GoogleドライブのURL末尾の文字列がIDです</small></div>
+    </div>
   </div>
 </div>
 
@@ -1286,13 +1289,53 @@ function closeAllPanels(except) {
 }
 
 // ─ Google Drive ─
-function toggleDrive() {
+async function toggleDrive() {
   const panel = document.getElementById('drivePanel');
   const btn = document.getElementById('driveToggleBtn');
   const isOpen = panel.classList.contains('open');
   closeAllPanels('drivePanel');
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
+  if (!isOpen) await loadDriveStatus();
+}
+
+async function loadDriveStatus() {
+  const statusArea = document.getElementById('driveStatusArea');
+  const mainArea = document.getElementById('driveMainArea');
+  try {
+    const status = await fetch('/api/drive/status').then(r => r.json());
+    if (status.connected) {
+      statusArea.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:18px;">✅</span>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#276749;">Drive連携済み</div>
+              <div style="font-size:11px;color:#718096;">最終更新: ${esc(status.updatedAt || '')}</div>
+            </div>
+          </div>
+          <button onclick="disconnectDrive()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;">解除</button>
+        </div>`;
+      mainArea.style.display = 'flex';
+    } else {
+      statusArea.innerHTML = `
+        <div style="text-align:center;padding:20px 16px;">
+          <div style="font-size:28px;margin-bottom:8px;">📁</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">Google Drive未連携</div>
+          <div style="font-size:12px;color:#718096;margin-bottom:16px;line-height:1.6;">連携するとAIエージェントがファイルを参照できます</div>
+          <a href="/auth/drive" style="display:inline-block;background:var(--primary);color:#fff;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;text-decoration:none;">Google Driveに連携する</a>
+        </div>`;
+      mainArea.style.display = 'none';
+    }
+  } catch(e) {
+    statusArea.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`;
+  }
+}
+
+async function disconnectDrive() {
+  if (!confirm('Google Drive連携を解除しますか？')) return;
+  await fetch('/api/drive/disconnect', { method: 'DELETE' });
+  await loadDriveStatus();
 }
 
 // ─ Google Calendar ─
