@@ -961,7 +961,7 @@ app.get('/api/task-runs', (req, res) => {
 const CW_TOKEN = process.env.CHATWORK_API_TOKEN;
 const CW_BASE = 'https://api.chatwork.com/v2';
 const CW_OAUTH_BASE = process.env.CHATWORK_OAUTH_BASE || 'https://kcw.kddi.ne.jp';
-const CW_OAUTH_TOKEN_URL = process.env.CHATWORK_OAUTH_TOKEN_URL || 'https://oauth.kcw.kddi.ne.jp/token';
+const CW_OAUTH_TOKEN_URL = process.env.CHATWORK_OAUTH_TOKEN_URL || 'https://oauth.chatwork.com/token';
 
 async function refreshChatworkToken(refreshToken, email) {
   const clientId = process.env.CHATWORK_OAUTH_CLIENT_ID;
