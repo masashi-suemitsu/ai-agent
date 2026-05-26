@@ -530,16 +530,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
     <h3>📁 Google Drive</h3>
     <button class="panel-close-btn" onclick="toggleDrive()">✕</button>
   </div>
-  <div id="driveStatusArea" style="border-bottom:1px solid var(--border);"></div>
-  <div id="driveMainArea" style="display:none;flex:1;overflow:hidden;display:flex;flex-direction:column;">
-    <div class="drive-folder-input">
-      <input type="text" id="driveFolderInput" placeholder="フォルダID を貼り付け" />
-      <button onclick="listDriveFiles()">表示</button>
-    </div>
-    <div class="drive-file-list" id="driveFileList">
-      <div class="drive-empty">フォルダIDを入力してファイルを表示<br><small style="font-size:11px;opacity:.7;">GoogleドライブのURL末尾の文字列がIDです</small></div>
-    </div>
-  </div>
+  <div id="driveStatusArea"></div>
 </div>
 
 <!-- ─ Kintone Panel ─ -->
@@ -559,18 +550,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
     <h3>📅 Googleカレンダー</h3>
     <button class="panel-close-btn" onclick="toggleCalendar()">✕</button>
   </div>
-  <div id="calendarStatusArea" style="border-bottom:1px solid var(--border);"></div>
-  <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;">
-    <select id="calendarDays" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;outline:none;">
-      <option value="7">7日間</option>
-      <option value="14">14日間</option>
-      <option value="30">30日間</option>
-    </select>
-    <button onclick="loadCalendarEvents()" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">表示</button>
-  </div>
-  <div id="calendarContent" style="flex:1;overflow-y:auto;padding:8px;">
-    <div class="drive-empty">読み込み中...</div>
-  </div>
+  <div id="calendarStatusArea"></div>
 </div>
 
 <!-- ─ Gmail Panel ─ -->
@@ -1301,22 +1281,17 @@ async function toggleDrive() {
 
 async function loadDriveStatus() {
   const statusArea = document.getElementById('driveStatusArea');
-  const mainArea = document.getElementById('driveMainArea');
   try {
     const status = await fetch('/api/drive/status').then(r => r.json());
     if (status.connected) {
       statusArea.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:18px;">✅</span>
-            <div>
-              <div style="font-size:13px;font-weight:700;color:#276749;">Drive連携済み</div>
-              <div style="font-size:11px;color:#718096;">最終更新: ${esc(status.updatedAt || '')}</div>
-            </div>
-          </div>
-          <button onclick="disconnectDrive()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;">解除</button>
+        <div style="text-align:center;padding:24px 16px;">
+          <div style="font-size:36px;margin-bottom:8px;">✅</div>
+          <div style="font-size:14px;font-weight:700;color:#276749;margin-bottom:4px;">Google Drive連携済み</div>
+          <div style="font-size:11px;color:#718096;margin-bottom:14px;">最終更新: ${esc(status.updatedAt || '')}</div>
+          <div style="font-size:12px;color:#4a5568;margin-bottom:16px;line-height:1.6;">AIエージェントがファイルを参照できます</div>
+          <button onclick="disconnectDrive()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
         </div>`;
-      mainArea.style.display = 'flex';
     } else {
       statusArea.innerHTML = `
         <div style="text-align:center;padding:20px 16px;">
@@ -1325,7 +1300,6 @@ async function loadDriveStatus() {
           <div style="font-size:12px;color:#718096;margin-bottom:16px;line-height:1.6;">連携するとAIエージェントがファイルを参照できます</div>
           <a href="/auth/drive" style="display:inline-block;background:var(--primary);color:#fff;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;text-decoration:none;">Google Driveに連携する</a>
         </div>`;
-      mainArea.style.display = 'none';
     }
   } catch(e) {
     statusArea.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`;
@@ -1355,13 +1329,13 @@ async function loadCalendarStatus() {
     const status = await fetch('/api/calendar/status').then(r => r.json());
     if (status.connected) {
       statusArea.innerHTML = `
-        <div style="text-align:center;padding:14px 16px;">
-          <div style="font-size:28px;margin-bottom:6px;">✅</div>
-          <div style="font-size:14px;font-weight:700;color:#276749;margin-bottom:2px;">カレンダー連携済み</div>
-          <div style="font-size:11px;color:#718096;margin-bottom:10px;">最終更新: ${esc(status.updatedAt || '')}</div>
+        <div style="text-align:center;padding:24px 16px;">
+          <div style="font-size:36px;margin-bottom:8px;">✅</div>
+          <div style="font-size:14px;font-weight:700;color:#276749;margin-bottom:4px;">カレンダー連携済み</div>
+          <div style="font-size:11px;color:#718096;margin-bottom:14px;">最終更新: ${esc(status.updatedAt || '')}</div>
+          <div style="font-size:12px;color:#4a5568;margin-bottom:16px;line-height:1.6;">AIエージェントが予定を確認できます</div>
           <button onclick="disconnectCalendar()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
         </div>`;
-      await loadCalendarEvents();
     } else {
       statusArea.innerHTML = `
         <div style="text-align:center;padding:20px 16px;">
@@ -1370,7 +1344,6 @@ async function loadCalendarStatus() {
           <div style="font-size:12px;color:#718096;margin-bottom:16px;line-height:1.6;">連携するとAIエージェントが予定を確認できます</div>
           <a href="/auth/calendar" style="display:inline-block;background:var(--primary);color:#fff;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;text-decoration:none;">Googleカレンダーに連携する</a>
         </div>`;
-      document.getElementById('calendarContent').innerHTML = '';
     }
   } catch(e) {
     statusArea.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`;
