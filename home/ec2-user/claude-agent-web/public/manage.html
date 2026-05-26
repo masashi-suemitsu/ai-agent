@@ -187,6 +187,30 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   </div>
 </div>
 
+<!-- ─ Skill Edit Modal ─ -->
+<div class="modal-overlay" id="editSkillModal" onclick="if(event.target===this)closeEditSkill()">
+  <div class="modal-box">
+    <div class="modal-title">✏️ スキルを編集</div>
+    <input type="hidden" id="editSkillId">
+    <div class="modal-field">
+      <label>タイトル</label>
+      <input type="text" id="editSkillTitle" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+    </div>
+    <div class="modal-field">
+      <label>説明（1行）</label>
+      <input type="text" id="editSkillDesc" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+    </div>
+    <div class="modal-field">
+      <label>実行手順</label>
+      <textarea id="editSkillSteps" rows="8" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;line-height:1.75;resize:vertical;outline:none;font-family:inherit;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeEditSkill()">キャンセル</button>
+      <button class="btn btn-primary" id="editSkillSaveBtn" onclick="saveEditSkill()">保存する</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─ Schedule Modal ─ -->
 <div class="modal-overlay" id="scheduleModal" onclick="if(event.target===this)closeModal()">
   <div class="modal-box">
@@ -332,6 +356,7 @@ function renderTasks(tasks) {
           </label>
           <span class="toggle-label" id="task-toggle-label-${t.id}">${t.enabled ? '有効' : (isOnce && t.last_status === 'done' ? '実行済' : '停止中')}</span>
         </div>
+        <button class="btn btn-outline" onclick="runTaskNow(${t.id}, this)" title="今すぐ実行">▶ 実行</button>
         ${!isOnce ? `<button class="btn btn-outline" onclick="openIntervalEdit(${t.id}, ${t.interval_min})">間隔を変更</button>` : ''}
         <button class="btn btn-danger" onclick="deleteTask(${t.id})">削除</button>
       </div>
@@ -387,6 +412,21 @@ async function toggleTask(id, enabled) {
   allTasks = allTasks.map(t => t.id === id ? { ...t, enabled: enabled ? 1 : 0 } : t);
 }
 
+async function runTaskNow(id, btn) {
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '実行中...';
+  try {
+    const resp = await fetch(`/api/scheduled-tasks/${id}/run`, { method: 'POST' });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '失敗');
+    btn.textContent = '✓ 開始';
+    setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 3000);
+  } catch(e) {
+    alert(e.message);
+    btn.disabled = false; btn.textContent = orig;
+  }
+}
+
 async function deleteTask(id) {
   if (!confirm('この定期タスクを削除しますか？')) return;
   await fetch(`/api/scheduled-tasks/${id}`, { method: 'DELETE' });
@@ -434,6 +474,7 @@ function renderSkills(skills) {
       ${isOwn ? `<div class="card-actions">
         <button class="btn btn-orange" onclick="openModal(${s.id}, ${JSON.stringify(s.title)})">⏰ 定期実行を設定</button>
         <button class="btn btn-outline" onclick="runSkillNow(${s.id}, ${JSON.stringify(s.title)}, this)">▶ 今すぐ実行</button>
+        <button class="btn btn-outline" onclick="openEditSkill(${s.id}, ${JSON.stringify(s.title)}, ${JSON.stringify(s.description||'')}, ${JSON.stringify(s.steps||'')})">✏️ 編集</button>
         <button class="btn btn-danger" onclick="deleteSkill(${s.id})">削除</button>
       </div>` : ''}
     </div>`;
@@ -463,6 +504,39 @@ async function runSkillNow(id, title, btn) {
     }
   } catch(e) {
     alert(e.message); btn.disabled = false; btn.textContent = '▶ 今すぐ実行';
+  }
+}
+
+function openEditSkill(id, title, description, steps) {
+  document.getElementById('editSkillId').value = id;
+  document.getElementById('editSkillTitle').value = title;
+  document.getElementById('editSkillDesc').value = description;
+  document.getElementById('editSkillSteps').value = steps;
+  document.getElementById('editSkillModal').classList.add('open');
+}
+function closeEditSkill() {
+  document.getElementById('editSkillModal').classList.remove('open');
+}
+async function saveEditSkill() {
+  const id = document.getElementById('editSkillId').value;
+  const title = document.getElementById('editSkillTitle').value.trim();
+  const description = document.getElementById('editSkillDesc').value.trim();
+  const steps = document.getElementById('editSkillSteps').value.trim();
+  if (!title) { alert('タイトルは必須です'); return; }
+  const btn = document.getElementById('editSkillSaveBtn');
+  btn.disabled = true; btn.textContent = '保存中...';
+  try {
+    const resp = await fetch(`/api/skills/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, description, steps })
+    });
+    if (!resp.ok) throw new Error((await resp.json()).error || '保存失敗');
+    closeEditSkill();
+    await loadSkills();
+  } catch(e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '保存する';
   }
 }
 
@@ -496,18 +570,12 @@ function renderRules(role) {
     { name: 'send_chatwork_message', label: 'Chatworkメッセージ送信',  roles: ['admin','gyoumu','eigyo','recruit','user'] },
     { name: 'list_drive_files',      label: 'Driveファイル一覧',       roles: ['admin','gyoumu','eigyo','recruit','user'] },
     { name: 'read_drive_file',       label: 'Driveファイル読取',        roles: ['admin','gyoumu','eigyo','recruit','user'] },
-    { name: 'fetch_corp_api',        label: '社員専用データAPI',        roles: ['admin','gyoumu','eigyo'] },
-    { name: 'fetch_corp_page',       label: '社内管理画面の参照',       roles: ['admin','gyoumu','eigyo','recruit'] },
     { name: 'list_calendar_events',  label: 'Googleカレンダー取得',    roles: ['admin','gyoumu','eigyo','recruit','user'] },
     { name: 'list_gmail_messages',   label: 'Gmail受信トレイ取得',     roles: ['admin','gyoumu','eigyo','recruit','user'] },
   ];
 
-  const corpApiActions = [
-    { action: 'cases',          label: '案件データ',        roles: ['admin','eigyo'] },
-    { action: 'contracts',      label: '契約データ',        roles: ['admin','gyoumu'] },
-    { action: 'geppo',          label: '月報データ',        roles: ['admin','gyoumu','eigyo'] },
-    { action: 'query',          label: '任意SQLクエリ（アロウリスト適用）', roles: ['admin','gyoumu'] },
-  ];
+  // corp 側 /api/agent.php が閉鎖中（503）のため fetch_corp_api アクションは一時停止
+  const corpApiActions = [];
 
   const myTools = allTools.filter(t => t.roles.includes(role));
   const myActions = corpApiActions.filter(a => a.roles.includes(role));

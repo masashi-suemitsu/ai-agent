@@ -48,9 +48,9 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
-  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','register_task']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','register_task']),
+  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','register_task']),
   user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','register_task'])
 };
 
@@ -501,29 +501,23 @@ function getSystemPrompt(role) {
 ## あなたの権限: 業務管理部
 担当業務: 契約管理・月報分析
 
-利用可能データ（fetch_corp_api）: contracts / geppo / query
-- 社員一覧（employees）・採用候補者（candidates）・フォローシグナル（follow_signals）・案件データ（cases）・勤怠データ（attendance）へのアクセスは権限外
-- 社員情報はAI経由では参照不可（個人情報保護のため無効化）
-- fetch_corp_page でcorp.acrovision.jp の管理画面ページをテキストで読める`,
+DBアロウリスト経由で kintone_contract / geppo_data / kintone_anken_eigyo / kintone_employees / kintone_customers / kintone_seikyu を query_corp_db で照会可能。
+- 採用候補者・フォローシグナル・勤怠・users などの機密テーブルは閲覧不可（アロウリスト外）
+- 社員情報はAI経由では参照不可（個人情報保護のため無効化）`,
 
     eigyo: `
 
 ## あなたの権限: 営業部
 担当業務: 案件管理・月報閲覧・名刺/人脈検索・提案書作成
 
-利用可能データ（fetch_corp_api）: cases / geppo
-- 社員一覧（employees）・採用候補者データ（candidates）・契約詳細（contracts）・勤怠データへのアクセスは権限外
-- fetch_corp_page でcorp.acrovision.jp の管理画面ページをテキストで読める
-
-案件情報は fetch_corp_api(action=cases) で取得できる。ステータスフィルタも使える。`,
+- 採用候補者・契約詳細・勤怠データへのアクセスは権限外`,
 
     recruit: `
 
 ## あなたの権限: 採用部
-担当業務: （AI経由でアクセスできるデータは現在なし）
+担当業務: （AI経由で参照できる corp データは現在なし）
 
-- 採用候補者・社員情報・案件・契約・勤怠データはすべてAI経由では参照不可
-- fetch_corp_page でcorp.acrovision.jp の管理画面ページをテキストで読める`,
+- 採用候補者・社員情報・案件・契約・勤怠データはすべてAI経由では参照不可`,
 
     user: `
 
@@ -663,34 +657,9 @@ const TOOLS = [
       required: ['file_id']
     }
   },
-  {
-    name: 'fetch_corp_api',
-    description: 'corp.acrovision.jp の社員専用データAPIにアクセスする。action: cases（案件）/ contracts（契約）/ geppo（月報）/ query（任意SELECT、アロウリスト適用）。※ employees / candidates / follow_signals / attendance は閲覧不可。',
-    input_schema: {
-      type: 'object',
-      properties: {
-        action: { type: 'string', description: 'cases / contracts / geppo / query' },
-        month: { type: 'string', description: 'YYYY-MM（geppo/attendance用）' },
-        status: { type: 'string', description: 'ステータスフィルタ（cases/contracts/candidates用）' },
-        employee: { type: 'string', description: '社員名フィルタ（contracts用）' },
-        limit: { type: 'number', description: '最大件数（デフォルト100、最大500）' },
-        sql: { type: 'string', description: 'SELECT文（action=queryの時のみ）' },
-        params: { type: 'array', description: 'SQLパラメータ（action=queryの時のみ）', items: {} }
-      },
-      required: ['action']
-    }
-  },
-  {
-    name: 'fetch_corp_page',
-    description: 'corp.acrovision.jp の認証済みHTMLページをテキストで取得する。/kanri/ や /monitoring/ 等の社内管理画面の内容をAIが読む。',
-    input_schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: '/kanri/attendance.php のようなパス（先頭の/は任意）' }
-      },
-      required: ['path']
-    }
-  },
+  // fetch_corp_api / fetch_corp_page は corp 側 /api/agent.php が現在閉鎖中（503）のため
+  // 一時的にツール定義から除外しています。corp が再開されたら復活させてください。
+  // 復活時の参照: CORP_API_ALLOWED, executeTool 内の case 'fetch_corp_api' / 'fetch_corp_page'
   {
     name: 'list_calendar_events',
     description: 'Googleカレンダーの予定一覧を取得する。ユーザー自身のプライマリカレンダーを参照。',
@@ -848,87 +817,9 @@ async function executeTool(name, input, user) {
       }
       return { id: input.file_id, name, mimeType, content: content.slice(0, 60000) };
     }
-    case 'fetch_corp_api': {
-      const corpToken = process.env.CORP_AGENT_TOKEN;
-      if (!corpToken) throw new Error('CORP_AGENT_TOKEN未設定');
-      const role = user.role || getUserRole(user.email);
-      const allowed = CORP_API_ALLOWED[role] || [];
-      if (!allowed.includes(input.action)) {
-        audit(user.email, user.name, 'tool.corp_api.denied', { reason: 'action', action: input.action, role });
-        throw new Error(`このアクション(${input.action})へのアクセス権限がありません`);
-      }
-      audit(user.email, user.name, 'tool.corp_api', { action: input.action });
-      const qs = new URLSearchParams({ action: input.action });
-      if (input.month)    qs.set('month', input.month);
-      if (input.status)   qs.set('status', input.status);
-      if (input.employee) qs.set('employee', input.employee);
-      if (input.limit)    qs.set('limit', String(input.limit));
-      // Node.js native fetch overrides Host header — use http module directly
-      const isQuery = (input.action === 'query' && input.sql);
-      if (isQuery) {
-        if (DB_BLOCKED_KEYWORDS.test(input.sql)) {
-          audit(user.email, user.name, 'tool.corp_api.denied', { reason: 'keyword', preview: input.sql.slice(0, 100) });
-          throw new Error('SELECT のみ許可（SHOW/DESCRIBE等は不可）');
-        }
-        const allowCheck = checkSqlAllowed(input.sql);
-        if (!allowCheck.ok) {
-          audit(user.email, user.name, 'tool.corp_api.denied', { reason: 'table', table: allowCheck.table, preview: input.sql.slice(0, 100) });
-          throw new Error(DB_DENIED_MESSAGE(input.sql));
-        }
-      }
-      const postBody = isQuery ? `action=query&sql=${encodeURIComponent(input.sql)}&params=${encodeURIComponent(JSON.stringify(input.params || []))}` : null;
-      const data = await new Promise((resolve, reject) => {
-        const reqOpts = {
-          hostname: '172.31.9.243',
-          port: 80,
-          path: `/api/agent.php?${qs}`,
-          method: isQuery ? 'POST' : 'GET',
-          headers: {
-            'Host': 'corp.acrovision.jp',
-            'X-Agent-Token': corpToken,
-            ...(isQuery ? { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(postBody) } : {})
-          }
-        };
-        const req = http.request(reqOpts, res => {
-          let body = '';
-          res.on('data', c => body += c);
-          res.on('end', () => {
-            if (res.statusCode >= 400) return reject(new Error(`Corp API error: HTTP ${res.statusCode}`));
-            try { resolve(JSON.parse(body)); } catch(e) { reject(new Error('Corp API: invalid JSON: ' + body.slice(0, 100))); }
-          });
-        });
-        req.on('error', reject);
-        if (postBody) req.write(postBody);
-        req.end();
-      });
-      return data;
-    }
-    case 'fetch_corp_page': {
-      const corpToken = process.env.CORP_AGENT_TOKEN;
-      if (!corpToken) throw new Error('CORP_AGENT_TOKEN未設定');
-      const pagePath = (input.path || '').replace(/^\/+/, '/').replace(/^([^/])/, '/$1');
-      audit(user.email, user.name, 'tool.corp_page', { path: pagePath });
-      const qs = new URLSearchParams({ action: 'page', path: pagePath });
-      const data = await new Promise((resolve, reject) => {
-        const req = http.request({
-          hostname: '172.31.9.243',
-          port: 80,
-          path: `/api/agent.php?${qs}`,
-          method: 'GET',
-          headers: { 'Host': 'corp.acrovision.jp', 'X-Agent-Token': corpToken }
-        }, res => {
-          let body = '';
-          res.on('data', c => body += c);
-          res.on('end', () => {
-            if (res.statusCode >= 400) return reject(new Error(`Corp page error: HTTP ${res.statusCode}`));
-            try { resolve(JSON.parse(body)); } catch(e) { reject(new Error('Corp page: invalid JSON: ' + body.slice(0, 100))); }
-          });
-        });
-        req.on('error', reject);
-        req.end();
-      });
-      return data;
-    }
+    // case 'fetch_corp_api' / 'fetch_corp_page' は corp 側 agent.php が現在閉鎖中（503）のため
+    // ツール定義から除外しています。corp 側を再開する際に git history から復元してください。
+    // 復元元コミット: 7251ba0 / ec7d66c7 より前
     case 'list_calendar_events': {
       audit(user.email, user.name, 'tool.calendar', { days: input.days });
       const cal = getCalendarClientForUser(user);
@@ -1193,6 +1084,18 @@ app.post('/api/skills', (req, res) => {
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// PUT /api/skills/:id
+app.put('/api/skills/:id', (req, res) => {
+  const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
+  if (!skill) return res.status(403).json({ error: '見つかりません' });
+  const { title, description, steps } = req.body;
+  if (!title?.trim()) return res.status(400).json({ error: 'title は必須' });
+  db.prepare('UPDATE user_skills SET title=?, description=?, steps=? WHERE id=?')
+    .run(title.trim(), description || '', steps || '', req.params.id);
+  audit(req.user.email, req.user.name, 'skill.update', { id: req.params.id });
+  res.json({ ok: true });
 });
 
 // DELETE /api/skills/:id
@@ -1955,6 +1858,22 @@ app.put('/api/scheduled-tasks/:id', (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/scheduled-tasks/:id/run — 即時実行
+app.post('/api/scheduled-tasks/:id/run', (req, res) => {
+  try {
+    const task = db.prepare('SELECT * FROM scheduled_tasks WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
+    if (!task) return res.status(403).json({ error: '権限がありません' });
+    const now = toUtcStr(Date.now());
+    db.prepare("UPDATE scheduled_tasks SET last_run_at=?, last_status='running' WHERE id=?").run(now, task.id);
+    runSkillBackground(task, req.user.email).then(result => {
+      db.prepare("UPDATE scheduled_tasks SET last_status=?, last_result=? WHERE id=?")
+        .run(result.ok ? 'done' : 'error', result.error || null, task.id);
+    }).catch(() => {});
+    audit(req.user.email, req.user.name, 'scheduled_task.run_now', { id: task.id, skill_name: task.skill_name });
+    res.json({ ok: true, message: '実行を開始しました' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // DELETE /api/scheduled-tasks/:id
 app.delete('/api/scheduled-tasks/:id', (req, res) => {
   try {
@@ -1974,16 +1893,22 @@ async function validateTaskSteps(steps, skillTitle) {
       max_tokens: 256,
       messages: [{
         role: 'user',
-        content: `以下のタスク定義を評価してください。
+        content: `以下のタスク定義が安全に実行できるか確認してください。
 
 タイトル: ${skillTitle || '(未設定)'}
 実行手順:
 ${steps}
 
-評価してください：
-1. 手順が具体的か（どのツールを使い、何を取得・出力するかが明確か）
-2. 実行可能か（曖昧な表現・未定義の変数・前提情報の欠落がないか）
-3. 意図しない副作用のリスク（誤送信・誤操作の可能性）
+【NG判定は最小限に】次の場合のみ {"ok":false,"issue":"..."} を返してください：
+- 存在しないツール名を使おうとしている
+- 無限ループになる可能性がある手順
+- 完全に意味不明で実行不能な内容
+
+【必ずOKにするもの】：
+- Chatworkへのメッセージ送信（送信先・内容の有無を問わず）
+- 情報取得・検索・集計タスク
+- 手順が多少あいまいでも意図が読み取れるもの
+- テスト・確認目的のタスク
 
 必ずこのJSON形式のみで返答：
 {"ok":true} または {"ok":false,"issue":"問題点を1文で（日本語）"}`
@@ -2057,11 +1982,31 @@ async function runSkillBackground(task, ownerEmail) {
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
       .run('done', resultBuffer.slice(0, 2000), runId);
     audit(ownerEmail, '', 'scheduled_task.ran', { skillName: task.skill_name, runId });
+    notifyTaskResult(ownerEmail, task.skill_title || task.skill_name, 'done', resultBuffer).catch(() => {});
     return { ok: true, runId };
   } catch(e) {
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
       .run('error', e.message.slice(0, 2000), runId);
+    notifyTaskResult(ownerEmail, task.skill_title || task.skill_name, 'error', e.message).catch(() => {});
     return { ok: false, error: e.message, runId };
+  }
+}
+
+async function notifyTaskResult(ownerEmail, taskName, status, result) {
+  if (!process.env.SES_USER) return;
+  const jst = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const icon = status === 'done' ? '✅' : '❌';
+  const statusLabel = status === 'done' ? '成功' : 'エラー';
+  const shortResult = (result || '').slice(0, 500);
+  try {
+    await getSesTransport().sendMail({
+      from: process.env.SES_FROM || 'info@acrovision.co.jp',
+      to: ownerEmail,
+      subject: `${icon} [AIエージェント] タスク${statusLabel}: ${taskName}`,
+      text: `タスク実行結果のお知らせ\n\nタスク名: ${taskName}\nステータス: ${statusLabel}\n実行日時: ${jst} (JST)\n\n--- 結果 ---\n${shortResult}\n\n管理画面: https://d2jjp21sq86i80.cloudfront.net/manage`
+    });
+  } catch(e) {
+    console.error('[notify] メール送信失敗:', e.message);
   }
 }
 
