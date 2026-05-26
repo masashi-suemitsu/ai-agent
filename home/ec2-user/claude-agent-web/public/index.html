@@ -576,18 +576,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
     <h3>✉️ Gmail</h3>
     <button class="panel-close-btn" onclick="toggleGmail()">✕</button>
   </div>
-  <div id="gmailStatusArea" style="border-bottom:1px solid var(--border);"></div>
-  <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;">
-    <input id="gmailQuery" type="text" placeholder="検索（例: from:xxx is:unread）" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;outline:none;">
-    <select id="gmailMax" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;outline:none;">
-      <option value="20">20件</option>
-      <option value="50">50件</option>
-    </select>
-    <button onclick="loadGmailMessages()" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">表示</button>
-  </div>
-  <div id="gmailContent" style="flex:1;overflow-y:auto;padding:8px;">
-    <div class="drive-empty">読み込み中...</div>
-  </div>
+  <div id="gmailStatusArea"></div>
 </div>
 
 <!-- ─ History Panel ─ -->
@@ -1394,13 +1383,13 @@ async function loadGmailStatus() {
     const status = await fetch('/api/gmail/status').then(r => r.json());
     if (status.connected) {
       statusArea.innerHTML = `
-        <div style="text-align:center;padding:14px 16px;">
-          <div style="font-size:28px;margin-bottom:6px;">✅</div>
-          <div style="font-size:14px;font-weight:700;color:#276749;margin-bottom:2px;">Gmail連携済み</div>
-          <div style="font-size:11px;color:#718096;margin-bottom:10px;">最終更新: ${esc(status.updatedAt || '')}</div>
+        <div style="text-align:center;padding:24px 16px;">
+          <div style="font-size:36px;margin-bottom:8px;">✅</div>
+          <div style="font-size:14px;font-weight:700;color:#276749;margin-bottom:4px;">Gmail連携済み</div>
+          <div style="font-size:11px;color:#718096;margin-bottom:14px;">最終更新: ${esc(status.updatedAt || '')}</div>
+          <div style="font-size:12px;color:#4a5568;margin-bottom:16px;line-height:1.6;">AIエージェントがメールを参照できます</div>
           <button onclick="disconnectGmail()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
         </div>`;
-      await loadGmailMessages();
     } else {
       statusArea.innerHTML = `
         <div style="text-align:center;padding:20px 16px;">
