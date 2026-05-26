@@ -6,7 +6,6 @@ const passport = require('passport');
 const { Strategy: GoogleStrategy } = require('passport-google-oauth20');
 const Anthropic = require('@anthropic-ai/sdk');
 const path = require('path');
-const { spawn } = require('child_process');
 const Database = require('better-sqlite3');
 
 const { google } = require('googleapis');
@@ -896,7 +895,7 @@ app.delete('/api/skills/:id', (req, res) => {
 });
 
 // POST /api/skills/:id/run
-app.post('/api/skills/:id/run', (req, res) => {
+app.post('/api/skills/:id/run', async (req, res) => {
   const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR shared=1)').get(req.params.id, req.user.email);
   if (!skill) return res.status(404).json({ error: 'Not found' });
 
@@ -916,35 +915,40 @@ app.post('/api/skills/:id/run', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.flushHeaders();
 
-  const stripAnsi = s => s
-    .replace(/\x1b\[[0-9;]*[mGKHFJABCDsu]/g, '')
-    .replace(/\x1b\[[\?=][0-9;]*[hl]/g, '')
-    .replace(/\x1b[()][B0]/g, '')
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n');
-
   let resultBuffer = '';
-  const proc = spawn('claude', [
-    '--print', '--dangerously-skip-permissions',
-    '--allowedTools', 'Bash,Read', prompt
-  ], { env: process.env });
-
-  proc.stdout.on('data', d => {
-    const text = stripAnsi(d.toString());
-    resultBuffer += text;
-    res.write(`data: ${JSON.stringify({ text })}\n\n`);
-  });
-  proc.stderr.on('data', d => {
-    const text = stripAnsi(d.toString());
-    if (text.trim()) res.write(`data: ${JSON.stringify({ text })}\n\n`);
-  });
-  proc.on('close', code => {
-    const status = code === 0 ? 'done' : 'error';
+  try {
+    const { query } = await import('@anthropic-ai/claude-agent-sdk');
+    for await (const msg of query({
+      prompt,
+      options: {
+        allowedTools: ['Bash', 'Read'],
+        permissionMode: 'bypassPermissions'
+      }
+    })) {
+      if (msg.type === 'assistant') {
+        for (const block of msg.message.content) {
+          if (block.type === 'text' && block.text) {
+            resultBuffer += block.text;
+            res.write(`data: ${JSON.stringify({ text: block.text })}\n\n`);
+          } else if (block.type === 'tool_use') {
+            res.write(`data: ${JSON.stringify({ tool: block.name, status: 'running' })}\n\n`);
+          }
+        }
+      } else if (msg.type === 'result' && msg.subtype !== 'success') {
+        const errMsg = (msg.errors || []).join(', ') || msg.subtype;
+        res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
+      }
+    }
     db.prepare('UPDATE task_runs SET status=?, result=?, finished_at=datetime("now","localtime") WHERE id=?')
-      .run(status, resultBuffer.slice(0, 2000), runId);
-    res.write(`data: ${JSON.stringify({ done: true, code, runId })}\n\n`);
-    res.end();
-  });
+      .run('done', resultBuffer.slice(0, 2000), runId);
+    res.write(`data: ${JSON.stringify({ done: true, code: 0, runId })}\n\n`);
+  } catch(e) {
+    db.prepare('UPDATE task_runs SET status=?, result=?, finished_at=datetime("now","localtime") WHERE id=?')
+      .run('error', e.message.slice(0, 2000), runId);
+    res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
+    res.write(`data: ${JSON.stringify({ done: true, code: 1, runId })}\n\n`);
+  }
+  res.end();
 });
 
 // ── Task Runs API ──
