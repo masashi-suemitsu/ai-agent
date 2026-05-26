@@ -149,7 +149,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 
 <div class="page">
   <div class="tab-nav">
-    <button class="tab-btn active" onclick="switchTab('tasks')">⏰ 定期タスク</button>
+    <button class="tab-btn active" onclick="switchTab('tasks')">⏰ タスク</button>
     <button class="tab-btn" onclick="switchTab('skills')">⚙️ スキル</button>
     <button class="tab-btn" onclick="switchTab('rules')">🔒 権限・ルール</button>
   </div>
@@ -178,9 +178,20 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 <!-- ─ Schedule Modal ─ -->
 <div class="modal-overlay" id="scheduleModal" onclick="if(event.target===this)closeModal()">
   <div class="modal-box">
-    <div class="modal-title">⏰ 定期実行を設定</div>
+    <div class="modal-title">⏰ タスクを設定</div>
     <div class="modal-subtitle" id="modalSkillTitle"></div>
     <div class="modal-field">
+      <label>タスク種別</label>
+      <div style="display:flex;gap:12px;margin-top:4px;">
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:normal;">
+          <input type="radio" name="mgTaskType" value="recurring" checked onchange="mgOnTaskTypeChange()"> 定期実行
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:normal;">
+          <input type="radio" name="mgTaskType" value="once" onchange="mgOnTaskTypeChange()"> 単発実行
+        </label>
+      </div>
+    </div>
+    <div class="modal-field" id="mgRecurringField">
       <label>実行間隔</label>
       <select id="modalInterval">
         <option value="30">30分ごと</option>
@@ -190,6 +201,10 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
         <option value="480">8時間ごと</option>
         <option value="1440">毎日（24時間ごと）</option>
       </select>
+    </div>
+    <div class="modal-field" id="mgOnceField" style="display:none;">
+      <label>実行日時</label>
+      <input type="datetime-local" id="mgRunAt" style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;">
     </div>
     <div class="modal-btns">
       <button class="modal-btn-cancel" onclick="closeModal()">キャンセル</button>
@@ -268,22 +283,25 @@ function renderTasks(tasks) {
     return;
   }
   el.innerHTML = tasks.map(t => {
+    const isOnce = t.task_type === 'once';
     const nextRun  = fmtDt(t.next_run_at);
     const lastRun  = fmtDt(t.last_run_at);
     const statusBadge = t.last_status ? `<span class="badge ${statusColor(t.last_status)}">${statusLabel(t.last_status)}</span>` : '';
+    const typeBadge = isOnce
+      ? '<span class="badge" style="background:#e9d8fd;color:#6b46c1;">単発</span>'
+      : '<span class="badge" style="background:#bee3f8;color:#2b6cb0;">定期</span>';
     const enabledBadge = t.enabled
       ? '<span class="badge badge-green">▶ 有効</span>'
-      : '<span class="badge badge-gray">⏸ 停止中</span>';
+      : `<span class="badge badge-gray">${isOnce && t.last_status === 'done' ? '✓ 実行済' : '⏸ 停止中'}</span>`;
+    const scheduleMeta = isOnce
+      ? `<span>実行日時: ${nextRun}</span><span>前回: ${lastRun}</span>`
+      : `<span>🔄 ${esc(intervalLabel(t.interval_min))}</span><span>次回: ${nextRun}</span><span>前回: ${lastRun}</span>`;
     return `<div class="card" id="task-card-${t.id}">
       <div class="card-header">
-        <div class="card-title">${esc(t.skill_title || t.skill_name)}</div>
+        <div class="card-title">${typeBadge} ${esc(t.skill_title || t.skill_name)}</div>
         <div class="card-badges">${enabledBadge}${statusBadge}</div>
       </div>
-      <div class="card-meta">
-        <span>🔄 ${esc(intervalLabel(t.interval_min))}</span>
-        <span>次回: ${nextRun}</span>
-        <span>前回: ${lastRun}</span>
-      </div>
+      <div class="card-meta">${scheduleMeta}</div>
       <div class="linked-skill">
         <span class="linked-skill-label">スキル</span>
         <span>⚙️ ${esc(t.skill_name)}</span>
@@ -297,9 +315,9 @@ function renderTasks(tasks) {
             <input type="checkbox" ${t.enabled ? 'checked' : ''} onchange="toggleTask(${t.id}, this.checked)">
             <span class="toggle-slider"></span>
           </label>
-          <span class="toggle-label" id="task-toggle-label-${t.id}">${t.enabled ? '有効' : '停止中'}</span>
+          <span class="toggle-label" id="task-toggle-label-${t.id}">${t.enabled ? '有効' : (isOnce && t.last_status === 'done' ? '実行済' : '停止中')}</span>
         </div>
-        <button class="btn btn-outline" onclick="openIntervalEdit(${t.id}, ${t.interval_min})">間隔を変更</button>
+        ${!isOnce ? `<button class="btn btn-outline" onclick="openIntervalEdit(${t.id}, ${t.interval_min})">間隔を変更</button>` : ''}
         <button class="btn btn-danger" onclick="deleteTask(${t.id})">削除</button>
       </div>
       <div class="interval-row" id="interval-row-${t.id}">
@@ -537,10 +555,23 @@ function renderRules(role) {
 }
 
 // ─ スケジュールモーダル ─
+function mgOnTaskTypeChange() {
+  const isOnce = document.querySelector('input[name="mgTaskType"]:checked').value === 'once';
+  document.getElementById('mgRecurringField').style.display = isOnce ? 'none' : '';
+  document.getElementById('mgOnceField').style.display = isOnce ? '' : 'none';
+  if (isOnce && !document.getElementById('mgRunAt').value) {
+    const d = new Date(Date.now() + 3600000);
+    d.setSeconds(0, 0);
+    document.getElementById('mgRunAt').value = d.toISOString().slice(0, 16);
+  }
+}
 function openModal(skillId, skillTitle) {
   modalSkillId = skillId;
   document.getElementById('modalSkillTitle').textContent = skillTitle;
   document.getElementById('modalInterval').value = '60';
+  document.querySelector('input[name="mgTaskType"][value="recurring"]').checked = true;
+  document.getElementById('mgRecurringField').style.display = '';
+  document.getElementById('mgOnceField').style.display = 'none';
   document.getElementById('scheduleModal').classList.add('open');
 }
 function closeModal() {
@@ -549,13 +580,21 @@ function closeModal() {
 }
 async function saveSchedule() {
   if (!modalSkillId) return;
-  const interval_min = parseInt(document.getElementById('modalInterval').value);
+  const task_type = document.querySelector('input[name="mgTaskType"]:checked').value;
   const btn = document.getElementById('modalSaveBtn');
   btn.disabled = true; btn.textContent = '登録中...';
   try {
+    const body = { skill_id: modalSkillId, task_type };
+    if (task_type === 'once') {
+      const runAt = document.getElementById('mgRunAt').value;
+      if (!runAt) { alert('実行日時を指定してください'); btn.disabled = false; btn.textContent = '登録する'; return; }
+      body.run_at = new Date(runAt).toISOString();
+    } else {
+      body.interval_min = parseInt(document.getElementById('modalInterval').value);
+    }
     const resp = await fetch('/api/scheduled-tasks', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skill_id: modalSkillId, interval_min })
+      body: JSON.stringify(body)
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || '登録失敗');

@@ -34,21 +34,24 @@ function getUserRole(email) {
 }
 
 // ロール別 fetch_corp_api 許可アクション
+// ※ candidates / follow_signals / attendance / employees は対応テーブル（recruit_ats_*,
+//    follow_signal_pool, attendance_posts / king_of_time_attendance, users）がブロック対象
+//    または users JOIN による個人情報漏洩経路のため全ロールから除外する
 const CORP_API_ALLOWED = {
-  admin:   ['employees','cases','contracts','geppo','candidates','attendance','follow_signals','query'],
-  gyoumu:  ['employees','contracts','attendance','geppo','follow_signals','query'],
-  eigyo:   ['employees','cases','geppo'],
-  recruit: ['candidates','employees'],
+  admin:   ['cases','contracts','geppo','query'],
+  gyoumu:  ['contracts','geppo','query'],
+  eigyo:   ['cases','geppo'],
+  recruit: [],
   user:    []
 };
 
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','list_kintone_records','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','get_kot_daily','get_kot_monthly','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page']),
-  eigyo:   new Set(['list_kintone_records','search_hotprofile','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page']),
-  recruit: new Set(['list_kintone_records','search_hotprofile','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page']),
-  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages'])
+  gyoumu:  new Set(['query_corp_db','list_kintone_records','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
+  eigyo:   new Set(['list_kintone_records','search_hotprofile','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
+  recruit: new Set(['list_kintone_records','search_hotprofile','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','fetch_corp_api','fetch_corp_page','register_task']),
+  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','register_task'])
 };
 
 app.set('trust proxy', 1);
@@ -108,10 +111,31 @@ db.exec(`
     finished_at TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS scheduled_tasks (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_email  TEXT NOT NULL,
+    task_type    TEXT NOT NULL DEFAULT 'recurring',
+    skill_id     INTEGER,
+    skill_name   TEXT NOT NULL,
+    skill_title  TEXT,
+    description  TEXT,
+    steps        TEXT NOT NULL,
+    interval_min INTEGER NOT NULL DEFAULT 60,
+    run_at       TEXT,
+    enabled      INTEGER DEFAULT 1,
+    next_run_at  TEXT,
+    last_run_at  TEXT,
+    last_status  TEXT,
+    last_result  TEXT,
+    created_at   TEXT DEFAULT (datetime('now','localtime'))
+  );
+
   CREATE INDEX IF NOT EXISTS idx_conv_email ON conversations(user_email, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id, id);
   CREATE INDEX IF NOT EXISTS idx_run_email ON task_runs(user_email, started_at DESC);
   CREATE INDEX IF NOT EXISTS idx_skill_owner ON user_skills(owner_email);
+  CREATE INDEX IF NOT EXISTS idx_sched_owner ON scheduled_tasks(owner_email);
+  CREATE INDEX IF NOT EXISTS idx_sched_next ON scheduled_tasks(enabled, next_run_at);
 
   CREATE TABLE IF NOT EXISTS user_drive_tokens (
     email TEXT PRIMARY KEY,
@@ -415,9 +439,15 @@ function getSystemPrompt(role) {
 - 不明点は1〜2個だけ端的に聞く
 
 ## 重要ルール
-- Chatwork送信・WP公開は必ずユーザーに内容確認してから実行
+- \`send_chatwork_message\`（個人アカウント送信）は必ずユーザーに内容確認してから実行
+- \`send_system_notification\`（システム通知アカウント送信）はユーザー確認不要で送信可能。定期タスクや自動通知に使用する
+- WP公開は必ずユーザーに内容確認してから実行
 - DBはSELECTのみ。更新系は不可
 - ツールがエラーになっても代替手段があれば黙って試す。すべての手段が尽きてから初めてユーザーに報告する
+
+## Chatwork送信の使い分け
+- **インタラクティブな会話中**（ユーザーが今チャットしている）: \`send_chatwork_message\` を使い、必ず送信内容をユーザーに確認してから実行
+- **自動タスク・スケジュール実行中**（バックグラウンドで動作）: \`send_system_notification\` を使い、確認なしで送信。専用システム通知アカウントとして送信される
 
 ## スキルの作成
 手順が固まったら以下の形式で出力してください（必ずこの形式を守る）：
@@ -426,36 +456,54 @@ function getSystemPrompt(role) {
 {"name":"英数字ハイフンのみ","title":"タイトル（日本語OK）","description":"何をするか1行","steps":"実行手順を自然言語で詳しく記述"}
 </skill>
 
-スキル作成後は「保存しておけば次回からすぐ実行できます」と案内してください。`;
+スキル作成後は「保存しておけば次回からすぐ実行できます」と案内してください。
+
+## タスクの自動実行（register_task ツール）
+\`register_task\` ツールを使うと、ユーザーの代わりにタスクを自動実行スケジュールに登録できます。
+
+**定期タスク（recurring）**: 指定した間隔（分）で繰り返し自動実行
+**単発タスク（once）**: 指定した日時に1回だけ自動実行
+
+ユーザーが以下のような発言をしたとき、積極的に \`register_task\` を提案・実行してください：
+- 「毎朝○○して」「毎日○○を確認して」→ 定期タスクを提案
+- 「○時に○○して」「来週月曜に○○して」「明日の朝○○して」→ 単発タスクを提案
+
+タスクを登録する際：
+- \`steps\` には、実際にAIが実行すべき手順を具体的・詳細に記述する（どのツールを使い、何を取得し、何を出力するか）
+- 実行日時は日本時間でユーザーに確認し、ISO 8601形式（例: 2025-06-01T09:00:00+09:00）で指定する
+- 登録後は「タスクを登録しました。/manage画面で確認・変更できます」と案内する
+
+タスク登録はスキルの保存とは独立しています。スキルを保存せずに直接チャットからタスクを登録することも可能です。
+
+**【重要制約】タスクの自動実行・スケジュール管理は必ず \`register_task\` ツールのみで行う。**
+- Google Apps Script・Zapier・cron・その他外部ツールの利用を提案しない
+- 「自分では予約送信できない」「タイマー機能がない」などの説明は不要。\`register_task\` で実現できる
+- ユーザーが自動実行・予約実行を求めたら、迷わず \`register_task\` を使う`;
 
   const roleContext = {
     admin: `
 
 ## あなたの権限: 管理者（全機能）
-利用可能ツール: 全ツール（DB照会・勤怠・契約・採用・Chatwork・Drive・WP・メール等）
-- 勤怠API（KoT）は 8:30〜10:00 / 17:30〜18:30 JST は利用不可 → エラー時は king_of_time_attendance テーブルを自動照会
-- overtime_minutes は常に0。work_minutes を使い SUM(GREATEST(work_minutes - 480, 0)) で残業計算`,
+利用可能ツール: 全ツール（DB照会・契約・Chatwork・Drive・WP・メール等）
+※ 勤怠データ（attendance_posts / king_of_time_attendance）と users テーブル、人事評価・採用関連テーブルへの照会は無効化されています`,
 
     gyoumu: `
 
 ## あなたの権限: 業務管理部
-担当業務: 契約管理・勤怠管理・社員情報・月報分析・フォローシグナル確認
+担当業務: 契約管理・月報分析
 
-利用可能データ（fetch_corp_api）: employees / contracts / attendance / geppo / follow_signals / query
-- 採用候補者データ（candidates）・案件データ（cases）へのアクセスは権限外
-- fetch_corp_page でcorp.acrovision.jp の管理画面ページをテキストで読める
-
-勤怠API（KoT）は 8:30〜10:00 / 17:30〜18:30 JST は利用不可
-→ エラー時は自動的に fetch_corp_api(action=attendance) または query_corp_db で king_of_time_attendance を照会
-→ overtime_minutes は常に0。SUM(GREATEST(work_minutes - 480, 0)) で残業を計算`,
+利用可能データ（fetch_corp_api）: contracts / geppo / query
+- 社員一覧（employees）・採用候補者（candidates）・フォローシグナル（follow_signals）・案件データ（cases）・勤怠データ（attendance）へのアクセスは権限外
+- 社員情報はAI経由では参照不可（個人情報保護のため無効化）
+- fetch_corp_page でcorp.acrovision.jp の管理画面ページをテキストで読める`,
 
     eigyo: `
 
 ## あなたの権限: 営業部
-担当業務: 案件管理・社員情報確認・月報閲覧・名刺/人脈検索・提案書作成
+担当業務: 案件管理・月報閲覧・名刺/人脈検索・提案書作成
 
-利用可能データ（fetch_corp_api）: employees / cases / geppo
-- 採用候補者データ（candidates）・契約詳細（contracts）・勤怠データへのアクセスは権限外
+利用可能データ（fetch_corp_api）: cases / geppo
+- 社員一覧（employees）・採用候補者データ（candidates）・契約詳細（contracts）・勤怠データへのアクセスは権限外
 - fetch_corp_page でcorp.acrovision.jp の管理画面ページをテキストで読める
 
 案件情報は fetch_corp_api(action=cases) で取得できる。ステータスフィルタも使える。`,
@@ -463,13 +511,10 @@ function getSystemPrompt(role) {
     recruit: `
 
 ## あなたの権限: 採用部
-担当業務: 採用候補者管理・選考進捗確認・社員情報参照
+担当業務: （AI経由でアクセスできるデータは現在なし）
 
-利用可能データ（fetch_corp_api）: candidates / employees
-- 案件データ（cases）・契約データ（contracts）・勤怠データへのアクセスは権限外
-- fetch_corp_page でcorp.acrovision.jp の管理画面ページをテキストで読める
-
-採用候補者は fetch_corp_api(action=candidates) で取得。stage（選考ステージ）でフィルタも可能。`,
+- 採用候補者・社員情報・案件・契約・勤怠データはすべてAI経由では参照不可
+- fetch_corp_page でcorp.acrovision.jp の管理画面ページをテキストで読める`,
 
     user: `
 
@@ -484,7 +529,7 @@ function getSystemPrompt(role) {
 const TOOLS = [
   {
     name: 'query_corp_db',
-    description: '社内MySQL DB（corp_acro_jp）をSELECTで照会する。テーブル例: kintone_employees, kintone_contract, geppo_data, recruit_ats_candidates, king_of_time_attendance, follow_signal_pool, kintone_customers など。',
+    description: '社内MySQL DB（corp_acro_jp）をSELECTで照会する。アロウリスト方式：照会可能なテーブルは kintone_employees / kintone_contract / kintone_anken_eigyo / geppo_data / kintone_customers / kintone_seikyu の6つのみ。これ以外のテーブルは拒否される。',
     input_schema: {
       type: 'object',
       properties: {
@@ -601,27 +646,6 @@ const TOOLS = [
     }
   },
   {
-    name: 'get_kot_daily',
-    description: 'King of Timeの日次勤怠データを取得する。',
-    input_schema: {
-      type: 'object',
-      properties: {
-        date: { type: 'string', description: 'YYYY-MM-DD（省略時は今日）' }
-      }
-    }
-  },
-  {
-    name: 'get_kot_monthly',
-    description: 'King of Timeの月次勤怠データを取得する。',
-    input_schema: {
-      type: 'object',
-      properties: {
-        year: { type: 'string', description: 'YYYY（省略時は今年）' },
-        month: { type: 'string', description: 'MM（省略時は今月）' }
-      }
-    }
-  },
-  {
     name: 'list_drive_files',
     description: 'Google DriveのフォルダIDを指定してファイル一覧を取得する。',
     input_schema: {
@@ -645,11 +669,11 @@ const TOOLS = [
   },
   {
     name: 'fetch_corp_api',
-    description: 'corp.acrovision.jp の社員専用データAPIにアクセスする。action: employees（社員一覧）/ cases（案件）/ contracts（契約）/ geppo（月報）/ candidates（採用候補者）/ attendance（勤怠サマリ）/ follow_signals（フォローシグナル）/ query（任意SELECT）。',
+    description: 'corp.acrovision.jp の社員専用データAPIにアクセスする。action: cases（案件）/ contracts（契約）/ geppo（月報）/ query（任意SELECT、アロウリスト適用）。※ employees / candidates / follow_signals / attendance は閲覧不可。',
     input_schema: {
       type: 'object',
       properties: {
-        action: { type: 'string', description: 'employees / cases / contracts / geppo / candidates / attendance / follow_signals / query' },
+        action: { type: 'string', description: 'cases / contracts / geppo / query' },
         month: { type: 'string', description: 'YYYY-MM（geppo/attendance用）' },
         status: { type: 'string', description: 'ステータスフィルタ（cases/contracts/candidates用）' },
         employee: { type: 'string', description: '社員名フィルタ（contracts用）' },
@@ -692,6 +716,35 @@ const TOOLS = [
         query: { type: 'string', description: 'Gmail検索クエリ（例: "from:xxx@example.com", "subject:見積", "is:unread"）' }
       }
     }
+  },
+  {
+    name: 'register_task',
+    description: 'ユーザーの依頼に基づいてタスクを登録する。定期タスク（繰り返し実行）または単発タスク（指定日時に1回だけ実行）を設定できる。ユーザーが「毎朝〇〇して」「来週月曜に〇〇して」などと言った場合にこのツールを使う。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        task_type:   { type: 'string', enum: ['recurring','once'], description: '定期実行=recurring、単発実行=once' },
+        skill_name:  { type: 'string', description: 'タスクの短い名前（例: 朝礼メッセージ送信）' },
+        skill_title: { type: 'string', description: 'タスクの表示タイトル（省略時はskill_nameと同じ）' },
+        description: { type: 'string', description: 'タスクの目的・概要' },
+        steps:       { type: 'string', description: 'AIが実行する具体的な手順・指示（Markdown形式）' },
+        interval_min:{ type: 'number', description: '定期タスクの間隔（分）。30/60/120/240/480/1440など。省略時60' },
+        run_at:      { type: 'string', description: '単発タスクの実行日時（ISO 8601形式 例: 2025-06-01T09:00:00）' }
+      },
+      required: ['task_type', 'skill_name', 'steps']
+    }
+  },
+  {
+    name: 'send_system_notification',
+    description: 'システム通知専用Chatworkアカウントからメッセージを送信する。個人アカウントではなくシステムボットとして通知される。ルーム内のメッセージ参照・ルーム一覧取得はできない（送信専用）。定期タスクや自動通知に使用する。ユーザー確認不要で送信可能。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        room_id: { type: 'string', description: '送信先のChatworkルームID' },
+        body:    { type: 'string', description: '送信するメッセージ本文（Chatwork記法可）' }
+      },
+      required: ['room_id', 'body']
+    }
   }
 ];
 
@@ -707,7 +760,9 @@ async function executeTool(name, input, user) {
       const dbRole = user.role || getUserRole(user.email);
       if (!['admin','gyoumu'].includes(dbRole)) throw new Error('DBの直接照会は業務管理部・管理者のみ許可されています');
       const { sql, params = [] } = input;
-      if (DB_BLOCKED_KEYWORDS.test(sql)) throw new Error('SELECTのみ許可されています');
+      if (DB_BLOCKED_KEYWORDS.test(sql)) throw new Error('SELECT のみ許可（SHOW/DESCRIBE等は不可）');
+      const allowCheck = checkSqlAllowed(sql);
+      if (!allowCheck.ok) throw new Error(DB_DENIED_MESSAGE(sql));
       audit(user.email, user.name, 'tool.db', { preview: sql.slice(0, 100) });
       const [rows] = await pool.execute(sql, params);
       return { rows: rows.slice(0, 200), count: rows.length };
@@ -777,20 +832,6 @@ async function executeTool(name, input, user) {
       const params = new URLSearchParams({ body: input.body });
       return await cwFetch(`/rooms/${input.room_id}/messages`, { method: 'POST', body: params.toString() }, user.email);
     }
-    case 'get_kot_daily': {
-      if (!KOT_TOKEN) throw new Error('KoT未設定');
-      const date = input.date || new Date().toLocaleDateString('sv', { timeZone: 'Asia/Tokyo' });
-      audit(user.email, user.name, 'tool.kot_daily', { date });
-      return await kotFetch(`/daily-attendances?date=${date}`);
-    }
-    case 'get_kot_monthly': {
-      if (!KOT_TOKEN) throw new Error('KoT未設定');
-      const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
-      const year = input.year || now.getFullYear();
-      const month = String(input.month || now.getMonth() + 1).padStart(2, '0');
-      audit(user.email, user.name, 'tool.kot_monthly', { year, month });
-      return await kotFetch(`/monthly-attendances?year=${year}&month=${month}`);
-    }
     case 'list_drive_files': {
       audit(user.email, user.name, 'tool.drive_list', { folderId: input.folder_id });
       const drive = getDriveClientForUser(user);
@@ -831,6 +872,11 @@ async function executeTool(name, input, user) {
       if (input.limit)    qs.set('limit', String(input.limit));
       // Node.js native fetch overrides Host header — use http module directly
       const isQuery = (input.action === 'query' && input.sql);
+      if (isQuery) {
+        if (DB_BLOCKED_KEYWORDS.test(input.sql)) throw new Error('SELECT のみ許可（SHOW/DESCRIBE等は不可）');
+        const allowCheck = checkSqlAllowed(input.sql);
+        if (!allowCheck.ok) throw new Error(DB_DENIED_MESSAGE(input.sql));
+      }
       const postBody = isQuery ? `action=query&sql=${encodeURIComponent(input.sql)}&params=${encodeURIComponent(JSON.stringify(input.params || []))}` : null;
       const data = await new Promise((resolve, reject) => {
         const reqOpts = {
@@ -924,6 +970,54 @@ async function executeTool(name, input, user) {
         const headers = Object.fromEntries((d.data.payload?.headers || []).map(h => [h.name, h.value]));
         return { id: d.data.id, subject: headers['Subject'] || '', from: headers['From'] || '', date: headers['Date'] || '', snippet: d.data.snippet || '' };
       });
+    }
+    case 'register_task': {
+      const {
+        task_type = 'recurring',
+        skill_name,
+        skill_title,
+        description: taskDesc = '',
+        steps,
+        interval_min = 60,
+        run_at
+      } = input;
+      if (!skill_name || !steps) throw new Error('skill_name と steps は必須です');
+      let nextRunAt;
+      if (task_type === 'once') {
+        if (!run_at) throw new Error('単発タスクには run_at（実行日時）が必要です');
+        const d = new Date(run_at);
+        if (isNaN(d.getTime())) throw new Error(`run_at の形式が不正です: ${run_at}`);
+        nextRunAt = toUtcStr(d);
+      } else {
+        nextRunAt = toUtcStr(Date.now() + Number(interval_min) * 60000);
+      }
+      const ins = db.prepare(
+        `INSERT INTO scheduled_tasks
+           (owner_email, task_type, skill_id, skill_name, skill_title, description, steps, interval_min, run_at, enabled, next_run_at)
+         VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, 1, ?)`
+      ).run(user.email, task_type, skill_name, skill_title || skill_name, taskDesc, steps, Number(interval_min), run_at || null, nextRunAt);
+      audit(user.email, user.name, 'scheduled_task.create_via_chat', { id: ins.lastInsertRowid, task_type, skill_name });
+      const label = task_type === 'once'
+        ? `単発タスク「${skill_name}」を ${run_at} に登録しました（ID: ${ins.lastInsertRowid}）`
+        : `定期タスク「${skill_name}」を${interval_min}分ごとに実行するよう登録しました（ID: ${ins.lastInsertRowid}）`;
+      return { ok: true, id: ins.lastInsertRowid, message: label };
+    }
+    case 'send_system_notification': {
+      const sysToken = process.env.CHATWORK_SYSTEM_TOKEN;
+      if (!sysToken) throw new Error('CHATWORK_SYSTEM_TOKEN が未設定です。管理者に環境変数の設定を依頼してください。');
+      const { room_id, body: notifyBody } = input;
+      if (!room_id || !notifyBody) throw new Error('room_id と body は必須です');
+      audit(user.email, user.name, 'tool.system_notify', { roomId: room_id, preview: notifyBody.slice(0, 50) });
+      const res = await fetch(`${CW_BASE}/rooms/${room_id}/messages`, {
+        method: 'POST',
+        headers: {
+          'X-ChatWorkToken': sysToken,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({ body: notifyBody }).toString()
+      });
+      if (!res.ok) throw new Error(`システム通知送信エラー: ${res.status} ${await res.text()}`);
+      return await res.json();
     }
     default:
       throw new Error(`Unknown tool: ${name}`);
@@ -1348,55 +1442,6 @@ app.delete('/api/chatwork/disconnect', (req, res) => {
   res.json({ ok: true });
 });
 
-// ── King of Time API ──
-const KOT_TOKEN = process.env.KOT_API_TOKEN;
-const KOT_BASE = 'https://api.kingtime.jp/v1.0';
-const KOT_BLOCKED = [[8,30,10,0],[17,30,18,30]]; // JST禁止帯
-
-function kotIsBlocked() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
-  const h = now.getHours(), m = now.getMinutes(), total = h * 60 + m;
-  return KOT_BLOCKED.some(([sh,sm,eh,em]) => total >= sh*60+sm && total < eh*60+em);
-}
-
-async function kotFetch(path) {
-  if (kotIsBlocked()) throw new Error('KingOfTime APIは現在利用禁止時間帯です（8:30〜10:00 / 17:30〜18:30 JST）');
-  const res = await fetch(`${KOT_BASE}${path}`, {
-    headers: { 'Authorization': `Bearer ${KOT_TOKEN}`, 'Content-Type': 'application/json' }
-  });
-  const json = await res.json();
-  if (!res.ok || json.errors) throw new Error(json.errors?.[0]?.message || `KoT error ${res.status}`);
-  return json;
-}
-
-// GET /api/kot/employees
-app.get('/api/kot/employees', async (req, res) => {
-  if (!KOT_TOKEN) return res.status(503).json({ error: 'KoT未設定' });
-  audit(req.user.email, req.user.name, 'kot.employees');
-  try { res.json(await kotFetch('/employees?limit=500')); }
-  catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// GET /api/kot/attendances?date=YYYY-MM-DD  日次勤怠
-app.get('/api/kot/attendances', async (req, res) => {
-  if (!KOT_TOKEN) return res.status(503).json({ error: 'KoT未設定' });
-  const date = req.query.date || new Date().toLocaleDateString('sv', { timeZone: 'Asia/Tokyo' });
-  audit(req.user.email, req.user.name, 'kot.attendances', { date });
-  try { res.json(await kotFetch(`/daily-attendances?date=${date}`)); }
-  catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// GET /api/kot/monthly?year=YYYY&month=MM  月次勤怠
-app.get('/api/kot/monthly', async (req, res) => {
-  if (!KOT_TOKEN) return res.status(503).json({ error: 'KoT未設定' });
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
-  const year = req.query.year || now.getFullYear();
-  const month = String(req.query.month || now.getMonth() + 1).padStart(2, '0');
-  audit(req.user.email, req.user.name, 'kot.monthly', { year, month });
-  try { res.json(await kotFetch(`/monthly-attendances?year=${year}&month=${month}`)); }
-  catch(e) { res.status(500).json({ error: e.message }); }
-});
-
 // ── Corp DB (MySQL read-only) ──
 let corpDbPool = null;
 function getCorpDb() {
@@ -1415,13 +1460,40 @@ function getCorpDb() {
 }
 
 // POST /api/db/query  body: { sql, params }
-const DB_BLOCKED_KEYWORDS = /\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i;
+// アロウリスト方式: 明示的に許可されたテーブルのみ照会可能。未定義テーブルはすべて拒否。
+const DB_BLOCKED_KEYWORDS = /\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE|DESCRIBE|SHOW)\b/i;
+const DB_ALLOWED_TABLES = new Set([
+  'kintone_employees',
+  'kintone_contract',
+  'kintone_anken_eigyo',
+  'geppo_data',
+  'kintone_customers',
+  'kintone_seikyu'
+]);
+// SQLからFROM/JOIN後のテーブル参照を抽出し、すべてアロウリストに含まれるか検査
+function checkSqlAllowed(sql) {
+  const tableRe = /\b(?:FROM|JOIN)\s+`?(?:\w+\.)?(\w+)`?/gi;
+  let m;
+  while ((m = tableRe.exec(sql)) !== null) {
+    const t = m[1].toLowerCase();
+    if (!DB_ALLOWED_TABLES.has(t)) {
+      return { ok: false, table: t };
+    }
+  }
+  return { ok: true };
+}
+const DB_DENIED_MESSAGE = sql => {
+  const c = checkSqlAllowed(sql);
+  return c.ok ? '' : `テーブル「${c.table}」への照会は許可されていません。許可: ${[...DB_ALLOWED_TABLES].join(', ')}`;
+};
 app.post('/api/db/query', async (req, res) => {
   const pool = getCorpDb();
   if (!pool) return res.status(503).json({ error: 'Corp DB未設定' });
   const { sql, params = [] } = req.body;
   if (!sql) return res.status(400).json({ error: 'sql is required' });
-  if (DB_BLOCKED_KEYWORDS.test(sql)) return res.status(403).json({ error: '読み取り専用です（SELECT のみ許可）' });
+  if (DB_BLOCKED_KEYWORDS.test(sql)) return res.status(403).json({ error: '読み取り専用です（SELECT のみ許可、SHOW/DESCRIBE等は不可）' });
+  const allowCheck = checkSqlAllowed(sql);
+  if (!allowCheck.ok) return res.status(403).json({ error: DB_DENIED_MESSAGE(sql) });
   audit(req.user.email, req.user.name, 'db.query', { preview: sql.slice(0, 100) });
   try {
     const [rows] = await pool.execute(sql, params);
@@ -1429,13 +1501,14 @@ app.post('/api/db/query', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /api/db/tables
+// GET /api/db/tables  アロウリスト内のテーブルのみ返却
 app.get('/api/db/tables', async (req, res) => {
   const pool = getCorpDb();
   if (!pool) return res.status(503).json({ error: 'Corp DB未設定' });
   try {
     const [rows] = await pool.execute('SHOW TABLES');
-    res.json(rows.map(r => Object.values(r)[0]));
+    const all = rows.map(r => Object.values(r)[0]);
+    res.json(all.filter(t => DB_ALLOWED_TABLES.has(String(t).toLowerCase())));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1993,126 +2066,78 @@ app.get('/api/gmail/messages/:id', async (req, res) => {
   }
 });
 
-// ── App DB (MySQL - agent_app) ──
-let appDbPool = null;
-function getAppDb() {
-  if (!appDbPool && process.env.APP_DB_HOST) {
-    appDbPool = mysql.createPool({
-      host: process.env.APP_DB_HOST,
-      user: process.env.APP_DB_USER,
-      password: process.env.APP_DB_PASS,
-      database: process.env.APP_DB_NAME || 'agent_app',
-      waitForConnections: true,
-      connectionLimit: 5,
-      ssl: { rejectUnauthorized: false }
-    });
-  }
-  return appDbPool;
-}
+// ── Scheduled Tasks API (SQLite) ──
 
-async function initAppDb() {
-  const pool = getAppDb();
-  if (!pool) return;
-  await pool.execute(`
-    CREATE TABLE IF NOT EXISTS scheduled_tasks (
-      id           INT AUTO_INCREMENT PRIMARY KEY,
-      owner_email  VARCHAR(255) NOT NULL,
-      skill_id     INT,
-      skill_name   VARCHAR(255) NOT NULL,
-      skill_title  VARCHAR(255),
-      description  TEXT,
-      steps        TEXT NOT NULL,
-      interval_min INT NOT NULL DEFAULT 60,
-      enabled      TINYINT DEFAULT 1,
-      next_run_at  DATETIME,
-      last_run_at  DATETIME,
-      last_status  VARCHAR(50),
-      last_result  TEXT,
-      created_at   DATETIME DEFAULT NOW(),
-      INDEX idx_owner    (owner_email),
-      INDEX idx_schedule (enabled, next_run_at)
-    )
-  `);
-  console.log('[appDb] scheduled_tasks ready');
+function toUtcStr(d) {
+  return new Date(d).toISOString().replace('T', ' ').slice(0, 19);
 }
-
-// ── Scheduled Tasks API ──
 
 // GET /api/scheduled-tasks
-app.get('/api/scheduled-tasks', async (req, res) => {
-  const pool = getAppDb();
-  if (!pool) return res.status(503).json({ error: 'APP_DB未設定' });
+app.get('/api/scheduled-tasks', (req, res) => {
   try {
-    const [rows] = await pool.execute(
-      'SELECT * FROM scheduled_tasks WHERE owner_email=? ORDER BY created_at DESC',
-      [req.user.email]
-    );
+    const rows = db.prepare('SELECT * FROM scheduled_tasks WHERE owner_email=? ORDER BY created_at DESC').all(req.user.email);
     res.json(rows);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // POST /api/scheduled-tasks
-app.post('/api/scheduled-tasks', async (req, res) => {
-  const pool = getAppDb();
-  if (!pool) return res.status(503).json({ error: 'APP_DB未設定' });
-  const { skill_id, interval_min = 60 } = req.body;
-  if (!skill_id) return res.status(400).json({ error: 'skill_id は必須' });
+app.post('/api/scheduled-tasks', (req, res) => {
+  const { skill_id, task_type = 'recurring', interval_min = 60, run_at } = req.body;
 
-  const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR shared=1)').get(skill_id, req.user.email);
-  if (!skill) return res.status(404).json({ error: 'スキルが見つかりません' });
+  let taskData = {};
+  if (skill_id) {
+    const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR shared=1)').get(skill_id, req.user.email);
+    if (!skill) return res.status(404).json({ error: 'スキルが見つかりません' });
+    taskData = { skill_id: skill.id, skill_name: skill.name, skill_title: skill.title, description: skill.description || '', steps: skill.steps || '' };
+  } else {
+    return res.status(400).json({ error: 'skill_id は必須' });
+  }
 
-  audit(req.user.email, req.user.name, 'scheduled_task.create', { skill_id, interval_min });
+  let nextRunAt;
+  if (task_type === 'once') {
+    if (!run_at) return res.status(400).json({ error: '単発タスクには run_at が必要です' });
+    nextRunAt = toUtcStr(run_at);
+  } else {
+    nextRunAt = toUtcStr(Date.now() + Number(interval_min) * 60000);
+  }
+
+  audit(req.user.email, req.user.name, 'scheduled_task.create', { skill_id, task_type, interval_min });
   try {
-    const nextRun = new Date(Date.now() + interval_min * 60 * 1000);
-    const [result] = await pool.execute(
+    const result = db.prepare(
       `INSERT INTO scheduled_tasks
-         (owner_email, skill_id, skill_name, skill_title, description, steps, interval_min, enabled, next_run_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-      [req.user.email, skill.id, skill.name, skill.title, skill.description || '', skill.steps || '', interval_min, nextRun]
-    );
-    res.json({ ok: true, id: result.insertId });
+         (owner_email, task_type, skill_id, skill_name, skill_title, description, steps, interval_min, run_at, enabled, next_run_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`
+    ).run(req.user.email, task_type, taskData.skill_id, taskData.skill_name, taskData.skill_title, taskData.description, taskData.steps, Number(interval_min), run_at || null, nextRunAt);
+    res.json({ ok: true, id: result.lastInsertRowid });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // PUT /api/scheduled-tasks/:id  body: { interval_min?, enabled? }
-app.put('/api/scheduled-tasks/:id', async (req, res) => {
-  const pool = getAppDb();
-  if (!pool) return res.status(503).json({ error: 'APP_DB未設定' });
+app.put('/api/scheduled-tasks/:id', (req, res) => {
   const { interval_min, enabled } = req.body;
   try {
-    const [rows] = await pool.execute(
-      'SELECT id FROM scheduled_tasks WHERE id=? AND owner_email=?',
-      [req.params.id, req.user.email]
-    );
-    if (!rows.length) return res.status(403).json({ error: '権限がありません' });
+    const row = db.prepare('SELECT id FROM scheduled_tasks WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
+    if (!row) return res.status(403).json({ error: '権限がありません' });
 
     const updates = [];
     const params = [];
-    if (interval_min !== undefined) { updates.push('interval_min=?'); params.push(interval_min); }
+    if (interval_min !== undefined) { updates.push('interval_min=?'); params.push(Number(interval_min)); }
     if (enabled !== undefined) { updates.push('enabled=?'); params.push(enabled ? 1 : 0); }
     if (!updates.length) return res.status(400).json({ error: '更新項目がありません' });
 
     params.push(req.params.id, req.user.email);
-    await pool.execute(
-      `UPDATE scheduled_tasks SET ${updates.join(',')} WHERE id=? AND owner_email=?`,
-      params
-    );
+    db.prepare(`UPDATE scheduled_tasks SET ${updates.join(',')} WHERE id=? AND owner_email=?`).run(...params);
     audit(req.user.email, req.user.name, 'scheduled_task.update', { id: req.params.id });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // DELETE /api/scheduled-tasks/:id
-app.delete('/api/scheduled-tasks/:id', async (req, res) => {
-  const pool = getAppDb();
-  if (!pool) return res.status(503).json({ error: 'APP_DB未設定' });
+app.delete('/api/scheduled-tasks/:id', (req, res) => {
   try {
-    const [rows] = await pool.execute(
-      'SELECT id FROM scheduled_tasks WHERE id=? AND owner_email=?',
-      [req.params.id, req.user.email]
-    );
-    if (!rows.length) return res.status(403).json({ error: '権限がありません' });
-    await pool.execute('DELETE FROM scheduled_tasks WHERE id=?', [req.params.id]);
+    const row = db.prepare('SELECT id FROM scheduled_tasks WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
+    if (!row) return res.status(403).json({ error: '権限がありません' });
+    db.prepare('DELETE FROM scheduled_tasks WHERE id=?').run(req.params.id);
     audit(req.user.email, req.user.name, 'scheduled_task.delete', { id: req.params.id });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -2166,7 +2191,7 @@ async function runSkillBackground(task, ownerEmail) {
 
     db.prepare('UPDATE task_runs SET status=?, result=?, finished_at=datetime("now","localtime") WHERE id=?')
       .run('done', resultBuffer.slice(0, 2000), runId);
-    audit(ownerEmail, '', 'scheduled_task.ran', { skillName: skill.name, runId });
+    audit(ownerEmail, '', 'scheduled_task.ran', { skillName: task.skill_name, runId });
     return { ok: true, runId };
   } catch(e) {
     db.prepare('UPDATE task_runs SET status=?, result=?, finished_at=datetime("now","localtime") WHERE id=?')
@@ -2175,34 +2200,33 @@ async function runSkillBackground(task, ownerEmail) {
   }
 }
 
-// ── Scheduler (1分ごとにポーリング) ──
-async function runScheduler() {
-  const pool = getAppDb();
-  if (!pool) return;
+// ── Scheduler (1分ごとにポーリング・SQLite) ──
+function runScheduler() {
   try {
-    const [due] = await pool.execute(
-      'SELECT * FROM scheduled_tasks WHERE enabled=1 AND next_run_at <= NOW()'
-    );
-    for (const task of due) {
-      // 先に next_run_at を更新して二重実行を防ぐ
-      await pool.execute(
-        `UPDATE scheduled_tasks
-         SET next_run_at = DATE_ADD(NOW(), INTERVAL interval_min MINUTE),
-             last_run_at = NOW(), last_status = 'running'
-         WHERE id=?`,
-        [task.id]
-      );
+    const now = toUtcStr(Date.now());
+    const due = db.prepare(
+      "SELECT * FROM scheduled_tasks WHERE enabled=1 AND next_run_at <= ?"
+    ).all(now);
 
-      runSkillBackground(task, task.owner_email).then(async result => {
-        await pool.execute(
-          'UPDATE scheduled_tasks SET last_status=?, last_result=? WHERE id=?',
-          [result.ok ? 'done' : 'error', result.error || null, task.id]
-        );
-      }).catch(async e => {
-        await pool.execute(
-          "UPDATE scheduled_tasks SET last_status='error', last_result=? WHERE id=?",
-          [e.message, task.id]
-        );
+    for (const task of due) {
+      // 先に更新して二重実行を防ぐ
+      if (task.task_type === 'once') {
+        db.prepare(
+          "UPDATE scheduled_tasks SET enabled=0, last_run_at=?, last_status='running' WHERE id=?"
+        ).run(now, task.id);
+      } else {
+        const nextRun = toUtcStr(Date.now() + task.interval_min * 60000);
+        db.prepare(
+          "UPDATE scheduled_tasks SET next_run_at=?, last_run_at=?, last_status='running' WHERE id=?"
+        ).run(nextRun, now, task.id);
+      }
+
+      runSkillBackground(task, task.owner_email).then(result => {
+        db.prepare("UPDATE scheduled_tasks SET last_status=?, last_result=? WHERE id=?")
+          .run(result.ok ? 'done' : 'error', result.error || null, task.id);
+      }).catch(e => {
+        db.prepare("UPDATE scheduled_tasks SET last_status='error', last_result=? WHERE id=?")
+          .run(e.message.slice(0, 500), task.id);
       });
     }
   } catch(e) {
@@ -2210,9 +2234,7 @@ async function runScheduler() {
   }
 }
 
-initAppDb().then(() => {
-  setInterval(runScheduler, 60 * 1000);
-  console.log('[scheduler] started');
-}).catch(e => console.error('[appDb] init error:', e.message));
+setInterval(runScheduler, 60 * 1000);
+console.log('[scheduler] started');
 
 app.listen(PORT, '0.0.0.0', () => console.log(`Claude Agent Web: http://0.0.0.0:${PORT}`));

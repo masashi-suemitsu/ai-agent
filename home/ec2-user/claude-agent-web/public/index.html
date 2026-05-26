@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI エージェント — 仕事を任せる</title>
+<title>タスクAIエージェント — 仕事を任せる</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -59,7 +59,7 @@ header {
 .header-left { display: flex; align-items: center; gap: 10px; }
 .header-logo { width: 28px; height: 28px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 800; }
 header h1 { font-size: 15px; font-weight: 700; color: var(--text); }
-header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); display: block; margin-top: 1px; }
+header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); display: inline; margin-left: 8px; }
 .header-right { display: flex; align-items: center; gap: 8px; }
 .header-btn { background: none; border: 1px solid var(--border); border-radius: 7px; padding: 5px 12px; font-size: 12px; cursor: pointer; color: var(--text-light); transition: all .15s; display: flex; align-items: center; gap: 5px; }
 .header-btn:hover { border-color: var(--primary); color: var(--primary); }
@@ -515,8 +515,8 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
 <body>
 <header>
   <div class="header-left">
-    <div class="header-logo">A</div>
-    <h1>AI エージェント<small>仕事を任せる</small></h1>
+    <div class="header-logo">T</div>
+    <h1>タスクAIエージェント<small>仕事を任せる</small></h1>
   </div>
   <div class="header-right">
     <span id="userBadge" style="font-size:12px;color:#718096;"></span>
@@ -565,13 +565,6 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
   <div class="sidebar-right">
     <div class="rs-header">連携サービス</div>
     <div class="rs-list" id="rsList">
-      <div class="rs-item" onclick="toggleKintone()" id="rs-kintone">
-        <span class="rs-icon">🔗</span>
-        <div class="rs-info">
-          <div class="rs-name">Kintone</div>
-          <div class="rs-status disconnected" id="rs-kintone-status">確認中...</div>
-        </div>
-      </div>
       <div class="rs-item" onclick="toggleCw()" id="rs-chatwork">
         <span class="rs-icon">💬</span>
         <div class="rs-info">
@@ -600,13 +593,6 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
           <div class="rs-status disconnected" id="rs-gmail-status">確認中...</div>
         </div>
       </div>
-      <div class="rs-item" onclick="toggleKot()" id="rs-kot">
-        <span class="rs-icon">⏰</span>
-        <div class="rs-info">
-          <div class="rs-name">King of Time</div>
-          <div class="rs-status connected" id="rs-kot-status">利用可能</div>
-        </div>
-      </div>
     </div>
     <div class="rs-footer">
       <button class="rs-footer-btn" id="rs-schedule-btn" onclick="toggleSchedule()">
@@ -616,29 +602,6 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
         <span>📋</span> 実行履歴
       </button>
     </div>
-  </div>
-</div>
-
-<!-- ─ KoT Panel ─ -->
-<div class="kot-panel" id="kotPanel">
-  <div class="kot-panel-header">
-    <h3>⏰ King of Time</h3>
-    <button class="panel-close-btn" onclick="toggleKot()">✕</button>
-  </div>
-  <div class="kot-controls">
-    <select id="kotMode" onchange="kotModeChange()">
-      <option value="daily">日次勤怠</option>
-      <option value="monthly">月次勤怠</option>
-    </select>
-    <input type="date" id="kotDate" />
-    <input type="month" id="kotMonth" style="display:none;" />
-    <button onclick="loadKot()">表示</button>
-  </div>
-  <div class="kot-table-wrap" id="kotTableWrap">
-    <div class="cw-empty">日付を選んで「表示」を押してください</div>
-  </div>
-  <div class="kot-attach-bar">
-    <button onclick="attachKot()">📎 添付してAIに質問</button>
   </div>
 </div>
 
@@ -704,9 +667,20 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
 <!-- ─ Schedule Modal ─ -->
 <div class="modal-overlay" id="scheduleModal" onclick="if(event.target===this)closeScheduleModal()">
   <div class="modal-box">
-    <div class="modal-title">⏰ 定期実行を設定</div>
+    <div class="modal-title">⏰ タスクを設定</div>
     <div class="modal-subtitle" id="modalSkillTitle"></div>
     <div class="modal-field">
+      <label>タスク種別</label>
+      <div style="display:flex;gap:8px;margin-top:4px;">
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:normal;">
+          <input type="radio" name="taskType" value="recurring" checked onchange="onTaskTypeChange()"> 定期実行
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:normal;">
+          <input type="radio" name="taskType" value="once" onchange="onTaskTypeChange()"> 単発実行
+        </label>
+      </div>
+    </div>
+    <div class="modal-field" id="recurringField">
       <label>実行間隔</label>
       <select id="modalInterval">
         <option value="30">30分ごと</option>
@@ -716,6 +690,10 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
         <option value="480">8時間ごと</option>
         <option value="1440">毎日（24時間ごと）</option>
       </select>
+    </div>
+    <div class="modal-field" id="onceField" style="display:none;">
+      <label>実行日時</label>
+      <input type="datetime-local" id="modalRunAt" style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;">
     </div>
     <div class="modal-btns">
       <button class="modal-btn-cancel" onclick="closeScheduleModal()">キャンセル</button>
@@ -980,8 +958,6 @@ async function send() {
             list_chatwork_rooms: 'Chatworkルームを取得中',
             get_chatwork_messages: 'Chatworkメッセージを取得中',
             send_chatwork_message: 'Chatworkに送信中',
-            get_kot_daily: '日次勤怠を取得中',
-            get_kot_monthly: '月次勤怠を取得中',
             list_drive_files: 'Driveファイル一覧を取得中',
             read_drive_file: 'Driveファイルを読み取り中',
             list_calendar_events: 'カレンダーを取得中',
@@ -1189,101 +1165,6 @@ function extractSkill(text) {
   } catch { return { clean: text, skill: null }; }
 }
 
-// ─ King of Time ─
-let kotData = null;
-let kotLabel = '';
-
-function kotModeChange() {
-  const mode = document.getElementById('kotMode').value;
-  document.getElementById('kotDate').style.display = mode === 'daily' ? '' : 'none';
-  document.getElementById('kotMonth').style.display = mode === 'monthly' ? '' : 'none';
-}
-
-function toggleKot() {
-  const panel = document.getElementById('kotPanel');
-  const btn = document.getElementById('rs-kot');
-  const isOpen = panel.classList.contains('open');
-  closeAllPanels('kotPanel');
-  panel.classList.toggle('open', !isOpen);
-  btn.classList.toggle('active', !isOpen);
-  if (!isOpen) {
-    // デフォルト日付を今日にセット
-    const today = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Tokyo' });
-    document.getElementById('kotDate').value = today;
-    const ym = today.slice(0, 7);
-    document.getElementById('kotMonth').value = ym;
-  }
-}
-
-async function loadKot() {
-  const mode = document.getElementById('kotMode').value;
-  const wrap = document.getElementById('kotTableWrap');
-  wrap.innerHTML = '<div class="cw-empty">読み込み中...</div>';
-  kotData = null;
-
-  try {
-    let data, url;
-    if (mode === 'daily') {
-      const date = document.getElementById('kotDate').value;
-      if (!date) { wrap.innerHTML = '<div class="cw-empty">日付を選んでください</div>'; return; }
-      url = `/api/kot/attendances?date=${date}`;
-      kotLabel = `日次勤怠 ${date}`;
-    } else {
-      const month = document.getElementById('kotMonth').value;
-      if (!month) { wrap.innerHTML = '<div class="cw-empty">年月を選んでください</div>'; return; }
-      const [y, m] = month.split('-');
-      url = `/api/kot/monthly?year=${y}&month=${m}`;
-      kotLabel = `月次勤怠 ${month}`;
-    }
-
-    data = await fetch(url).then(r => r.json());
-    if (data.error) { wrap.innerHTML = `<div class="drive-error">${esc(data.error)}</div>`; return; }
-
-    kotData = data;
-    renderKotTable(data, mode);
-  } catch(e) {
-    wrap.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`;
-  }
-}
-
-function renderKotTable(data, mode) {
-  const wrap = document.getElementById('kotTableWrap');
-  const rows = Array.isArray(data) ? data : (data.daily_attendances || data.monthly_attendances || []);
-  if (!rows.length) { wrap.innerHTML = '<div class="cw-empty">データがありません</div>'; return; }
-
-  if (mode === 'daily') {
-    wrap.innerHTML = `<table class="kot-table">
-      <tr><th>社員名</th><th>出勤</th><th>退勤</th><th>残業</th><th>状態</th></tr>
-      ${rows.map(r => `<tr>
-        <td>${esc(r.employee?.name || r.name || '')}</td>
-        <td>${esc(r.start_time || r.clock_in_time || '−')}</td>
-        <td>${esc(r.end_time || r.clock_out_time || '−')}</td>
-        <td>${r.overtime_minutes != null ? Math.round(r.overtime_minutes/60*10)/10 + 'h' : '−'}</td>
-        <td>${esc(r.attendance_type_name || r.work_type || '')}</td>
-      </tr>`).join('')}
-    </table>`;
-  } else {
-    wrap.innerHTML = `<table class="kot-table">
-      <tr><th>社員名</th><th>出勤日数</th><th>残業時間</th><th>有休残</th></tr>
-      ${rows.map(r => `<tr>
-        <td>${esc(r.employee?.name || r.name || '')}</td>
-        <td>${r.working_days ?? '−'}</td>
-        <td>${r.overtime_minutes != null ? Math.round(r.overtime_minutes/60*10)/10 + 'h' : '−'}</td>
-        <td>${r.paid_leave_remaining != null ? r.paid_leave_remaining + '日' : '−'}</td>
-      </tr>`).join('')}
-    </table>`;
-  }
-}
-
-function attachKot() {
-  if (!kotData) { alert('先にデータを表示してください'); return; }
-  const text = `【KingOfTime: ${kotLabel}】\n${JSON.stringify(kotData, null, 2)}`;
-  driveAttachments.push({ name: `KoT: ${kotLabel}`, content: text });
-  renderAttachBar();
-  document.getElementById('kotPanel').classList.remove('open');
-  document.getElementById('rs-kot').classList.remove('active');
-  document.getElementById('input').focus();
-}
 
 // ─ Chatwork ─
 let cwRooms = [];
@@ -1415,8 +1296,8 @@ async function attachCwMessages() {
 }
 
 // ─ パネル共通クローズ ─
-const ALL_PANELS = ['cwPanel','kotPanel','kintonePanel','drivePanel','calendarPanel','gmailPanel','historyPanel','schedulePanel'];
-const ALL_BTNS   = ['rs-chatwork','rs-kot','rs-kintone','rs-drive','rs-calendar','rs-gmail','rs-history-btn','rs-schedule-btn'];
+const ALL_PANELS = ['cwPanel','drivePanel','calendarPanel','gmailPanel','historyPanel','schedulePanel'];
+const ALL_BTNS   = ['rs-chatwork','rs-drive','rs-calendar','rs-gmail','rs-history-btn','rs-schedule-btn'];
 function closeAllPanels(except) {
   ALL_PANELS.forEach((id, i) => { if (id !== except) { document.getElementById(id)?.classList.remove('open'); document.getElementById(ALL_BTNS[i])?.classList.remove('active'); } });
 }
@@ -1424,7 +1305,6 @@ function closeAllPanels(except) {
 // ─ 右サイドバー ステータス読み込み ─
 async function loadRightSidebarStatuses() {
   const apis = [
-    { id: 'rs-kintone-status', url: '/api/kintone/status' },
     { id: 'rs-chatwork-status', url: '/api/chatwork/status' },
     { id: 'rs-drive-status',    url: '/api/drive/status' },
     { id: 'rs-calendar-status', url: '/api/calendar/status' },
@@ -1794,12 +1674,18 @@ async function loadScheduledTasks() {
       return;
     }
     list.innerHTML = tasks.map(t => {
+      const isOnce = t.task_type === 'once';
       const nextRun = t.next_run_at ? new Date(t.next_run_at.replace(' ','T')).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '─';
+      const typeBadge = isOnce
+        ? `<span style="background:#e9d8fd;color:#6b46c1;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:600;">単発</span>`
+        : `<span style="background:#bee3f8;color:#2b6cb0;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:600;">定期</span>`;
+      const scheduleMeta = isOnce
+        ? `<span>実行: ${nextRun}</span>`
+        : `<span>🔄 ${esc(intervalToLabel(t.interval_min))}</span><span>次回: ${nextRun}</span>`;
       return `<div class="sched-card">
-        <div class="sched-card-title">${esc(t.skill_title || t.skill_name)}</div>
+        <div class="sched-card-title">${typeBadge} ${esc(t.skill_title || t.skill_name)}</div>
         <div class="sched-card-meta">
-          <span>🔄 ${esc(intervalToLabel(t.interval_min))}</span>
-          <span>次回: ${nextRun}</span>
+          ${scheduleMeta}
           ${t.last_status ? `<span class="run-status ${t.last_status}" style="font-size:10px;">${statusLabel(t.last_status)}</span>` : ''}
         </div>
         ${t.last_result ? `<div class="run-card-result">${esc(t.last_result)}</div>` : ''}
@@ -1808,7 +1694,7 @@ async function loadScheduledTasks() {
             <input type="checkbox" ${t.enabled ? 'checked' : ''} onchange="toggleScheduledTask(${t.id}, this.checked)">
             <span class="sched-slider"></span>
           </label>
-          <span style="font-size:11px;color:var(--text-light);">${t.enabled ? '有効' : '停止中'}</span>
+          <span style="font-size:11px;color:var(--text-light);">${t.enabled ? '有効' : (isOnce && t.last_status === 'done' ? '実行済' : '停止中')}</span>
           <button class="sched-del-btn" onclick="deleteScheduledTask(${t.id})">削除</button>
         </div>
       </div>`;
@@ -1825,10 +1711,25 @@ function intervalToLabel(min) {
   return '毎日';
 }
 
+function onTaskTypeChange() {
+  const isOnce = document.querySelector('input[name="taskType"]:checked').value === 'once';
+  document.getElementById('recurringField').style.display = isOnce ? 'none' : '';
+  document.getElementById('onceField').style.display = isOnce ? '' : 'none';
+  if (isOnce && !document.getElementById('modalRunAt').value) {
+    // デフォルト: 1時間後
+    const d = new Date(Date.now() + 3600000);
+    d.setSeconds(0, 0);
+    document.getElementById('modalRunAt').value = d.toISOString().slice(0, 16);
+  }
+}
+
 function openScheduleModal(skillId, skillTitle) {
   scheduleTargetSkillId = skillId;
   document.getElementById('modalSkillTitle').textContent = skillTitle;
   document.getElementById('modalInterval').value = '60';
+  document.querySelector('input[name="taskType"][value="recurring"]').checked = true;
+  document.getElementById('recurringField').style.display = '';
+  document.getElementById('onceField').style.display = 'none';
   document.getElementById('scheduleModal').classList.add('open');
 }
 
@@ -1839,14 +1740,22 @@ function closeScheduleModal() {
 
 async function saveSchedule() {
   if (!scheduleTargetSkillId) return;
-  const interval_min = parseInt(document.getElementById('modalInterval').value);
+  const task_type = document.querySelector('input[name="taskType"]:checked').value;
   const btn = document.getElementById('modalSaveBtn');
   btn.disabled = true; btn.textContent = '登録中...';
   try {
+    const body = { skill_id: scheduleTargetSkillId, task_type };
+    if (task_type === 'once') {
+      const runAt = document.getElementById('modalRunAt').value;
+      if (!runAt) { alert('実行日時を指定してください'); return; }
+      body.run_at = new Date(runAt).toISOString();
+    } else {
+      body.interval_min = parseInt(document.getElementById('modalInterval').value);
+    }
     const resp = await fetch('/api/scheduled-tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skill_id: scheduleTargetSkillId, interval_min })
+      body: JSON.stringify(body)
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || '登録失敗');
