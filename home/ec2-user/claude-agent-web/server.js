@@ -390,7 +390,7 @@ app.get('/api/me', (req, res) => {
 // ── 認証必須ルート ──
 app.use(requireAuth);
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
 // ── 監査ログ閲覧 ──
 app.get('/api/admin/logs', (req, res) => {
