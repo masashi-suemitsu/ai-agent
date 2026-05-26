@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>タスク管理 — AI エージェント</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #5b6eff; --primary-dark: #4a5ce8; --primary-light: #edf2ff;
+  --border: #e2e8f0; --text: #2d3748; --text-light: #718096;
+  --success: #48bb78; --danger: #e53e3e; --warn: #ed8936; --bg: #f4f6fb;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+header {
+  background: #fff; border-bottom: 1px solid var(--border);
+  padding: 0 24px; height: 52px; display: flex; align-items: center;
+  justify-content: space-between; position: sticky; top: 0; z-index: 10;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+}
+.header-left { display: flex; align-items: center; gap: 12px; }
+.back-link { font-size: 13px; color: var(--primary); text-decoration: none; font-weight: 500; padding: 4px 10px; border: 1px solid var(--primary); border-radius: 7px; transition: all .15s; }
+.back-link:hover { background: var(--primary-light); }
+.header-logo { width: 28px; height: 28px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 800; }
+header h1 { font-size: 15px; font-weight: 700; }
+header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); display: block; margin-top: 1px; }
+.header-right { display: flex; align-items: center; gap: 8px; }
+.user-badge { font-size: 12px; color: var(--text-light); }
+.role-chip { font-size: 11px; padding: 2px 9px; border-radius: 10px; font-weight: 600; border: 1px solid; }
+
+.page { max-width: 880px; margin: 0 auto; padding: 24px 20px; }
+
+.tab-nav { display: flex; gap: 4px; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 24px; width: fit-content; }
+.tab-btn { padding: 8px 22px; border: none; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; background: none; color: var(--text-light); transition: all .15s; }
+.tab-btn.active { background: var(--primary); color: #fff; }
+.tab-btn:hover:not(.active) { background: var(--bg); color: var(--text); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.filter-bar { display: flex; gap: 6px; margin-bottom: 16px; }
+.filter-btn { background: #fff; border: 1px solid var(--border); border-radius: 7px; padding: 5px 14px; font-size: 12px; cursor: pointer; color: var(--text-light); transition: all .12s; }
+.filter-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+.card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; transition: box-shadow .15s; }
+.card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.06); }
+.card-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.card-title { font-size: 15px; font-weight: 700; flex: 1; }
+.card-badges { display: flex; gap: 6px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
+.badge { display: inline-flex; align-items: center; border-radius: 5px; padding: 2px 9px; font-size: 11px; font-weight: 600; }
+.badge-green  { background: #d4f5e2; color: #276749; }
+.badge-gray   { background: #edf2f7; color: #718096; }
+.badge-blue   { background: var(--primary-light); color: var(--primary-dark); }
+.badge-orange { background: #fef3cd; color: #92400e; }
+.badge-red    { background: #fde8e8; color: #9b1c1c; }
+
+.card-meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-light); margin-bottom: 12px; }
+.card-meta span { display: flex; align-items: center; gap: 4px; }
+
+.linked-skill { background: #f7f8fc; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12px; color: var(--text); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.linked-skill-label { font-weight: 600; color: var(--text-light); font-size: 11px; margin-right: 2px; }
+
+.steps-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--primary); cursor: pointer; background: var(--primary-light); border: none; border-radius: 6px; padding: 5px 12px; transition: background .12s; }
+.steps-btn:hover { background: #dde8ff; }
+.steps-body { margin-top: 10px; background: #f7f8fc; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 12px; line-height: 1.85; color: var(--text); white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow-y: auto; display: none; }
+.steps-body.open { display: block; }
+
+.card-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.btn { border: none; border-radius: 7px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-orange { background: var(--warn); color: #fff; }
+.btn-orange:hover { background: #c97e2b; }
+.btn-outline { background: none; border: 1px solid var(--border); color: var(--text-light); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+.btn-danger { background: none; border: 1px solid #fed7d7; color: var(--danger); }
+.btn-danger:hover { background: #fff5f5; }
+.btn:disabled { opacity: .5; cursor: default; }
+
+.toggle-wrap { display: flex; align-items: center; gap: 8px; }
+.toggle { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; cursor: pointer; inset: 0; background: #cbd5e0; border-radius: 22px; transition: .2s; }
+.toggle-slider:before { position: absolute; content: ''; height: 16px; width: 16px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+input:checked + .toggle-slider { background: var(--primary); }
+input:checked + .toggle-slider:before { transform: translateX(18px); }
+.toggle-label { font-size: 12px; color: var(--text-light); min-width: 40px; }
+
+.interval-row { display: none; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 10px; background: #f7f8fc; border-radius: 8px; }
+.interval-row.open { display: flex; }
+.interval-row select { border: 1.5px solid var(--primary); border-radius: 7px; padding: 5px 10px; font-size: 12px; outline: none; background: #fff; }
+.interval-row .btn { padding: 5px 12px; }
+
+.empty { text-align: center; padding: 56px 20px; color: var(--text-light); }
+.empty-icon { font-size: 42px; margin-bottom: 14px; }
+.empty h3 { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.empty p { font-size: 13px; line-height: 1.7; }
+.empty a { color: var(--primary); font-weight: 600; text-decoration: none; }
+
+.rules-block { background: #fff; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+.rules-block-title { padding: 13px 18px; font-size: 13px; font-weight: 700; background: #f7f8fc; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.rules-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.rules-table th { padding: 8px 16px; text-align: left; border-bottom: 1px solid var(--border); font-weight: 600; color: var(--text-light); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.rules-table td { padding: 9px 16px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
+.rules-table tr:last-child td { border-bottom: none; }
+.rules-table tr:hover td { background: #fafbff; }
+.check { color: var(--success); font-size: 14px; font-weight: 700; }
+.cross { color: #cbd5e0; font-size: 14px; }
+.tool-name { font-weight: 600; font-family: 'SF Mono', monospace; font-size: 11px; color: var(--primary-dark); }
+.tool-desc { color: var(--text-light); }
+
+.role-card { background: var(--primary-light); border: 1px solid #c3d0ff; border-radius: 12px; padding: 18px 22px; margin-bottom: 20px; display: flex; align-items: center; gap: 18px; }
+.role-icon { font-size: 36px; }
+.role-info h2 { font-size: 17px; font-weight: 700; color: var(--primary-dark); }
+.role-info p { font-size: 13px; color: #4a5568; margin-top: 5px; line-height: 1.65; }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal-box { background: #fff; border-radius: 16px; padding: 24px; width: 340px; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+.modal-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.modal-subtitle { font-size: 13px; color: var(--primary-dark); font-weight: 600; margin-bottom: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modal-field label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+.modal-field select { width: 100%; border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; }
+.modal-field select:focus { border-color: var(--primary); }
+.modal-btns { display: flex; gap: 8px; margin-top: 20px; }
+.modal-btn-cancel { flex: 1; background: none; border: 1px solid var(--border); border-radius: 8px; padding: 9px; font-size: 13px; cursor: pointer; }
+.modal-btn-save { flex: 2; background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.modal-btn-save:disabled { opacity: .6; cursor: default; }
+
+@media (max-width: 600px) {
+  .page { padding: 16px 12px; }
+  .tab-btn { padding: 7px 14px; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">← チャット</a>
+    <div class="header-logo">A</div>
+    <h1>タスク管理<small>定期タスク・スキル・権限の確認</small></h1>
+  </div>
+  <div class="header-right">
+    <span class="user-badge" id="userBadge"></span>
+    <span class="role-chip" id="roleBadge" style="display:none;"></span>
+  </div>
+</header>
+
+<div class="page">
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('tasks')">⏰ 定期タスク</button>
+    <button class="tab-btn" onclick="switchTab('skills')">⚙️ スキル</button>
+    <button class="tab-btn" onclick="switchTab('rules')">🔒 権限・ルール</button>
+  </div>
+
+  <!-- ─ 定期タスク ─ -->
+  <div class="tab-content active" id="tab-tasks">
+    <div class="filter-bar">
+      <button class="filter-btn active" onclick="filterTasks('all', this)">すべて</button>
+      <button class="filter-btn" onclick="filterTasks('enabled', this)">有効のみ</button>
+      <button class="filter-btn" onclick="filterTasks('disabled', this)">停止中のみ</button>
+    </div>
+    <div id="taskList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+  </div>
+
+  <!-- ─ スキル ─ -->
+  <div class="tab-content" id="tab-skills">
+    <div id="skillList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+  </div>
+
+  <!-- ─ 権限・ルール ─ -->
+  <div class="tab-content" id="tab-rules">
+    <div id="rulesContent"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+  </div>
+</div>
+
+<!-- ─ Schedule Modal ─ -->
+<div class="modal-overlay" id="scheduleModal" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-title">⏰ 定期実行を設定</div>
+    <div class="modal-subtitle" id="modalSkillTitle"></div>
+    <div class="modal-field">
+      <label>実行間隔</label>
+      <select id="modalInterval">
+        <option value="30">30分ごと</option>
+        <option value="60" selected>1時間ごと</option>
+        <option value="120">2時間ごと</option>
+        <option value="240">4時間ごと</option>
+        <option value="480">8時間ごと</option>
+        <option value="1440">毎日（24時間ごと）</option>
+      </select>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn-cancel" onclick="closeModal()">キャンセル</button>
+      <button class="modal-btn-save" id="modalSaveBtn" onclick="saveSchedule()">登録する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let allTasks = [];
+let allSkills = [];
+let currentUser = null;
+let modalSkillId = null;
+
+// ─ 初期化 ─
+(async () => {
+  currentUser = await fetch('/api/me').then(r => r.json());
+  if (!currentUser) { location.href = '/login'; return; }
+  renderUserBadge(currentUser);
+  await Promise.all([loadTasks(), loadSkills()]);
+  renderRules(currentUser.role);
+})();
+
+function renderUserBadge(me) {
+  document.getElementById('userBadge').textContent = me.name || me.email;
+  const roleLabels = {
+    admin:   ['管理者', '#e53e3e', '#fff5f5'],
+    gyoumu:  ['業務管理部', '#2b6cb0', '#ebf8ff'],
+    eigyo:   ['営業', '#276749', '#f0fff4'],
+    recruit: ['採用', '#6b46c1', '#faf5ff'],
+    user:    ['一般', '#718096', '#f7fafc']
+  };
+  const rl = roleLabels[me.role] || roleLabels.user;
+  const rb = document.getElementById('roleBadge');
+  rb.textContent = rl[0];
+  rb.style.color = rl[1];
+  rb.style.background = rl[2];
+  rb.style.borderColor = rl[1] + '60';
+  rb.style.display = 'inline-block';
+}
+
+// ─ タブ切替 ─
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+
+// ─ 定期タスク ─
+async function loadTasks() {
+  try {
+    allTasks = await fetch('/api/scheduled-tasks').then(r => r.json());
+    renderTasks(allTasks);
+  } catch(e) {
+    document.getElementById('taskList').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>${esc(e.message)}</p></div>`;
+  }
+}
+
+function filterTasks(mode, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const filtered = mode === 'enabled'  ? allTasks.filter(t => t.enabled) :
+                   mode === 'disabled' ? allTasks.filter(t => !t.enabled) : allTasks;
+  renderTasks(filtered);
+}
+
+function renderTasks(tasks) {
+  const el = document.getElementById('taskList');
+  if (!tasks.length) {
+    el.innerHTML = `<div class="empty">
+      <div class="empty-icon">⏰</div>
+      <h3>定期タスクがありません</h3>
+      <p>チャット画面のスキル一覧から ⏰ ボタンで登録できます。<br><a href="/">チャット画面へ</a></p>
+    </div>`;
+    return;
+  }
+  el.innerHTML = tasks.map(t => {
+    const nextRun  = fmtDt(t.next_run_at);
+    const lastRun  = fmtDt(t.last_run_at);
+    const statusBadge = t.last_status ? `<span class="badge ${statusColor(t.last_status)}">${statusLabel(t.last_status)}</span>` : '';
+    const enabledBadge = t.enabled
+      ? '<span class="badge badge-green">▶ 有効</span>'
+      : '<span class="badge badge-gray">⏸ 停止中</span>';
+    return `<div class="card" id="task-card-${t.id}">
+      <div class="card-header">
+        <div class="card-title">${esc(t.skill_title || t.skill_name)}</div>
+        <div class="card-badges">${enabledBadge}${statusBadge}</div>
+      </div>
+      <div class="card-meta">
+        <span>🔄 ${esc(intervalLabel(t.interval_min))}</span>
+        <span>次回: ${nextRun}</span>
+        <span>前回: ${lastRun}</span>
+      </div>
+      <div class="linked-skill">
+        <span class="linked-skill-label">スキル</span>
+        <span>⚙️ ${esc(t.skill_name)}</span>
+      </div>
+      ${t.steps ? `<button class="steps-btn" onclick="toggleSteps('task-steps-${t.id}', this)">📋 指示内容を確認 <span>▼</span></button>
+      <div class="steps-body" id="task-steps-${t.id}">${esc(t.steps)}</div>` : ''}
+      ${t.last_result ? `<div style="margin-top:8px;padding:8px 10px;background:#f7f8fc;border-radius:7px;font-size:12px;color:var(--text-light);line-height:1.6;">${esc(t.last_result.slice(0,300))}${t.last_result.length > 300 ? '…' : ''}</div>` : ''}
+      <div class="card-actions">
+        <div class="toggle-wrap">
+          <label class="toggle">
+            <input type="checkbox" ${t.enabled ? 'checked' : ''} onchange="toggleTask(${t.id}, this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label" id="task-toggle-label-${t.id}">${t.enabled ? '有効' : '停止中'}</span>
+        </div>
+        <button class="btn btn-outline" onclick="openIntervalEdit(${t.id}, ${t.interval_min})">間隔を変更</button>
+        <button class="btn btn-danger" onclick="deleteTask(${t.id})">削除</button>
+      </div>
+      <div class="interval-row" id="interval-row-${t.id}">
+        <select id="interval-select-${t.id}">
+          <option value="30">30分ごと</option>
+          <option value="60">1時間ごと</option>
+          <option value="120">2時間ごと</option>
+          <option value="240">4時間ごと</option>
+          <option value="480">8時間ごと</option>
+          <option value="1440">毎日</option>
+        </select>
+        <button class="btn btn-primary" onclick="saveInterval(${t.id})">保存</button>
+        <button class="btn btn-outline" onclick="closeIntervalEdit(${t.id})">キャンセル</button>
+      </div>
+    </div>`;
+  }).join('');
+  // interval select の初期値をセット
+  tasks.forEach(t => {
+    const sel = document.getElementById(`interval-select-${t.id}`);
+    if (sel) sel.value = String(t.interval_min);
+  });
+}
+
+function openIntervalEdit(id, current) {
+  const row = document.getElementById(`interval-row-${id}`);
+  row.classList.add('open');
+  const sel = document.getElementById(`interval-select-${id}`);
+  if (sel) sel.value = String(current);
+}
+function closeIntervalEdit(id) {
+  document.getElementById(`interval-row-${id}`)?.classList.remove('open');
+}
+
+async function saveInterval(id) {
+  const sel = document.getElementById(`interval-select-${id}`);
+  const interval_min = parseInt(sel.value);
+  await fetch(`/api/scheduled-tasks/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ interval_min })
+  });
+  closeIntervalEdit(id);
+  await loadTasks();
+}
+
+async function toggleTask(id, enabled) {
+  await fetch(`/api/scheduled-tasks/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled })
+  });
+  const lbl = document.getElementById(`task-toggle-label-${id}`);
+  if (lbl) lbl.textContent = enabled ? '有効' : '停止中';
+  allTasks = allTasks.map(t => t.id === id ? { ...t, enabled: enabled ? 1 : 0 } : t);
+}
+
+async function deleteTask(id) {
+  if (!confirm('この定期タスクを削除しますか？')) return;
+  await fetch(`/api/scheduled-tasks/${id}`, { method: 'DELETE' });
+  await loadTasks();
+}
+
+// ─ スキル ─
+async function loadSkills() {
+  try {
+    allSkills = await fetch('/api/skills').then(r => r.json());
+    renderSkills(allSkills);
+  } catch(e) {
+    document.getElementById('skillList').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>${esc(e.message)}</p></div>`;
+  }
+}
+
+function renderSkills(skills) {
+  const el = document.getElementById('skillList');
+  if (!skills.length) {
+    el.innerHTML = `<div class="empty">
+      <div class="empty-icon">⚙️</div>
+      <h3>スキルがありません</h3>
+      <p>チャット画面でAIと会話して手順が決まったら<br>スキルとして保存できます。<br><a href="/">チャット画面へ</a></p>
+    </div>`;
+    return;
+  }
+  el.innerHTML = skills.map(s => {
+    const isOwn = s.owner_email === currentUser?.email;
+    return `<div class="card">
+      <div class="card-header">
+        <div class="card-title">${esc(s.title)}</div>
+        <div class="card-badges">
+          ${s.shared ? '<span class="badge badge-blue">共有</span>' : ''}
+          ${!isOwn ? '<span class="badge badge-gray">他のユーザー</span>' : ''}
+        </div>
+      </div>
+      ${s.description ? `<div style="font-size:13px;color:var(--text-light);margin-bottom:10px;line-height:1.6;">${esc(s.description)}</div>` : ''}
+      <div class="card-meta">
+        <span>📊 実行 ${s.run_count || 0} 回</span>
+        <span>🕐 作成: ${fmtDt(s.created_at)}</span>
+        <span>⚙️ ID: ${s.id}</span>
+      </div>
+      ${s.steps ? `<button class="steps-btn" onclick="toggleSteps('skill-steps-${s.id}', this)">📋 実行手順（指示内容）を確認 <span>▼</span></button>
+      <div class="steps-body" id="skill-steps-${s.id}">${esc(s.steps)}</div>` : ''}
+      ${isOwn ? `<div class="card-actions">
+        <button class="btn btn-orange" onclick="openModal(${s.id}, ${JSON.stringify(s.title)})">⏰ 定期実行を設定</button>
+        <button class="btn btn-outline" onclick="runSkillNow(${s.id}, ${JSON.stringify(s.title)}, this)">▶ 今すぐ実行</button>
+        <button class="btn btn-danger" onclick="deleteSkill(${s.id})">削除</button>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function runSkillNow(id, title, btn) {
+  if (!confirm(`「${title}」を今すぐ実行しますか？`)) return;
+  btn.disabled = true; btn.textContent = '実行中...';
+  try {
+    const resp = await fetch(`/api/skills/${id}/run`, { method: 'POST' });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        try {
+          const d = JSON.parse(line.slice(5));
+          if (d.done) { btn.textContent = '✓ 実行完了'; setTimeout(() => { btn.disabled = false; btn.textContent = '▶ 今すぐ実行'; }, 3000); }
+        } catch {}
+      }
+    }
+  } catch(e) {
+    alert(e.message); btn.disabled = false; btn.textContent = '▶ 今すぐ実行';
+  }
+}
+
+async function deleteSkill(id) {
+  if (!confirm('このスキルを削除しますか？')) return;
+  await fetch(`/api/skills/${id}`, { method: 'DELETE' });
+  await loadSkills();
+}
+
+// ─ 権限・ルール ─
+function renderRules(role) {
+  const roleInfo = {
+    admin:   { icon: '👑', name: '管理者', desc: 'すべての機能・データにアクセスできます。全ツールが利用可能です。' },
+    gyoumu:  { icon: '📋', name: '業務管理部', desc: '契約管理・勤怠管理・社員情報・月報・フォローシグナルを扱えます。採用候補者・案件データへのアクセスはありません。' },
+    eigyo:   { icon: '💼', name: '営業部', desc: '案件管理・社員情報・月報・名刺検索・提案書作成が行えます。採用データ・契約詳細・勤怠データへのアクセスはありません。' },
+    recruit: { icon: '🎯', name: '採用部', desc: '採用候補者管理・選考進捗確認・社員情報参照が行えます。案件・契約・勤怠データへのアクセスはありません。' },
+    user:    { icon: '👤', name: '一般ユーザー', desc: 'Chatwork閲覧・DriveファイルIO・OSS AI呼び出しのみ利用できます。' }
+  };
+  const ri = roleInfo[role] || roleInfo.user;
+
+  const allTools = [
+    { name: 'query_corp_db',         label: '社内DBを直接照会',       roles: ['admin','gyoumu'] },
+    { name: 'list_kintone_records',  label: 'Kintoneレコード取得',     roles: ['admin','gyoumu','eigyo','recruit'] },
+    { name: 'search_hotprofile',     label: 'HotProfile名刺検索',      roles: ['admin','eigyo','recruit'] },
+    { name: 'list_wp_posts',         label: 'WP投稿一覧取得',          roles: ['admin','eigyo'] },
+    { name: 'create_wp_post',        label: 'WP投稿作成',              roles: ['admin','eigyo'] },
+    { name: 'send_email',            label: 'メール送信（SES）',        roles: ['admin'] },
+    { name: 'call_oss_ai',           label: 'OSS AI呼び出し',          roles: ['admin','gyoumu','eigyo','recruit','user'] },
+    { name: 'list_chatwork_rooms',   label: 'Chatworkルーム一覧',      roles: ['admin','gyoumu','eigyo','recruit','user'] },
+    { name: 'get_chatwork_messages', label: 'Chatworkメッセージ取得',  roles: ['admin','gyoumu','eigyo','recruit','user'] },
+    { name: 'send_chatwork_message', label: 'Chatworkメッセージ送信',  roles: ['admin','gyoumu','eigyo','recruit','user'] },
+    { name: 'get_kot_daily',         label: 'KoT日次勤怠取得',         roles: ['admin','gyoumu'] },
+    { name: 'get_kot_monthly',       label: 'KoT月次勤怠取得',         roles: ['admin','gyoumu'] },
+    { name: 'list_drive_files',      label: 'Driveファイル一覧',       roles: ['admin','gyoumu','eigyo','recruit','user'] },
+    { name: 'read_drive_file',       label: 'Driveファイル読取',        roles: ['admin','gyoumu','eigyo','recruit','user'] },
+    { name: 'fetch_corp_api',        label: '社員専用データAPI',        roles: ['admin','gyoumu','eigyo','recruit'] },
+    { name: 'fetch_corp_page',       label: '社内管理画面の参照',       roles: ['admin','gyoumu','eigyo','recruit'] },
+    { name: 'list_calendar_events',  label: 'Googleカレンダー取得',    roles: ['admin','gyoumu','eigyo','recruit','user'] },
+    { name: 'list_gmail_messages',   label: 'Gmail受信トレイ取得',     roles: ['admin','gyoumu','eigyo','recruit','user'] },
+  ];
+
+  const corpApiActions = [
+    { action: 'employees',      label: '社員一覧',         roles: ['admin','gyoumu','eigyo','recruit'] },
+    { action: 'cases',          label: '案件データ',        roles: ['admin','eigyo'] },
+    { action: 'contracts',      label: '契約データ',        roles: ['admin','gyoumu'] },
+    { action: 'geppo',          label: '月報データ',        roles: ['admin','gyoumu','eigyo'] },
+    { action: 'candidates',     label: '採用候補者',        roles: ['admin','recruit'] },
+    { action: 'attendance',     label: '勤怠サマリ',        roles: ['admin','gyoumu'] },
+    { action: 'follow_signals', label: 'フォローシグナル',  roles: ['admin','gyoumu'] },
+    { action: 'query',          label: '任意SQLクエリ',     roles: ['admin','gyoumu'] },
+  ];
+
+  const myTools = allTools.filter(t => t.roles.includes(role));
+  const myActions = corpApiActions.filter(a => a.roles.includes(role));
+
+  document.getElementById('rulesContent').innerHTML = `
+    <div class="role-card">
+      <div class="role-icon">${ri.icon}</div>
+      <div class="role-info">
+        <h2>${ri.name}</h2>
+        <p>${ri.desc}</p>
+      </div>
+    </div>
+
+    <div class="rules-block">
+      <div class="rules-block-title">🔧 利用可能なツール（${myTools.length} / ${allTools.length}）</div>
+      <table class="rules-table">
+        <tr><th>ツール名</th><th>機能</th><th>利用可否</th></tr>
+        ${allTools.map(t => {
+          const ok = t.roles.includes(role);
+          return `<tr>
+            <td><span class="tool-name">${esc(t.name)}</span></td>
+            <td class="tool-desc">${esc(t.label)}</td>
+            <td>${ok ? '<span class="check">✓</span>' : '<span class="cross">─</span>'}</td>
+          </tr>`;
+        }).join('')}
+      </table>
+    </div>
+
+    <div class="rules-block">
+      <div class="rules-block-title">🗂 アクセスできる社員データ</div>
+      <table class="rules-table">
+        <tr><th>データ種別</th><th>利用可否</th></tr>
+        ${corpApiActions.map(a => {
+          const ok = a.roles.includes(role);
+          return `<tr>
+            <td class="tool-desc">${esc(a.label)}</td>
+            <td>${ok ? '<span class="check">✓</span>' : '<span class="cross">─</span>'}</td>
+          </tr>`;
+        }).join('')}
+      </table>
+    </div>
+
+    <div class="rules-block">
+      <div class="rules-block-title">⚠️ AIに課せられているルール</div>
+      <table class="rules-table">
+        <tr><th>ルール</th><th>内容</th></tr>
+        <tr><td class="tool-desc">Chatwork送信・WP公開</td><td>必ずユーザーに内容確認してから実行</td></tr>
+        <tr><td class="tool-desc">DBへの書き込み</td><td>SELECT（読み取り）のみ許可。更新・削除は不可</td></tr>
+        <tr><td class="tool-desc">King of Time API</td><td>8:30〜10:00 / 17:30〜18:30 JST は利用禁止時間帯</td></tr>
+        <tr><td class="tool-desc">エラー時の動作</td><td>代替手段があれば自動で試みる。すべて失敗した場合のみ報告</td></tr>
+        <tr><td class="tool-desc">不明点の確認</td><td>1〜2個だけ端的に確認。多くを聞かない</td></tr>
+      </table>
+    </div>`;
+}
+
+// ─ スケジュールモーダル ─
+function openModal(skillId, skillTitle) {
+  modalSkillId = skillId;
+  document.getElementById('modalSkillTitle').textContent = skillTitle;
+  document.getElementById('modalInterval').value = '60';
+  document.getElementById('scheduleModal').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('scheduleModal').classList.remove('open');
+  modalSkillId = null;
+}
+async function saveSchedule() {
+  if (!modalSkillId) return;
+  const interval_min = parseInt(document.getElementById('modalInterval').value);
+  const btn = document.getElementById('modalSaveBtn');
+  btn.disabled = true; btn.textContent = '登録中...';
+  try {
+    const resp = await fetch('/api/scheduled-tasks', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skill_id: modalSkillId, interval_min })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '登録失敗');
+    closeModal();
+    await loadTasks();
+    switchTabByName('tasks');
+  } catch(e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '登録する';
+  }
+}
+function switchTabByName(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelectorAll('.tab-btn')[name === 'tasks' ? 0 : name === 'skills' ? 1 : 2].classList.add('active');
+}
+
+// ─ 指示内容の展開 ─
+function toggleSteps(id, btn) {
+  const el = document.getElementById(id);
+  const open = el.classList.toggle('open');
+  btn.querySelector('span').textContent = open ? '▲' : '▼';
+  btn.textContent = btn.textContent.replace(open ? '確認' : '閉じる', open ? '閉じる' : '確認');
+  // ボタンのテキスト再構築
+  btn.innerHTML = `📋 指示内容を${open ? '閉じる' : '確認'} <span>${open ? '▲' : '▼'}</span>`;
+}
+
+// ─ ユーティリティ ─
+function esc(t) {
+  return String(t || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtDt(dt) {
+  if (!dt) return '─';
+  const d = new Date(String(dt).replace(' ', 'T'));
+  return d.toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+function intervalLabel(min) {
+  if (min < 60)   return `${min}分ごと`;
+  if (min === 60) return '1時間ごと';
+  if (min < 1440) return `${min/60}時間ごと`;
+  return '毎日';
+}
+function statusLabel(s) {
+  return { done:'完了', running:'実行中', error:'エラー' }[s] || s;
+}
+function statusColor(s) {
+  return { done:'badge-green', running:'badge-orange', error:'badge-red' }[s] || 'badge-gray';
+}
+</script>
+</body>
+</html>

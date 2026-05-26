@@ -1993,4 +1993,226 @@ app.get('/api/gmail/messages/:id', async (req, res) => {
   }
 });
 
+// ── App DB (MySQL - agent_app) ──
+let appDbPool = null;
+function getAppDb() {
+  if (!appDbPool && process.env.APP_DB_HOST) {
+    appDbPool = mysql.createPool({
+      host: process.env.APP_DB_HOST,
+      user: process.env.APP_DB_USER,
+      password: process.env.APP_DB_PASS,
+      database: process.env.APP_DB_NAME || 'agent_app',
+      waitForConnections: true,
+      connectionLimit: 5,
+      ssl: { rejectUnauthorized: false }
+    });
+  }
+  return appDbPool;
+}
+
+async function initAppDb() {
+  const pool = getAppDb();
+  if (!pool) return;
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS scheduled_tasks (
+      id           INT AUTO_INCREMENT PRIMARY KEY,
+      owner_email  VARCHAR(255) NOT NULL,
+      skill_id     INT,
+      skill_name   VARCHAR(255) NOT NULL,
+      skill_title  VARCHAR(255),
+      description  TEXT,
+      steps        TEXT NOT NULL,
+      interval_min INT NOT NULL DEFAULT 60,
+      enabled      TINYINT DEFAULT 1,
+      next_run_at  DATETIME,
+      last_run_at  DATETIME,
+      last_status  VARCHAR(50),
+      last_result  TEXT,
+      created_at   DATETIME DEFAULT NOW(),
+      INDEX idx_owner    (owner_email),
+      INDEX idx_schedule (enabled, next_run_at)
+    )
+  `);
+  console.log('[appDb] scheduled_tasks ready');
+}
+
+// ── Scheduled Tasks API ──
+
+// GET /api/scheduled-tasks
+app.get('/api/scheduled-tasks', async (req, res) => {
+  const pool = getAppDb();
+  if (!pool) return res.status(503).json({ error: 'APP_DB未設定' });
+  try {
+    const [rows] = await pool.execute(
+      'SELECT * FROM scheduled_tasks WHERE owner_email=? ORDER BY created_at DESC',
+      [req.user.email]
+    );
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/scheduled-tasks
+app.post('/api/scheduled-tasks', async (req, res) => {
+  const pool = getAppDb();
+  if (!pool) return res.status(503).json({ error: 'APP_DB未設定' });
+  const { skill_id, interval_min = 60 } = req.body;
+  if (!skill_id) return res.status(400).json({ error: 'skill_id は必須' });
+
+  const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR shared=1)').get(skill_id, req.user.email);
+  if (!skill) return res.status(404).json({ error: 'スキルが見つかりません' });
+
+  audit(req.user.email, req.user.name, 'scheduled_task.create', { skill_id, interval_min });
+  try {
+    const nextRun = new Date(Date.now() + interval_min * 60 * 1000);
+    const [result] = await pool.execute(
+      `INSERT INTO scheduled_tasks
+         (owner_email, skill_id, skill_name, skill_title, description, steps, interval_min, enabled, next_run_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+      [req.user.email, skill.id, skill.name, skill.title, skill.description || '', skill.steps || '', interval_min, nextRun]
+    );
+    res.json({ ok: true, id: result.insertId });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/scheduled-tasks/:id  body: { interval_min?, enabled? }
+app.put('/api/scheduled-tasks/:id', async (req, res) => {
+  const pool = getAppDb();
+  if (!pool) return res.status(503).json({ error: 'APP_DB未設定' });
+  const { interval_min, enabled } = req.body;
+  try {
+    const [rows] = await pool.execute(
+      'SELECT id FROM scheduled_tasks WHERE id=? AND owner_email=?',
+      [req.params.id, req.user.email]
+    );
+    if (!rows.length) return res.status(403).json({ error: '権限がありません' });
+
+    const updates = [];
+    const params = [];
+    if (interval_min !== undefined) { updates.push('interval_min=?'); params.push(interval_min); }
+    if (enabled !== undefined) { updates.push('enabled=?'); params.push(enabled ? 1 : 0); }
+    if (!updates.length) return res.status(400).json({ error: '更新項目がありません' });
+
+    params.push(req.params.id, req.user.email);
+    await pool.execute(
+      `UPDATE scheduled_tasks SET ${updates.join(',')} WHERE id=? AND owner_email=?`,
+      params
+    );
+    audit(req.user.email, req.user.name, 'scheduled_task.update', { id: req.params.id });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/scheduled-tasks/:id
+app.delete('/api/scheduled-tasks/:id', async (req, res) => {
+  const pool = getAppDb();
+  if (!pool) return res.status(503).json({ error: 'APP_DB未設定' });
+  try {
+    const [rows] = await pool.execute(
+      'SELECT id FROM scheduled_tasks WHERE id=? AND owner_email=?',
+      [req.params.id, req.user.email]
+    );
+    if (!rows.length) return res.status(403).json({ error: '権限がありません' });
+    await pool.execute('DELETE FROM scheduled_tasks WHERE id=?', [req.params.id]);
+    audit(req.user.email, req.user.name, 'scheduled_task.delete', { id: req.params.id });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Background Skill Runner ──
+async function runSkillBackground(task, ownerEmail) {
+  const role = getUserRole(ownerEmail);
+  const user = { email: ownerEmail, role };
+  const prompt = `# ${task.skill_title || task.title}\n\n${task.description || ''}\n\n## 実行手順\n\n${task.steps || ''}`;
+
+  const runRow = db.prepare('INSERT INTO task_runs (user_email, skill_name, skill_title, status) VALUES (?,?,?,?)')
+    .run(ownerEmail, task.skill_name || task.name, task.skill_title || task.title, 'running');
+  const runId = runRow.lastInsertRowid;
+
+  let resultBuffer = '';
+  try {
+    const allowedToolNames = TOOLS_FOR_ROLE[role];
+    const activeTools = allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS;
+    const messages = [{ role: 'user', content: prompt }];
+    let toolRound = 0;
+
+    while (toolRound < 10) {
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        system: getSystemPrompt(role),
+        tools: activeTools,
+        messages
+      });
+
+      for (const block of response.content) {
+        if (block.type === 'text') resultBuffer += block.text;
+      }
+      if (response.stop_reason !== 'tool_use') break;
+
+      messages.push({ role: 'assistant', content: response.content });
+      const toolResults = [];
+      for (const block of response.content) {
+        if (block.type !== 'tool_use') continue;
+        try {
+          const result = await executeTool(block.name, block.input, user);
+          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result).slice(0, 80000) });
+        } catch(e) {
+          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
+        }
+      }
+      messages.push({ role: 'user', content: toolResults });
+      toolRound++;
+    }
+
+    db.prepare('UPDATE task_runs SET status=?, result=?, finished_at=datetime("now","localtime") WHERE id=?')
+      .run('done', resultBuffer.slice(0, 2000), runId);
+    audit(ownerEmail, '', 'scheduled_task.ran', { skillName: skill.name, runId });
+    return { ok: true, runId };
+  } catch(e) {
+    db.prepare('UPDATE task_runs SET status=?, result=?, finished_at=datetime("now","localtime") WHERE id=?')
+      .run('error', e.message.slice(0, 2000), runId);
+    return { ok: false, error: e.message, runId };
+  }
+}
+
+// ── Scheduler (1分ごとにポーリング) ──
+async function runScheduler() {
+  const pool = getAppDb();
+  if (!pool) return;
+  try {
+    const [due] = await pool.execute(
+      'SELECT * FROM scheduled_tasks WHERE enabled=1 AND next_run_at <= NOW()'
+    );
+    for (const task of due) {
+      // 先に next_run_at を更新して二重実行を防ぐ
+      await pool.execute(
+        `UPDATE scheduled_tasks
+         SET next_run_at = DATE_ADD(NOW(), INTERVAL interval_min MINUTE),
+             last_run_at = NOW(), last_status = 'running'
+         WHERE id=?`,
+        [task.id]
+      );
+
+      runSkillBackground(task, task.owner_email).then(async result => {
+        await pool.execute(
+          'UPDATE scheduled_tasks SET last_status=?, last_result=? WHERE id=?',
+          [result.ok ? 'done' : 'error', result.error || null, task.id]
+        );
+      }).catch(async e => {
+        await pool.execute(
+          "UPDATE scheduled_tasks SET last_status='error', last_result=? WHERE id=?",
+          [e.message, task.id]
+        );
+      });
+    }
+  } catch(e) {
+    console.error('[scheduler] error:', e.message);
+  }
+}
+
+initAppDb().then(() => {
+  setInterval(runScheduler, 60 * 1000);
+  console.log('[scheduler] started');
+}).catch(e => console.error('[appDb] init error:', e.message));
+
 app.listen(PORT, '0.0.0.0', () => console.log(`Claude Agent Web: http://0.0.0.0:${PORT}`));
