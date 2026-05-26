@@ -211,6 +211,37 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   </div>
 </div>
 
+<!-- ─ Result Modal ─ -->
+<div class="modal-overlay" id="resultModal" onclick="if(event.target===this)closeResultModal()">
+  <div class="modal-box" style="max-width:640px;">
+    <div class="modal-title" id="resultModalTitle">実行結果</div>
+    <pre id="resultModalBody" style="white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.8;color:var(--text);background:#f7f8fc;border:1px solid var(--border);border-radius:8px;padding:14px;max-height:60vh;overflow-y:auto;font-family:inherit;"></pre>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeResultModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─ Task Edit Modal ─ -->
+<div class="modal-overlay" id="editTaskModal" onclick="if(event.target===this)closeEditTask()">
+  <div class="modal-box" style="max-width:580px;">
+    <div class="modal-title">✏️ タスクを編集</div>
+    <input type="hidden" id="editTaskId">
+    <div class="modal-field">
+      <label>タスク名</label>
+      <input type="text" id="editTaskTitle" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+    </div>
+    <div class="modal-field">
+      <label>実行手順</label>
+      <textarea id="editTaskSteps" rows="9" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;line-height:1.75;resize:vertical;outline:none;font-family:inherit;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeEditTask()">キャンセル</button>
+      <button class="btn btn-primary" id="editTaskSaveBtn" onclick="saveEditTask()">保存する</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─ Schedule Modal ─ -->
 <div class="modal-overlay" id="scheduleModal" onclick="if(event.target===this)closeModal()">
   <div class="modal-box">
@@ -254,6 +285,8 @@ let allTasks = [];
 let allSkills = [];
 let currentUser = null;
 let modalSkillId = null;
+const _taskCache = {};
+const _skillCache = {};
 
 // ─ 初期化 ─
 (async () => {
@@ -321,6 +354,7 @@ function renderTasks(tasks) {
     </div>`;
     return;
   }
+  tasks.forEach(t => { _taskCache[t.id] = t; });
   el.innerHTML = tasks.map(t => {
     const isOnce = t.task_type === 'once';
     const nextRun  = fmtDt(t.next_run_at);
@@ -347,7 +381,12 @@ function renderTasks(tasks) {
       </div>
       ${t.steps ? `<button class="steps-btn" onclick="toggleSteps('task-steps-${t.id}', this)">📋 指示内容を確認 <span>▼</span></button>
       <div class="steps-body" id="task-steps-${t.id}">${esc(t.steps)}</div>` : ''}
-      ${t.last_result ? `<div style="margin-top:8px;padding:8px 10px;background:#f7f8fc;border-radius:7px;font-size:12px;color:var(--text-light);line-height:1.6;">${esc(t.last_result.slice(0,300))}${t.last_result.length > 300 ? '…' : ''}</div>` : ''}
+      ${t.last_result ? (() => {
+        const preview = t.last_result.slice(0, 200);
+        const hasMore = t.last_result.length > 200;
+        return `<div style="margin-top:8px;padding:8px 10px;background:#f7f8fc;border-radius:7px;font-size:12px;color:var(--text-light);line-height:1.6;">${esc(preview)}${hasMore ? '…' : ''}</div>
+        ${hasMore ? `<button class="steps-btn" style="margin-top:4px;" onclick="openResultModal_t(${t.id})">📄 全文を表示</button>` : ''}`;
+      })() : ''}
       <div class="card-actions">
         <div class="toggle-wrap">
           <label class="toggle">
@@ -357,6 +396,7 @@ function renderTasks(tasks) {
           <span class="toggle-label" id="task-toggle-label-${t.id}">${t.enabled ? '有効' : (isOnce && t.last_status === 'done' ? '実行済' : '停止中')}</span>
         </div>
         <button class="btn btn-outline" onclick="runTaskNow(${t.id}, this)" title="今すぐ実行">▶ 実行</button>
+        <button class="btn btn-outline" onclick="openEditTask(${t.id})">✏️ 編集</button>
         ${!isOnce ? `<button class="btn btn-outline" onclick="openIntervalEdit(${t.id}, ${t.interval_min})">間隔を変更</button>` : ''}
         <button class="btn btn-danger" onclick="deleteTask(${t.id})">削除</button>
       </div>
@@ -453,6 +493,7 @@ function renderSkills(skills) {
     </div>`;
     return;
   }
+  skills.forEach(s => { _skillCache[s.id] = s; });
   el.innerHTML = skills.map(s => {
     const isOwn = s.owner_email === currentUser?.email;
     return `<div class="card">
@@ -472,9 +513,9 @@ function renderSkills(skills) {
       ${s.steps ? `<button class="steps-btn" onclick="toggleSteps('skill-steps-${s.id}', this)">📋 実行手順（指示内容）を確認 <span>▼</span></button>
       <div class="steps-body" id="skill-steps-${s.id}">${esc(s.steps)}</div>` : ''}
       ${isOwn ? `<div class="card-actions">
-        <button class="btn btn-orange" onclick="openModal(${s.id}, ${JSON.stringify(s.title)})">⏰ 定期実行を設定</button>
-        <button class="btn btn-outline" onclick="runSkillNow(${s.id}, ${JSON.stringify(s.title)}, this)">▶ 今すぐ実行</button>
-        <button class="btn btn-outline" onclick="openEditSkill(${s.id}, ${JSON.stringify(s.title)}, ${JSON.stringify(s.description||'')}, ${JSON.stringify(s.steps||'')})">✏️ 編集</button>
+        <button class="btn btn-orange" onclick="openModal(${s.id}, _skillCache[${s.id}].title)">⏰ 定期実行を設定</button>
+        <button class="btn btn-outline" onclick="runSkillNow(${s.id}, _skillCache[${s.id}].title, this)">▶ 今すぐ実行</button>
+        <button class="btn btn-outline" onclick="openEditSkill(${s.id})">✏️ 編集</button>
         <button class="btn btn-danger" onclick="deleteSkill(${s.id})">削除</button>
       </div>` : ''}
     </div>`;
@@ -507,11 +548,44 @@ async function runSkillNow(id, title, btn) {
   }
 }
 
-function openEditSkill(id, title, description, steps) {
+function openEditTask(id) {
+  const t = _taskCache[id] || {};
+  document.getElementById('editTaskId').value = id;
+  document.getElementById('editTaskTitle').value = t.skill_title || t.skill_name || '';
+  document.getElementById('editTaskSteps').value = t.steps || '';
+  document.getElementById('editTaskModal').classList.add('open');
+}
+function closeEditTask() {
+  document.getElementById('editTaskModal').classList.remove('open');
+}
+async function saveEditTask() {
+  const id = document.getElementById('editTaskId').value;
+  const skill_title = document.getElementById('editTaskTitle').value.trim();
+  const steps = document.getElementById('editTaskSteps').value.trim();
+  if (!skill_title) { alert('タスク名は必須です'); return; }
+  const btn = document.getElementById('editTaskSaveBtn');
+  btn.disabled = true; btn.textContent = '保存中...';
+  try {
+    const resp = await fetch(`/api/scheduled-tasks/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skill_title, steps })
+    });
+    if (!resp.ok) throw new Error((await resp.json()).error || '保存失敗');
+    closeEditTask();
+    await loadTasks();
+  } catch(e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '保存する';
+  }
+}
+
+function openEditSkill(id) {
+  const s = _skillCache[id] || {};
   document.getElementById('editSkillId').value = id;
-  document.getElementById('editSkillTitle').value = title;
-  document.getElementById('editSkillDesc').value = description;
-  document.getElementById('editSkillSteps').value = steps;
+  document.getElementById('editSkillTitle').value = s.title || '';
+  document.getElementById('editSkillDesc').value = s.description || '';
+  document.getElementById('editSkillSteps').value = s.steps || '';
   document.getElementById('editSkillModal').classList.add('open');
 }
 function closeEditSkill() {
@@ -762,6 +836,7 @@ function renderHistory(runs) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><h3>実行履歴がありません</h3><p>タスクが実行されると、ここに記録が表示されます。</p></div>`;
     return;
   }
+  runs.forEach(r => { _resultCache[r.id] = r; });
   el.innerHTML = runs.map(r => {
     const statusColor = r.status === 'done' ? 'badge-green' : r.status === 'error' ? 'badge-red' : 'badge-orange';
     const statusText  = r.status === 'done' ? '✓ 成功' : r.status === 'error' ? '✗ エラー' : '⟳ 実行中';
@@ -781,9 +856,33 @@ function renderHistory(runs) {
         <span>⏱ 所要: ${duration}</span>
         <span style="font-size:11px;color:#a0aec0;">スキル: ${esc(r.skill_name)}</span>
       </div>
-      ${r.result ? `<div style="background:#f7f8fc;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.75;color:var(--text);white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;">${esc(r.result)}</div>` : ''}
+      ${r.result ? (() => {
+        const preview = r.result.slice(0, 200);
+        const hasMore = r.result.length > 200;
+        return `<div style="background:#f7f8fc;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.75;color:var(--text);white-space:pre-wrap;word-break:break-word;">${esc(preview)}${hasMore ? '…' : ''}</div>
+        ${hasMore ? `<button class="steps-btn" style="margin-top:6px;" onclick="openResultModal_h(${r.id})">📄 全文を表示</button>` : ''}`;
+      })() : ''}
     </div>`;
   }).join('');
+}
+
+// ─ 結果モーダル ─
+const _resultCache = {};
+function openResultModal(title, result) {
+  document.getElementById('resultModalTitle').textContent = title || '実行結果';
+  document.getElementById('resultModalBody').textContent = result;
+  document.getElementById('resultModal').classList.add('open');
+}
+function openResultModal_t(taskId) {
+  const t = _taskCache[taskId] || {};
+  openResultModal(t.skill_title || t.skill_name, t.last_result || '');
+}
+function openResultModal_h(runId) {
+  const r = _resultCache[runId] || {};
+  openResultModal(r.skill_title || r.skill_name, r.result || '');
+}
+function closeResultModal() {
+  document.getElementById('resultModal').classList.remove('open');
 }
 
 // ─ 指示内容の展開 ─

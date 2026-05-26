@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>タスクAIエージェントとは — Acrovision</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #5b6eff;
+  --primary-dark: #4a5ce8;
+  --primary-light: #edf2ff;
+  --bg: #f4f6fb;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --text: #2d3748;
+  --text-light: #718096;
+  --success: #48bb78;
+  --warn: #ed8936;
+  --danger: #e53e3e;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+}
+header {
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+}
+.header-left { display: flex; align-items: center; gap: 10px; }
+.header-logo {
+  width: 28px; height: 28px; background: var(--primary); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 14px; font-weight: 800;
+}
+header h1 { font-size: 15px; font-weight: 700; }
+header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); margin-left: 8px; }
+.back-btn {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.back-btn:hover { background: var(--primary-dark); }
+
+main { max-width: 880px; margin: 0 auto; padding: 32px 24px 80px; }
+.hero {
+  background: linear-gradient(135deg, #5b6eff 0%, #7c5bff 100%);
+  color: #fff;
+  border-radius: 16px;
+  padding: 36px 32px;
+  margin-bottom: 28px;
+}
+.hero h2 { font-size: 26px; font-weight: 800; margin-bottom: 10px; }
+.hero p { font-size: 15px; opacity: .95; }
+
+.section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px 28px;
+  margin-bottom: 20px;
+}
+.section h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+.section h3 .icon { font-size: 22px; }
+.section h4 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+.section p { font-size: 14px; color: var(--text); margin-bottom: 10px; }
+.section ul { padding-left: 22px; margin-bottom: 10px; }
+.section li { font-size: 14px; color: var(--text); margin-bottom: 4px; }
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+.feature-card {
+  background: var(--primary-light);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.feature-card .ficon { font-size: 22px; margin-bottom: 6px; }
+.feature-card .ftitle { font-size: 13px; font-weight: 700; margin-bottom: 4px; color: var(--primary-dark); }
+.feature-card .fdesc { font-size: 12px; color: var(--text-light); line-height: 1.6; }
+
+.example-box {
+  background: #f7f8fc;
+  border-left: 3px solid var(--primary);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 8px 0;
+  font-size: 13px;
+}
+.example-box .label { font-size: 11px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+.example-box code {
+  background: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', monospace;
+  font-size: 12px;
+}
+
+.table-wrap { overflow-x: auto; margin: 8px 0; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+th { background: #f7f8fc; font-weight: 700; color: var(--text); }
+td.muted { color: var(--text-light); }
+
+.callout {
+  background: #fffaf0;
+  border: 1px solid #fbd38d;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.callout .label { font-weight: 700; color: #c05621; margin-bottom: 4px; }
+
+.tag {
+  display: inline-block;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 4px;
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <div class="header-logo">T</div>
+    <h1>タスクAIエージェント<small>サービス概要</small></h1>
+  </div>
+  <a href="/" class="back-btn">← チャットに戻る</a>
+</header>
+
+<main>
+  <div class="hero">
+    <h2>仕事を任せる、AIエージェント。</h2>
+    <p>チャットで依頼するだけで、社内データの集計・名刺検索・カレンダー確認・メール下書きまで、業務を自動で実行します。</p>
+  </div>
+
+  <!-- 概要 -->
+  <div class="section">
+    <h3><span class="icon">💡</span>このサービスは何？</h3>
+    <p>「タスクAIエージェント」は、社員一人ひとりの業務を AI が代わりに実行するためのチャットツールです。</p>
+    <p>「○○の集計をして」「○○の名刺を教えて」「来週月曜の朝にレポートを Chatwork に送って」など、日本語で依頼するだけで、AI が社内の各種データやサービスを参照・操作して結果を返します。</p>
+    <p>従来は <strong>「データ取得→Excel整形→Chatwork送信」</strong> のような複数ステップを手作業で行っていた業務を、依頼一発で完結させることが目的です。</p>
+  </div>
+
+  <!-- 主な機能 -->
+  <div class="section">
+    <h3><span class="icon">⚡</span>主な機能</h3>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="ficon">💬</div>
+        <div class="ftitle">チャットで依頼</div>
+        <div class="fdesc">日本語で業務を依頼。AI が自動で必要なツールを呼び出します。</div>
+      </div>
+      <div class="feature-card">
+        <div class="ficon">🗄️</div>
+        <div class="ftitle">社内データ参照</div>
+        <div class="fdesc">社員・契約・顧客・案件・月報・名刺データを横断検索できます。</div>
+      </div>
+      <div class="feature-card">
+        <div class="ficon">🔗</div>
+        <div class="ftitle">サービス連携</div>
+        <div class="fdesc">Chatwork / Google Drive / カレンダー / Gmail を AI から操作可能。</div>
+      </div>
+      <div class="feature-card">
+        <div class="ficon">⚙️</div>
+        <div class="ftitle">スキル保存</div>
+        <div class="fdesc">よく使う手順を「スキル」として保存。次回からワンクリック実行。</div>
+      </div>
+      <div class="feature-card">
+        <div class="ficon">⏰</div>
+        <div class="ftitle">自動実行（定期/単発）</div>
+        <div class="fdesc">「毎朝9時に○○して」「来週月曜の朝に○○して」も登録できます。</div>
+      </div>
+      <div class="feature-card">
+        <div class="ficon">🔒</div>
+        <div class="ftitle">権限管理</div>
+        <div class="fdesc">担当部門に応じて、使えるツール・参照できるデータ範囲が決まります。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 使い方の例 -->
+  <div class="section">
+    <h3><span class="icon">📝</span>使い方の例</h3>
+
+    <h4>例1: 社内データを使った集計</h4>
+    <div class="example-box">
+      <div class="label">あなた</div>
+      日立関係の名刺データを最新順で10件見せて
+    </div>
+    <p class="example-box">
+      <span class="label">AI</span>
+      名刺データから「日立」を含む会社 40件のうち、最新10件を表示します（会社名・氏名・部署・役職・名刺交換日）。
+    </p>
+
+    <h4>例2: 連携サービスの操作</h4>
+    <div class="example-box">
+      <div class="label">あなた</div>
+      明日の自分のカレンダー予定を教えて。重要な会議が複数あれば優先順位もコメントして。
+    </div>
+    <p class="example-box">
+      <span class="label">AI</span>
+      Googleカレンダーから明日の予定を取得して時系列で表示。重要そうな会議に印を付けてコメントします。
+    </p>
+
+    <h4>例3: 定期タスクの自動実行</h4>
+    <div class="example-box">
+      <div class="label">あなた</div>
+      毎週月曜の朝9時に、先週の契約稼働状況をまとめて Chatwork のグループ「営業」に送って
+    </div>
+    <p class="example-box">
+      <span class="label">AI</span>
+      タスクを定期実行登録します。<code>/manage</code> 画面から確認・変更・停止できます。
+    </p>
+  </div>
+
+  <!-- 利用可能データ -->
+  <div class="section">
+    <h3><span class="icon">📊</span>参照できる社内データ</h3>
+    <p>AI は社内 MySQL（読み取り専用）から以下のテーブルを参照できます：</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>テーブル</th><th>内容</th><th>件数（目安）</th></tr>
+        <tr><td>kintone_employees</td><td>社員情報</td><td>約 1,036件</td></tr>
+        <tr><td>kintone_contract</td><td>契約データ</td><td>約 14,716件</td></tr>
+        <tr><td>kintone_customers</td><td>顧客情報</td><td>約 1,039件</td></tr>
+        <tr><td>kintone_anken_eigyo</td><td>案件・営業</td><td>約 396件</td></tr>
+        <tr><td>kintone_seikyu</td><td>請求データ</td><td>約 31,743件</td></tr>
+        <tr><td>geppo_data</td><td>月報</td><td>約 6,184件</td></tr>
+        <tr><td>hotprofile_business_cards</td><td>名刺データ（HotProfile由来）</td><td>約 18,134件</td></tr>
+      </table>
+    </div>
+    <div class="callout">
+      <div class="label">⚠ 読み取り専用</div>
+      AI が直接データを書き換えることはできません。集計・抽出・整形のみ可能です。
+    </div>
+  </div>
+
+  <!-- 連携サービス -->
+  <div class="section">
+    <h3><span class="icon">🔌</span>連携サービス</h3>
+    <p>画面右側の「連携サービス」一覧から、自分のアカウントで個別に連携できます：</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>サービス</th><th>できること</th><th>連携方式</th></tr>
+        <tr><td>💬 Chatwork</td><td>メッセージ送信、ルーム一覧、メッセージ取得</td><td>個人OAuth</td></tr>
+        <tr><td>📁 Google Drive</td><td>フォルダ内ファイル一覧、ファイル内容の読み取り</td><td>個人OAuth</td></tr>
+        <tr><td>📅 Google カレンダー</td><td>予定の確認</td><td>個人OAuth</td></tr>
+        <tr><td>✉️ Gmail</td><td>メッセージ取得（送信は非対応）</td><td>個人OAuth</td></tr>
+      </table>
+    </div>
+    <p style="margin-top:8px;">それぞれ <strong>自分のアカウントの権限内</strong>でしか動作しません。他の人のデータが見えることはありません。</p>
+  </div>
+
+  <!-- スキル -->
+  <div class="section">
+    <h3><span class="icon">💾</span>スキルとして保存</h3>
+    <p>AI とのやりとりで手順が固まったら、AI が <strong>「保存しておけば次回からすぐ実行できます」</strong>と案内してきます。保存ボタンを押すと、左側「マイスキル」に登録されます。</p>
+    <p>登録後はクリック1つで再実行できます。よく繰り返す業務は積極的にスキル化してください。</p>
+  </div>
+
+  <!-- 自動実行 -->
+  <div class="section">
+    <h3><span class="icon">⏲️</span>タスクの自動実行</h3>
+    <p>「毎朝○○して」「来週月曜の朝○○して」など、時間指定の依頼をすると AI が自動実行タスクとして登録できます。</p>
+    <ul>
+      <li><strong>定期タスク</strong>：指定間隔で繰り返し実行（毎日 / 毎週 など）</li>
+      <li><strong>単発タスク</strong>：指定日時に1回だけ実行</li>
+    </ul>
+    <p>登録したタスクは <code>/manage</code> ページから一覧・編集・停止できます。実行結果はメールでも通知されます。</p>
+  </div>
+
+  <!-- 個人ルール -->
+  <div class="section">
+    <h3><span class="icon">🎯</span>個人ルール（毎回言わなくていい指示）</h3>
+    <p>「いつも箇条書きで返して」「日本語で結果を要約して」など、自分専用のルールは <code>/manage</code> → 「権限・ルール」タブ → 「個人ルール」に登録できます。</p>
+    <p>登録すると、以降のすべてのやりとりに自動で適用されます。毎回同じ指示を書く必要がなくなります。</p>
+  </div>
+
+  <!-- 権限 -->
+  <div class="section">
+    <h3><span class="icon">🛡️</span>権限について</h3>
+    <p>所属部門により利用可能なツール・データ範囲が異なります。詳細は <code>/manage</code> → 「権限・ルール」タブで確認できます。</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>ロール</th><th>主な範囲</th></tr>
+        <tr><td><span class="tag">admin</span></td><td>全ツール・全データ</td></tr>
+        <tr><td><span class="tag">業務管理</span></td><td>契約・社員・月報・名刺・Chatwork・Drive など</td></tr>
+        <tr><td><span class="tag">営業</span></td><td>名刺・WordPress・Chatwork・Drive など</td></tr>
+        <tr><td><span class="tag">採用</span></td><td>名刺・Chatwork・Drive など</td></tr>
+        <tr><td><span class="tag">一般</span></td><td>Chatwork・Drive・Calendar・Gmail 閲覧、自動実行</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- 注意事項 -->
+  <div class="section">
+    <h3><span class="icon">⚠️</span>使うときの注意</h3>
+    <ul>
+      <li>Chatwork 送信や WordPress 公開など <strong>外部に影響する操作は、AI が必ず内容確認してから実行</strong>します。</li>
+      <li>AI の回答は完璧ではありません。<strong>重要な数字・人名・送信先は自分の目で確認</strong>してください。</li>
+      <li>機密情報（パスワード等）はチャットに貼り付けないでください。</li>
+      <li>個人 OAuth で連携したサービスは、自分の権限範囲のデータしか見えません。</li>
+    </ul>
+  </div>
+
+  <!-- 困ったときは -->
+  <div class="section">
+    <h3><span class="icon">🆘</span>困ったとき・要望</h3>
+    <p>動作不良、要望、追加してほしい機能などがあれば、<strong>業務管理部 末光</strong>までお知らせください。</p>
+    <p>「こんな業務に使えないか？」「このデータも参照できないか？」といった相談も歓迎です。</p>
+  </div>
+
+  <div style="text-align:center; margin-top: 24px;">
+    <a href="/" class="back-btn" style="display:inline-block; padding: 10px 28px; font-size: 14px;">チャットを始める</a>
+  </div>
+</main>
+</body>
+</html>
