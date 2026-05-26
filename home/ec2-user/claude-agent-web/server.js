@@ -1442,14 +1442,16 @@ app.get('/api/db/tables', async (req, res) => {
 // ── Kintone API ──
 async function refreshKintoneToken(refreshToken, email) {
   const domain = process.env.KINTONE_DOMAIN;
+  const basicAuth = Buffer.from(`${process.env.KINTONE_OAUTH_CLIENT_ID}:${process.env.KINTONE_OAUTH_CLIENT_SECRET}`).toString('base64');
   const r = await fetch(`https://${domain}.cybozu.com/oauth2/token`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Authorization': `Basic ${basicAuth}`
+    },
     body: new URLSearchParams({
       grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: process.env.KINTONE_OAUTH_CLIENT_ID,
-      client_secret: process.env.KINTONE_OAUTH_CLIENT_SECRET
+      refresh_token: refreshToken
     })
   });
   if (!r.ok) throw new Error('Kintoneトークンの更新に失敗しました。再連携してください。');
