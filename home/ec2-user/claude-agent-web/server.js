@@ -1168,24 +1168,39 @@ app.get('/auth/kintone', (req, res) => {
 });
 
 app.get('/auth/kintone/callback', async (req, res) => {
+  console.log('[kintone/callback] called', { code: !!req.query.code, error: req.query.error, auth: req.isAuthenticated(), user: req.user?.email });
   const { code, error } = req.query;
-  if (error || !code) return res.redirect('/?kintone_error=1');
+  if (error || !code) {
+    console.log('[kintone/callback] no code, error:', error);
+    return res.redirect('/?kintone_error=1');
+  }
+  if (!req.user) {
+    console.log('[kintone/callback] not authenticated — redirecting to login');
+    return res.redirect('/login');
+  }
   const domain = process.env.KINTONE_DOMAIN;
   const callbackUrl = process.env.KINTONE_CALLBACK_URL;
+  console.log('[kintone/callback] exchanging code, domain:', domain, 'callbackUrl:', callbackUrl);
   try {
+    const clientId = process.env.KINTONE_OAUTH_CLIENT_ID;
+    const clientSecret = process.env.KINTONE_OAUTH_CLIENT_SECRET;
+    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     const r = await fetch(`https://${domain}.cybozu.com/oauth2/token`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${basicAuth}`
+      },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: callbackUrl,
-        client_id: process.env.KINTONE_OAUTH_CLIENT_ID,
-        client_secret: process.env.KINTONE_OAUTH_CLIENT_SECRET
+        redirect_uri: callbackUrl
       })
     });
-    if (!r.ok) throw new Error(`Token exchange failed: ${r.status} ${await r.text()}`);
-    const data = await r.json();
+    const resText = await r.text();
+    console.log('[kintone/callback] token response:', r.status, resText.slice(0, 200));
+    if (!r.ok) throw new Error(`Token exchange failed: ${r.status} ${resText}`);
+    const data = JSON.parse(resText);
     const expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
     db.prepare(`
       INSERT INTO user_kintone_tokens (email, access_token, refresh_token, expires_at)
@@ -1199,7 +1214,7 @@ app.get('/auth/kintone/callback', async (req, res) => {
     audit(req.user.email, req.user.name, 'kintone.oauth.connect');
     res.redirect('/?kintone_connected=1');
   } catch(e) {
-    console.error('Kintone OAuth callback error:', e.message);
+    console.error('[kintone/callback] error:', e.message);
     res.redirect('/?kintone_error=1');
   }
 });
