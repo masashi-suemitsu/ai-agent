@@ -45,10 +45,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','list_kintone_records','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','get_kot_daily','get_kot_monthly','list_drive_files','read_drive_file','fetch_corp_api','fetch_corp_page']),
-  eigyo:   new Set(['list_kintone_records','search_hotprofile','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','list_drive_files','read_drive_file','fetch_corp_api','fetch_corp_page']),
-  recruit: new Set(['list_kintone_records','search_hotprofile','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','list_drive_files','read_drive_file','fetch_corp_api','fetch_corp_page']),
-  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','list_drive_files','read_drive_file'])
+  gyoumu:  new Set(['query_corp_db','list_kintone_records','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','get_kot_daily','get_kot_monthly','list_drive_files','read_drive_file','list_calendar_events','fetch_corp_api','fetch_corp_page']),
+  eigyo:   new Set(['list_kintone_records','search_hotprofile','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','list_drive_files','read_drive_file','list_calendar_events','fetch_corp_api','fetch_corp_page']),
+  recruit: new Set(['list_kintone_records','search_hotprofile','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','list_drive_files','read_drive_file','list_calendar_events','fetch_corp_api','fetch_corp_page']),
+  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','list_drive_files','read_drive_file','list_calendar_events'])
 };
 
 app.set('trust proxy', 1);
@@ -209,7 +209,11 @@ app.get('/auth/google', (req, res, next) => {
   console.log('[auth/google] sessionID:', req.sessionID, 'session keys:', Object.keys(req.session || {}));
   next();
 }, passport.authenticate('google', {
-  scope: ['profile', 'email', 'https://www.googleapis.com/auth/drive.readonly'],
+  scope: [
+    'profile', 'email',
+    'https://www.googleapis.com/auth/drive.readonly',
+    'https://www.googleapis.com/auth/calendar.readonly'
+  ],
   accessType: 'offline',
   prompt: 'consent',
   hd: ALLOWED_DOMAIN
@@ -520,6 +524,17 @@ const TOOLS = [
       },
       required: ['path']
     }
+  },
+  {
+    name: 'list_calendar_events',
+    description: 'Googleカレンダーの予定一覧を取得する。ユーザー自身のプライマリカレンダーを参照。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: '今日から何日分取得するか（デフォルト7）' },
+        max_results: { type: 'number', description: '最大件数（デフォルト20）' }
+      }
+    }
   }
 ];
 
@@ -711,6 +726,29 @@ async function executeTool(name, input, user) {
         req.end();
       });
       return data;
+    }
+    case 'list_calendar_events': {
+      audit(user.email, user.name, 'tool.calendar', { days: input.days });
+      const cal = getCalendarClientForUser(user);
+      const now = new Date();
+      const timeMin = now.toISOString();
+      const timeMax = new Date(now.getTime() + (input.days || 7) * 24 * 3600 * 1000).toISOString();
+      const r = await cal.events.list({
+        calendarId: 'primary',
+        timeMin,
+        timeMax,
+        maxResults: input.max_results || 20,
+        singleEvents: true,
+        orderBy: 'startTime'
+      });
+      return (r.data.items || []).map(e => ({
+        id: e.id,
+        summary: e.summary,
+        start: e.start?.dateTime || e.start?.date,
+        end: e.end?.dateTime || e.end?.date,
+        location: e.location,
+        description: e.description?.slice(0, 200)
+      }));
     }
     default:
       throw new Error(`Unknown tool: ${name}`);
@@ -1538,6 +1576,56 @@ app.post('/api/ai/chat', async (req, res) => {
     const data = await r.json();
     res.json({ content: data.choices?.[0]?.message?.content || '', usage: data.usage });
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Google Calendar API ──
+function getCalendarClientForUser(user) {
+  const tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
+  if (!tokenRow?.refresh_token) {
+    throw new Error('Googleカレンダーが未連携です。一度ログアウトして再ログインしてください');
+  }
+  const oauth2 = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET
+  );
+  oauth2.setCredentials({ access_token: tokenRow.access_token, refresh_token: tokenRow.refresh_token });
+  oauth2.on('tokens', tokens => {
+    if (tokens.access_token) {
+      db.prepare("UPDATE user_drive_tokens SET access_token=?, updated_at=datetime('now','localtime') WHERE email=?")
+        .run(tokens.access_token, user.email);
+    }
+  });
+  return google.calendar({ version: 'v3', auth: oauth2 });
+}
+
+// GET /api/calendar/status
+app.get('/api/calendar/status', (req, res) => {
+  const row = db.prepare('SELECT refresh_token, updated_at FROM user_drive_tokens WHERE email=?').get(req.user.email);
+  res.json({ connected: !!(row?.refresh_token), updatedAt: row?.updated_at || null });
+});
+
+// GET /api/calendar/events?days=7&maxResults=20
+app.get('/api/calendar/events', async (req, res) => {
+  audit(req.user.email, req.user.name, 'calendar.events');
+  try {
+    const cal = getCalendarClientForUser(req.user);
+    const now = new Date();
+    const days = parseInt(req.query.days || '7');
+    const maxResults = parseInt(req.query.maxResults || '20');
+    const timeMin = now.toISOString();
+    const timeMax = new Date(now.getTime() + days * 24 * 3600 * 1000).toISOString();
+    const r = await cal.events.list({
+      calendarId: 'primary',
+      timeMin,
+      timeMax,
+      maxResults,
+      singleEvents: true,
+      orderBy: 'startTime'
+    });
+    res.json(r.data.items || []);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Google Drive API ──

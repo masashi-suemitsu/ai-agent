@@ -447,6 +447,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
     <button class="header-btn" id="kotToggleBtn" onclick="toggleKot()">⏰ KoT</button>
     <button class="header-btn" id="cwToggleBtn" onclick="toggleCw()">💬 Chatwork</button>
     <button class="header-btn" id="driveToggleBtn" onclick="toggleDrive()">📁 Drive</button>
+    <button class="header-btn" id="calendarToggleBtn" onclick="toggleCalendar()">📅 Calendar</button>
     <button class="header-btn" id="historyToggleBtn" onclick="toggleHistory()">📋 実行履歴</button>
     <span id="userBadge" style="font-size:12px;color:#718096;"></span>
     <span id="roleBadge" style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;display:none;"></span>
@@ -544,6 +545,25 @@ textarea:focus { border-color: var(--primary); background: #fff; }
     <button class="panel-close-btn" onclick="toggleKintone()">✕</button>
   </div>
   <div id="kintoneContent" style="flex:1;overflow-y:auto;padding:24px 20px;">
+    <div class="drive-empty">読み込み中...</div>
+  </div>
+</div>
+
+<!-- ─ Calendar Panel ─ -->
+<div class="drive-panel" id="calendarPanel">
+  <div class="drive-panel-header">
+    <h3>📅 Googleカレンダー</h3>
+    <button class="panel-close-btn" onclick="toggleCalendar()">✕</button>
+  </div>
+  <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;">
+    <select id="calendarDays" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;outline:none;">
+      <option value="7">7日間</option>
+      <option value="14">14日間</option>
+      <option value="30">30日間</option>
+    </select>
+    <button onclick="loadCalendarEvents()" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">表示</button>
+  </div>
+  <div id="calendarContent" style="flex:1;overflow-y:auto;padding:8px;">
     <div class="drive-empty">読み込み中...</div>
   </div>
 </div>
@@ -806,6 +826,7 @@ async function send() {
             get_kot_monthly: '月次勤怠を取得中',
             list_drive_files: 'Driveファイル一覧を取得中',
             read_drive_file: 'Driveファイルを読み取り中',
+            list_calendar_events: 'カレンダーを取得中',
           };
           let toolCallsEl = aiBubble.querySelector('.tool-calls');
           if (!toolCallsEl) {
@@ -1245,20 +1266,63 @@ async function attachCwMessages() {
   } catch(e) { alert(e.message); }
 }
 
+// ─ パネル共通クローズ ─
+const ALL_PANELS = ['cwPanel','kotPanel','kintonePanel','drivePanel','calendarPanel','historyPanel'];
+const ALL_BTNS   = ['cwToggleBtn','kotToggleBtn','kintoneToggleBtn','driveToggleBtn','calendarToggleBtn','historyToggleBtn'];
+function closeAllPanels(except) {
+  ALL_PANELS.forEach((id, i) => { if (id !== except) { document.getElementById(id)?.classList.remove('open'); document.getElementById(ALL_BTNS[i])?.classList.remove('active'); } });
+}
+
 // ─ Google Drive ─
 function toggleDrive() {
   const panel = document.getElementById('drivePanel');
   const btn = document.getElementById('driveToggleBtn');
   const isOpen = panel.classList.contains('open');
-  // 他パネルを閉じる
-  document.getElementById('cwPanel').classList.remove('open');
-  document.getElementById('cwToggleBtn').classList.remove('active');
-  document.getElementById('kotPanel').classList.remove('open');
-  document.getElementById('kotToggleBtn').classList.remove('active');
-  document.getElementById('kintonePanel').classList.remove('open');
-  document.getElementById('kintoneToggleBtn').classList.remove('active');
+  closeAllPanels('drivePanel');
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
+}
+
+// ─ Google Calendar ─
+async function toggleCalendar() {
+  const panel = document.getElementById('calendarPanel');
+  const btn = document.getElementById('calendarToggleBtn');
+  const isOpen = panel.classList.contains('open');
+  closeAllPanels('calendarPanel');
+  panel.classList.toggle('open', !isOpen);
+  btn.classList.toggle('active', !isOpen);
+  if (!isOpen) await loadCalendarEvents();
+}
+
+async function loadCalendarEvents() {
+  const content = document.getElementById('calendarContent');
+  const days = document.getElementById('calendarDays').value;
+  content.innerHTML = '<div class="drive-empty">読み込み中...</div>';
+  try {
+    const status = await fetch('/api/calendar/status').then(r => r.json());
+    if (!status.connected) {
+      content.innerHTML = '<div class="drive-error">Googleカレンダーに未接続です。<br>一度ログアウトして再ログインしてください。</div>';
+      return;
+    }
+    const events = await fetch(`/api/calendar/events?days=${days}&maxResults=30`).then(r => r.json());
+    if (events.error) { content.innerHTML = `<div class="drive-error">${esc(events.error)}</div>`; return; }
+    if (events.length === 0) { content.innerHTML = '<div class="drive-empty">予定がありません</div>'; return; }
+    content.innerHTML = events.map(e => {
+      const start = e.start?.dateTime || e.start?.date || '';
+      const startLabel = start ? new Date(start).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'Asia/Tokyo' }) : '';
+      const isAllDay = !e.start?.dateTime;
+      return `<div class="drive-file-item" style="flex-direction:column;align-items:flex-start;gap:4px;border-bottom:1px solid var(--border);padding:10px 12px;">
+        <div style="display:flex;align-items:center;gap:8px;width:100%;">
+          <span style="font-size:16px;">${isAllDay ? '📅' : '🕐'}</span>
+          <div style="flex:1;min-width:0;">
+            <div class="drive-file-name" style="white-space:normal;font-weight:600;">${esc(e.summary || '(タイトルなし)')}</div>
+            <div class="drive-file-meta">${esc(startLabel)}${e.location ? ' · ' + esc(e.location) : ''}</div>
+          </div>
+        </div>
+        ${e.description ? `<div style="font-size:11px;color:var(--text-light);padding-left:24px;line-height:1.5;">${esc(e.description)}</div>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) { content.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`; }
 }
 
 // ─ Kintone 連携 ─
@@ -1266,8 +1330,7 @@ async function toggleKintone() {
   const panel = document.getElementById('kintonePanel');
   const btn = document.getElementById('kintoneToggleBtn');
   const isOpen = panel.classList.contains('open');
-  ['cwPanel','drivePanel','kotPanel','historyPanel'].forEach(id => document.getElementById(id).classList.remove('open'));
-  ['cwToggleBtn','driveToggleBtn','kotToggleBtn','historyToggleBtn'].forEach(id => document.getElementById(id).classList.remove('active'));
+  closeAllPanels('kintonePanel');
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
   if (!isOpen) await loadKintoneStatus();
