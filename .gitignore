@@ -1,8 +1,8 @@
-node_modules/
-ecosystem.config.js
-*.db
-*.sqlite
+home/ec2-user/claude-agent-web/node_modules/
+home/ec2-user/claude-agent-web/ecosystem.config.js
+home/ec2-user/claude-agent-web/*.db
+home/ec2-user/claude-agent-web/*.sqlite
+home/ec2-user/claude-agent-web/*.log
+home/ec2-user/claude-agent-web/*.tmp
 .env
 .env.*
-*.log
-*.tmp
