@@ -187,6 +187,7 @@ passport.deserializeUser((u, done) => done(null, u));
 
 function requireAuth(req, res, next) {
   if (req.isAuthenticated()) return next();
+  if (req.path === '/auth/kintone/callback') return next(); // Kintone OAuthコールバックは除外
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'ログインが必要です' });
   res.redirect('/login');
 }
@@ -1158,29 +1159,37 @@ app.get('/auth/kintone', (req, res) => {
   const clientId = process.env.KINTONE_OAUTH_CLIENT_ID;
   if (!clientId) return res.status(503).send('KINTONE_OAUTH_CLIENT_IDが未設定です。環境変数を確認してください。');
   const callbackUrl = process.env.KINTONE_CALLBACK_URL;
+  // stateパラメータにメールをbase64エンコードして埋め込む（コールバック時のユーザー特定用）
+  const state = Buffer.from(req.user.email).toString('base64url');
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: callbackUrl,
     response_type: 'code',
-    scope: 'k:app_record:read k:app_settings:read'
+    scope: 'k:app_record:read k:app_settings:read',
+    state
   });
   res.redirect(`https://${domain}.cybozu.com/oauth2/authorization?${params}`);
 });
 
 app.get('/auth/kintone/callback', async (req, res) => {
-  console.log('[kintone/callback] called', { code: !!req.query.code, error: req.query.error, auth: req.isAuthenticated(), user: req.user?.email });
-  const { code, error } = req.query;
+  const { code, error, state } = req.query;
+  console.log('[kintone/callback] called', { code: !!code, error, state: !!state, auth: req.isAuthenticated() });
   if (error || !code) {
     console.log('[kintone/callback] no code, error:', error);
     return res.redirect('/?kintone_error=1');
   }
-  if (!req.user) {
-    console.log('[kintone/callback] not authenticated — redirecting to login');
+  // stateからメールアドレスを復元
+  let userEmail = req.user?.email;
+  if (!userEmail && state) {
+    try { userEmail = Buffer.from(state, 'base64url').toString('utf8'); } catch(e) {}
+  }
+  if (!userEmail || !userEmail.endsWith('@acrovision.co.jp')) {
+    console.log('[kintone/callback] invalid user email:', userEmail);
     return res.redirect('/login');
   }
   const domain = process.env.KINTONE_DOMAIN;
   const callbackUrl = process.env.KINTONE_CALLBACK_URL;
-  console.log('[kintone/callback] exchanging code, domain:', domain, 'callbackUrl:', callbackUrl);
+  console.log('[kintone/callback] exchanging code for', userEmail);
   try {
     const clientId = process.env.KINTONE_OAUTH_CLIENT_ID;
     const clientSecret = process.env.KINTONE_OAUTH_CLIENT_SECRET;
@@ -1210,8 +1219,8 @@ app.get('/auth/kintone/callback', async (req, res) => {
         refresh_token=excluded.refresh_token,
         expires_at=excluded.expires_at,
         updated_at=datetime('now','localtime')
-    `).run(req.user.email, data.access_token, data.refresh_token || '', expiresAt);
-    audit(req.user.email, req.user.name, 'kintone.oauth.connect');
+    `).run(userEmail, data.access_token, data.refresh_token || '', expiresAt);
+    audit(userEmail, '', 'kintone.oauth.connect');
     res.redirect('/?kintone_connected=1');
   } catch(e) {
     console.error('[kintone/callback] error:', e.message);
