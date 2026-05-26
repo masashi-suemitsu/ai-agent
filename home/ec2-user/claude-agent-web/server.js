@@ -493,31 +493,47 @@ function getSystemPrompt(role) {
     admin: `
 
 ## あなたの権限: 管理者（全機能）
-利用可能ツール: 全ツール（DB照会・契約・Chatwork・Drive・WP・メール等）
-※ 勤怠データ（attendance_posts / king_of_time_attendance）と users テーブル、人事評価・採用関連テーブルへの照会は無効化されています`,
+利用可能ツール: 全ツール（DB照会・Chatwork・Drive・WP・メール等）
+
+### query_corp_db で照会可能なテーブル（この6つのみ・絶対に他のテーブル名を回答に含めないこと）
+1. kintone_employees - 社員マスタ
+2. kintone_contract - 契約データ
+3. kintone_anken_eigyo - 営業案件
+4. geppo_data - 月報データ
+5. kintone_customers - 顧客データ
+6. kintone_seikyu - 請求データ
+
+上記6テーブル以外（users / attendance_posts / king_of_time_attendance / jinji_employee_profiles / in_member_evaluations / recruit_ats_* / follow_signal_pool / hotprofile_business_cards / その他すべて）へのSELECTは403で拒否される。ユーザーに「照会可能なテーブル」を案内する場合も必ず上記6つだけを示すこと。架空のテーブル名を追加してはいけない。`,
 
     gyoumu: `
 
 ## あなたの権限: 業務管理部
 担当業務: 契約管理・月報分析
 
-DBアロウリスト経由で kintone_contract / geppo_data / kintone_anken_eigyo / kintone_employees / kintone_customers / kintone_seikyu を query_corp_db で照会可能。
-- 採用候補者・フォローシグナル・勤怠・users などの機密テーブルは閲覧不可（アロウリスト外）
-- 社員情報はAI経由では参照不可（個人情報保護のため無効化）`,
+### query_corp_db で照会可能なテーブル（この6つのみ・他のテーブル名を回答に含めない）
+1. kintone_employees - 社員マスタ
+2. kintone_contract - 契約データ
+3. kintone_anken_eigyo - 営業案件
+4. geppo_data - 月報データ
+5. kintone_customers - 顧客データ
+6. kintone_seikyu - 請求データ
+
+これ以外のテーブル（users / 勤怠 / 人事評価 / 採用 / フォローシグナル等）は閲覧不可。架空のテーブル名を追加して案内してはいけない。`,
 
     eigyo: `
 
 ## あなたの権限: 営業部
 担当業務: 案件管理・月報閲覧・名刺/人脈検索・提案書作成
 
-- 採用候補者・契約詳細・勤怠データへのアクセスは権限外`,
+query_corp_db は権限外。Kintone API / HotProfile / WordPress / Chatwork / Drive 等のツールで業務を進めること。`,
 
     recruit: `
 
 ## あなたの権限: 採用部
 担当業務: （AI経由で参照できる corp データは現在なし）
 
-- 採用候補者・社員情報・案件・契約・勤怠データはすべてAI経由では参照不可`,
+- 採用候補者・社員情報・案件・契約・勤怠データはすべてAI経由では参照不可
+- Kintone / Chatwork / Drive 等の周辺ツールは利用可能`,
 
     user: `
 
@@ -1838,9 +1854,9 @@ app.post('/api/scheduled-tasks', (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// PUT /api/scheduled-tasks/:id  body: { interval_min?, enabled? }
+// PUT /api/scheduled-tasks/:id
 app.put('/api/scheduled-tasks/:id', (req, res) => {
-  const { interval_min, enabled } = req.body;
+  const { interval_min, enabled, skill_title, description, steps } = req.body;
   try {
     const row = db.prepare('SELECT id FROM scheduled_tasks WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
     if (!row) return res.status(403).json({ error: '権限がありません' });
@@ -1849,6 +1865,9 @@ app.put('/api/scheduled-tasks/:id', (req, res) => {
     const params = [];
     if (interval_min !== undefined) { updates.push('interval_min=?'); params.push(Number(interval_min)); }
     if (enabled !== undefined) { updates.push('enabled=?'); params.push(enabled ? 1 : 0); }
+    if (skill_title !== undefined) { updates.push('skill_title=?'); params.push(skill_title); }
+    if (description !== undefined) { updates.push('description=?'); params.push(description); }
+    if (steps !== undefined) { updates.push('steps=?'); params.push(steps); }
     if (!updates.length) return res.status(400).json({ error: '更新項目がありません' });
 
     params.push(req.params.id, req.user.email);
