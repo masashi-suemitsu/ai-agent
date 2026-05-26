@@ -1159,16 +1159,16 @@ app.get('/auth/kintone', (req, res) => {
   const clientId = process.env.KINTONE_OAUTH_CLIENT_ID;
   if (!clientId) return res.status(503).send('KINTONE_OAUTH_CLIENT_IDが未設定です。環境変数を確認してください。');
   const callbackUrl = process.env.KINTONE_CALLBACK_URL;
-  // stateパラメータにメールをbase64エンコードして埋め込む（コールバック時のユーザー特定用）
   const state = Buffer.from(req.user.email).toString('base64url');
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: callbackUrl,
-    response_type: 'code',
-    scope: 'k:app_record:read k:app_settings:read',
-    state
-  });
-  res.redirect(`https://${domain}.cybozu.com/oauth2/authorization?${params}`);
+  // スコープは%20区切りで明示的にエンコード
+  const authUrl = `https://${domain}.cybozu.com/oauth2/authorization`
+    + `?client_id=${encodeURIComponent(clientId)}`
+    + `&redirect_uri=${encodeURIComponent(callbackUrl)}`
+    + `&response_type=code`
+    + `&scope=${encodeURIComponent('k:app_record:read')}`
+    + `&state=${state}`;
+  console.log('[auth/kintone] redirecting to:', authUrl);
+  res.redirect(authUrl);
 });
 
 app.get('/auth/kintone/callback', async (req, res) => {
