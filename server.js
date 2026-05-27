@@ -2684,6 +2684,68 @@ app.delete('/api/scheduled-tasks/:id', (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── モデル推薦 ──
+const MODELS_FOR_RECOMMENDATION = [
+  { key: 'sonnet',    name: 'Claude Sonnet 4.6 (Anthropic)', strengths: '高品質・ツール連携安定・複雑な判断',   cost_label: '約3〜4円/回', input_per_1m: 3.0,  output_per_1m: 15.0 },
+  { key: 'haiku',     name: 'Claude Haiku 4.5 (Anthropic)',  strengths: '高速・低コスト・シンプルな定型作業',   cost_label: '約1円/回',   input_per_1m: 0.8,  output_per_1m: 4.0  },
+  { key: 'openrouter:deepseek/deepseek-chat',              name: 'DeepSeek V3 (OpenRouter)',      strengths: 'コーディング・データ分析・超低コスト',     cost_label: '約0.1円/回', input_per_1m: 0.14, output_per_1m: 0.28 },
+  { key: 'openrouter:deepseek/deepseek-r1',                name: 'DeepSeek R1 推論 (OpenRouter)', strengths: '推論・論理・数学・複雑な問題解決（やや遅め）', cost_label: '約0.6円/回', input_per_1m: 0.55, output_per_1m: 2.19 },
+  { key: 'deepinfra:deepseek-ai/DeepSeek-V3',             name: 'DeepSeek V3 (DeepInfra)',       strengths: 'コーディング・分析（DeepInfra・低コスト）', cost_label: '約0.3円/回', input_per_1m: 0.35, output_per_1m: 0.89 },
+  { key: 'deepinfra:deepseek-ai/DeepSeek-R1',             name: 'DeepSeek R1 推論 (DeepInfra)', strengths: '推論・論理・数学（DeepInfra経由）',          cost_label: '約0.6円/回', input_per_1m: 0.55, output_per_1m: 2.19 },
+  { key: 'openrouter:qwen/qwen3-235b-a22b',               name: 'Qwen3 235B (OpenRouter)',       strengths: '日本語強・多言語・バランス良・低コスト',   cost_label: '約0.2円/回', input_per_1m: 0.22, output_per_1m: 0.88 },
+  { key: 'openrouter:qwen/qwen3-30b-a3b',                 name: 'Qwen3 30B (OpenRouter)',        strengths: '超軽量・超低コスト・日本語対応・高頻度向け', cost_label: '約0.03円/回', input_per_1m: 0.03, output_per_1m: 0.09 },
+  { key: 'deepinfra:Qwen/Qwen3-235B-A22B',                name: 'Qwen3 235B (DeepInfra)',        strengths: '日本語・多言語（DeepInfra経由）',           cost_label: '約0.2円/回', input_per_1m: 0.22, output_per_1m: 0.88 },
+  { key: 'openrouter:meta-llama/llama-4-maverick',        name: 'Llama 4 Maverick (OpenRouter)', strengths: '最新Llama・汎用・マルチモーダル・英語強',   cost_label: '約0.2円/回', input_per_1m: 0.19, output_per_1m: 0.85 },
+  { key: 'openrouter:meta-llama/llama-4-scout',           name: 'Llama 4 Scout (OpenRouter)',    strengths: '軽量Llama4・高速・低コスト・シンプルタスク', cost_label: '約0.2円/回', input_per_1m: 0.18, output_per_1m: 0.59 },
+  { key: 'deepinfra:meta-llama/Llama-3.3-70B-Instruct',  name: 'Llama 3.3 70B (DeepInfra)',    strengths: '前世代大型Llama・汎用・英語強・低コスト',   cost_label: '約0.1円/回', input_per_1m: 0.13, output_per_1m: 0.40 },
+  { key: 'openrouter:mistralai/mistral-small-3.1-24b-instruct', name: 'Mistral Small 3.1 (OpenRouter)', strengths: '効率的・ツール対応・低コスト',    cost_label: '約0.1円/回', input_per_1m: 0.10, output_per_1m: 0.30 },
+];
+
+app.post('/api/recommend-model', async (req, res) => {
+  const { title = '', steps = '' } = req.body;
+  if (!title && !steps) return res.status(400).json({ error: 'タスク情報が必要です' });
+  audit(req.user.email, req.user.name, 'model.recommend', { title: title.slice(0, 30) });
+  try {
+    const modelList = MODELS_FOR_RECOMMENDATION.map(m =>
+      `- key="${m.key}" | ${m.name} | 特徴: ${m.strengths} | コスト: ${m.cost_label}`
+    ).join('\n');
+    const prompt = `あなたはAIモデル選択アドバイザーです。以下のスケジュールタスクに最適なモデルを推薦してください。
+
+**最重要基準: コスパ（品質÷コスト）**
+- 単純なタスク（通知送信・定型チェック）→ 安価なモデルを優先
+- 複雑なタスク（DB分析・複数ツール連携・判断が必要）→ 品質重視
+- 日本語処理が多い → 日本語強のモデルを優先
+- ツールを頻繁に使う → Anthropic優先（ツール安定性）
+
+タスク名: ${title}
+実行手順（抜粋）:
+${steps.slice(0, 1200)}
+
+利用可能なモデル:
+${modelList}
+
+以下のJSON形式のみで回答（説明文・コードブロック不要）:
+{"model":"モデルのkey","reason":"推薦理由（40文字以内・日本語）","cost_note":"コスパコメント（30文字以内）"}`;
+
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 256,
+      messages: [{ role: 'user', content: prompt }]
+    });
+    const text = resp.content[0]?.text || '';
+    const m = text.match(/\{[\s\S]*?\}/);
+    if (!m) throw new Error('推薦結果のパースに失敗しました');
+    const parsed = JSON.parse(m[0]);
+    if (!MODELS_FOR_RECOMMENDATION.find(x => x.key === parsed.model)) {
+      parsed.model = 'sonnet';
+    }
+    res.json(parsed);
+  } catch(e) {
+    console.error('[recommend-model] error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Feedback (改善提案・不具合報告) ──
 const FEEDBACK_NOTIFY_TO = process.env.FEEDBACK_NOTIFY_TO || 'marketing@acrovision.co.jp';
 const FEEDBACK_LABELS = {
