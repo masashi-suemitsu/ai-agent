@@ -1168,25 +1168,46 @@ async function toggleCw() {
   }
 }
 
+// ─ 連携プライバシー案内 ─
+// mode: 'full' = 未連携時の目立つ案内, 'compact' = 連携済み時の小さい注記
+function privacyNoteHtml(mode, serviceName) {
+  if (mode === 'full') {
+    const detail = {
+      'Chatwork':         'あなたが連携した Chatwork のメッセージを、他のユーザーが見ることはありません。',
+      'Google Drive':     'あなたが連携した Drive のファイルを、他のユーザーが見ることはありません。',
+      'Google カレンダー': 'あなたが連携したカレンダーの予定を、他のユーザーが見ることはありません。',
+      'Gmail':            'あなたが連携した Gmail のメールを、他のユーザーが見ることはありません。',
+    }[serviceName] || 'あなたが連携したデータを、他のユーザーが見ることはありません。';
+    return `<div style="margin-top:12px;padding:10px 12px;background:rgba(91,110,255,0.08);border:1px solid rgba(91,110,255,0.25);border-radius:8px;font-size:11.5px;line-height:1.6;color:var(--text);text-align:left;">
+      <div style="font-weight:700;color:var(--primary);margin-bottom:2px;">🔒 この連携はあなた個人のものです</div>
+      <div style="color:#4a5568;">${detail}</div>
+    </div>`;
+  }
+  return `<div style="margin-top:8px;font-size:10.5px;color:var(--text-light);line-height:1.5;">🔒 この連携はあなた個人のものです。他の利用者からデータは見えません。</div>`;
+}
+
 async function loadChatworkStatus() {
   const banner = document.getElementById('cwAuthBanner');
   try {
     const status = await fetch('/api/chatwork/status').then(r => r.json());
     if (status.connected && !status.expired) {
-      banner.style.display = 'flex';
-      banner.style.justifyContent = 'space-between';
-      banner.style.alignItems = 'center';
-      banner.innerHTML = `<span style="color:#276749;">✅ 個人連携済み <span style="opacity:.6;font-size:11px;">${status.updatedAt || ''}</span></span>
-        <button onclick="disconnectChatwork()" style="font-size:11px;color:#c53030;background:none;border:1px solid #feb2b2;border-radius:4px;padding:2px 8px;cursor:pointer;">解除</button>`;
+      banner.style.display = 'block';
+      banner.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:#276749;">✅ 個人連携済み <span style="opacity:.6;font-size:11px;">${status.updatedAt || ''}</span></span>
+          <button onclick="disconnectChatwork()" style="font-size:11px;color:#c53030;background:none;border:1px solid #feb2b2;border-radius:4px;padding:2px 8px;cursor:pointer;">解除</button>
+        </div>
+        ${privacyNoteHtml('compact')}`;
     } else if (status.connected && status.expired) {
       banner.style.display = 'block';
-      banner.innerHTML = `<span style="color:#c53030;">⚠️ 連携期限切れ</span> <a href="/auth/chatwork" style="color:var(--primary);font-weight:600;">再連携</a>`;
+      banner.innerHTML = `<span style="color:#c53030;">⚠️ 連携期限切れ</span> <a href="/auth/chatwork" style="color:var(--primary);font-weight:600;">再連携</a>
+        ${privacyNoteHtml('compact')}`;
     } else {
-      banner.style.display = 'flex';
-      banner.style.justifyContent = 'space-between';
-      banner.style.alignItems = 'center';
-      banner.innerHTML = `<span style="opacity:.7;">個人アカウントで連携</span>
-        <a href="/auth/chatwork" style="font-size:12px;font-weight:600;color:#fff;background:var(--primary);border-radius:4px;padding:3px 10px;text-decoration:none;">🔗 連携する</a>`;
+      banner.style.display = 'block';
+      banner.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="opacity:.7;">個人アカウントで連携</span>
+          <a href="/auth/chatwork" style="font-size:12px;font-weight:600;color:#fff;background:var(--primary);border-radius:4px;padding:3px 10px;text-decoration:none;">🔗 連携する</a>
+        </div>
+        ${privacyNoteHtml('full', 'Chatwork')}`;
     }
   } catch(e) {
     banner.style.display = 'none';
@@ -1344,6 +1365,7 @@ async function loadDriveStatus() {
           <div style="font-size:11px;color:#718096;margin-bottom:14px;">最終更新: ${esc(status.updatedAt || '')}</div>
           <div style="font-size:12px;color:#4a5568;margin-bottom:16px;line-height:1.6;">AIエージェントがファイルを参照できます</div>
           <button onclick="disconnectDrive()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
+          ${privacyNoteHtml('compact')}
         </div>`;
     } else {
       statusArea.innerHTML = `
@@ -1352,6 +1374,7 @@ async function loadDriveStatus() {
           <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">Google Drive未連携</div>
           <div style="font-size:12px;color:#718096;margin-bottom:16px;line-height:1.6;">連携するとAIエージェントがファイルを参照できます</div>
           <a href="/auth/drive" style="display:inline-block;background:var(--primary);color:#fff;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;text-decoration:none;">Google Driveに連携する</a>
+          ${privacyNoteHtml('full', 'Google Drive')}
         </div>`;
     }
   } catch(e) {
@@ -1389,6 +1412,7 @@ async function loadCalendarStatus() {
           <div style="font-size:11px;color:#718096;margin-bottom:14px;">最終更新: ${esc(status.updatedAt || '')}</div>
           <div style="font-size:12px;color:#4a5568;margin-bottom:16px;line-height:1.6;">AIエージェントが予定を確認できます</div>
           <button onclick="disconnectCalendar()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
+          ${privacyNoteHtml('compact')}
         </div>`;
     } else {
       statusArea.innerHTML = `
@@ -1397,6 +1421,7 @@ async function loadCalendarStatus() {
           <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">Googleカレンダー未連携</div>
           <div style="font-size:12px;color:#718096;margin-bottom:16px;line-height:1.6;">連携するとAIエージェントが予定を確認できます</div>
           <a href="/auth/calendar" style="display:inline-block;background:var(--primary);color:#fff;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;text-decoration:none;">Googleカレンダーに連携する</a>
+          ${privacyNoteHtml('full', 'Google カレンダー')}
         </div>`;
     }
   } catch(e) {
@@ -1460,6 +1485,7 @@ async function loadGmailStatus() {
           <div style="font-size:11px;color:#718096;margin-bottom:14px;">最終更新: ${esc(status.updatedAt || '')}</div>
           <div style="font-size:12px;color:#4a5568;margin-bottom:16px;line-height:1.6;">AIエージェントがメールを参照できます</div>
           <button onclick="disconnectGmail()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
+          ${privacyNoteHtml('compact')}
         </div>`;
     } else {
       statusArea.innerHTML = `
@@ -1468,8 +1494,8 @@ async function loadGmailStatus() {
           <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">Gmail未連携</div>
           <div style="font-size:12px;color:#718096;margin-bottom:16px;line-height:1.6;">連携するとAIエージェントがメールを確認できます</div>
           <a href="/auth/gmail" style="display:inline-block;background:var(--primary);color:#fff;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;text-decoration:none;">Gmailに連携する</a>
+          ${privacyNoteHtml('full', 'Gmail')}
         </div>`;
-      document.getElementById('gmailContent').innerHTML = '';
     }
   } catch(e) {
     statusArea.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`;
