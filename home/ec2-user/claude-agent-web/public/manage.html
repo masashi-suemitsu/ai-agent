@@ -521,9 +521,10 @@ function renderTasks(tasks) {
     const enabledBadge = t.enabled
       ? '<span class="badge badge-green">▶ 有効</span>'
       : `<span class="badge badge-gray">${isOnce && t.last_status === 'done' ? '✓ 実行済' : '⏸ 停止中'}</span>`;
+    const modelLabel = modelDisplayName(t.model);
     const scheduleMeta = isOnce
-      ? `<span>実行日時: ${nextRun}</span><span>前回: ${lastRun}</span>`
-      : `<span>🔄 ${esc(scheduleLabel(t))}</span><span>次回: ${nextRun}</span><span>前回: ${lastRun}</span>`;
+      ? `<span>実行日時: ${nextRun}</span><span>前回: ${lastRun}</span><span>🤖 ${esc(modelLabel)}</span>`
+      : `<span>🔄 ${esc(scheduleLabel(t))}</span><span>次回: ${nextRun}</span><span>前回: ${lastRun}</span><span>🤖 ${esc(modelLabel)}</span>`;
     return `<div class="card" id="task-card-${t.id}">
       <div class="card-header">
         <div class="card-title">${typeBadge} ${esc(t.skill_title || t.skill_name)}</div>
@@ -1151,6 +1152,13 @@ function intervalLabel(min) {
   if (min === 60) return '1時間ごと';
   if (min < 1440) return `${min/60}時間ごと`;
   return '24時間ごと';
+}
+function modelDisplayName(model) {
+  if (!model || model === 'sonnet') return 'Claude Sonnet 4.6';
+  if (model === 'haiku') return 'Claude Haiku 4.5';
+  if (model.startsWith('openrouter:')) return model.slice(11).split('/').pop() + ' (OR)';
+  if (model.startsWith('deepinfra:')) return model.slice(10).split('/').pop() + ' (DI)';
+  return model;
 }
 function scheduleLabel(t) {
   if (t.schedule_type === 'daily' && t.schedule_hour != null) {
