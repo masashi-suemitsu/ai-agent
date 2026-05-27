@@ -633,12 +633,12 @@ function renderSkills(skills) {
   skills.forEach(s => { _skillCache[s.id] = s; });
   el.innerHTML = skills.map(s => {
     const isOwn = s.owner_email === currentUser?.email;
+    const ownerLabel = s.owner_name || (s.owner_email ? s.owner_email.split('@')[0] : '');
     return `<div class="card">
       <div class="card-header">
         <div class="card-title">${esc(s.title)}</div>
         <div class="card-badges">
-          ${s.shared ? '<span class="badge badge-blue">共有</span>' : ''}
-          ${!isOwn ? '<span class="badge badge-gray">他のユーザー</span>' : ''}
+          ${!isOwn ? `<span class="badge badge-blue">by ${esc(ownerLabel)}</span>` : ''}
         </div>
       </div>
       ${s.description ? `<div style="font-size:13px;color:var(--text-light);margin-bottom:10px;line-height:1.6;">${esc(s.description)}</div>` : ''}
@@ -649,12 +649,20 @@ function renderSkills(skills) {
       </div>
       ${s.steps ? `<button class="steps-btn" onclick="toggleSteps('skill-steps-${s.id}', this)">📋 実行手順（指示内容）を確認 <span>▼</span></button>
       <div class="steps-body" id="skill-steps-${s.id}">${esc(s.steps)}</div>` : ''}
-      ${isOwn ? `<div class="card-actions">
+      <div class="card-actions">
+        ${isOwn ? `
+        <button class="btn ${s.shared ? 'btn-primary' : 'btn-outline'}" onclick="toggleShareSkill(${s.id}, ${!s.shared})" title="${s.shared ? 'クリックで非公開に' : 'チームに共有する'}">
+          ${s.shared ? '🌐 共有中' : '🔒 共有する'}
+        </button>
         <button class="btn btn-orange" onclick="openModal(${s.id}, _skillCache[${s.id}].title)">⏰ 定期実行を設定</button>
         <button class="btn btn-outline" onclick="runSkillNow(${s.id}, _skillCache[${s.id}].title, this)">▶ 今すぐ実行</button>
         <button class="btn btn-outline" onclick="openEditSkill(${s.id})">✏️ 編集</button>
         <button class="btn btn-danger" onclick="deleteSkill(${s.id})">削除</button>
-      </div>` : ''}
+        ` : `
+        <button class="btn btn-orange" onclick="openModal(${s.id}, _skillCache[${s.id}].title)">⏰ 定期実行を設定</button>
+        <button class="btn btn-outline" onclick="runSkillNow(${s.id}, _skillCache[${s.id}].title, this)">▶ 今すぐ実行</button>
+        `}
+      </div>
     </div>`;
   }).join('');
 }
@@ -835,6 +843,16 @@ async function saveEditSkill() {
 async function deleteSkill(id) {
   if (!confirm('このスキルを削除しますか？')) return;
   await fetch(`/api/skills/${id}`, { method: 'DELETE' });
+  await loadSkills();
+}
+
+async function toggleShareSkill(id, shared) {
+  const resp = await fetch(`/api/skills/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shared })
+  });
+  if (!resp.ok) { alert('共有設定の変更に失敗しました'); return; }
   await loadSkills();
 }
 
