@@ -134,6 +134,22 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   .page { padding: 16px 12px; }
   .tab-btn { padding: 7px 14px; font-size: 12px; }
 }
+.model-desc-card { margin-top: 8px; background: var(--primary-light); border: 1px solid #c3d0ff; border-radius: 10px; padding: 11px 14px; }
+.model-desc-header { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
+.model-provider-chip { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 5px; background: rgba(91,110,255,.18); color: var(--primary-dark); }
+.model-cost-chip { font-size: 13px; font-weight: 700; color: #276749; }
+.model-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.model-tag { font-size: 10px; padding: 2px 7px; background: #fff; border: 1px solid #c3d0ff; border-radius: 4px; color: var(--primary-dark); font-weight: 500; }
+.model-bars { display: grid; grid-template-columns: 36px 1fr; gap: 3px 8px; align-items: center; margin-bottom: 8px; }
+.model-bar-label { font-size: 10px; color: var(--text-light); text-align: right; }
+.model-bar-track { height: 5px; background: #dde5ff; border-radius: 3px; overflow: hidden; }
+.model-bar-fill { height: 100%; border-radius: 3px; background: var(--primary); }
+.model-bar-fill.high { background: #276749; }
+.model-best-for { font-size: 11px; color: var(--text); line-height: 1.6; }
+.recommend-btn { margin-top: 8px; width: 100%; background: none; border: 1.5px dashed var(--primary); border-radius: 8px; padding: 8px; font-size: 12px; font-weight: 600; color: var(--primary); cursor: pointer; transition: all .15s; display: block; }
+.recommend-btn:hover { background: var(--primary-light); }
+.recommend-btn:disabled { opacity: .6; cursor: default; }
+.recommend-result { margin-top: 8px; background: #f0fff4; border: 1px solid #9ae6b4; border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.7; color: var(--text); }
 </style>
 </head>
 <body>
@@ -299,19 +315,10 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     </div>
     <div class="modal-field">
       <label>AIモデル</label>
-      <select id="editTaskModel" style="width:100%;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;background:#fff;">
-        <option value="sonnet">Claude Sonnet 4.6（標準・高品質）</option>
-        <option value="haiku">Claude Haiku 4.5（高速・低コスト）</option>
-        <optgroup label="── OSS モデル / OpenRouter ──">
-          <option value="openrouter:qwen/qwen3-235b-a22b">Qwen3 235B（OpenRouter）</option>
-          <option value="openrouter:meta-llama/llama-4-maverick">Llama 4 Maverick（OpenRouter）</option>
-          <option value="openrouter:mistralai/mistral-small-3.1-24b-instruct">Mistral Small 3.1 24B（OpenRouter）</option>
-        </optgroup>
-        <optgroup label="── OSS モデル / DeepInfra ──">
-          <option value="deepinfra:Qwen/Qwen3-235B-A22B">Qwen3 235B（DeepInfra）</option>
-          <option value="deepinfra:meta-llama/Llama-3.3-70B-Instruct">Llama 3.3 70B（DeepInfra）</option>
-        </optgroup>
-      </select>
+      <select id="editTaskModel" style="width:100%;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;background:#fff;" onchange="updateModelDesc('edit')"></select>
+      <div id="editTaskModelDesc" class="model-desc-card" style="display:none;"></div>
+      <button type="button" class="recommend-btn" id="editRecommendBtn" onclick="recommendModel('edit')">🤖 AIにおすすめを聞く</button>
+      <div id="editRecommendResult" class="recommend-result" style="display:none;"></div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeEditTask()">キャンセル</button>
@@ -405,19 +412,10 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     </div>
     <div class="modal-field">
       <label>AIモデル</label>
-      <select id="modalModel" style="width:100%;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;background:#fff;">
-        <option value="sonnet">Claude Sonnet 4.6（標準・高品質）</option>
-        <option value="haiku">Claude Haiku 4.5（高速・低コスト）</option>
-        <optgroup label="── OSS モデル / OpenRouter ──">
-          <option value="openrouter:qwen/qwen3-235b-a22b">Qwen3 235B（OpenRouter）</option>
-          <option value="openrouter:meta-llama/llama-4-maverick">Llama 4 Maverick（OpenRouter）</option>
-          <option value="openrouter:mistralai/mistral-small-3.1-24b-instruct">Mistral Small 3.1 24B（OpenRouter）</option>
-        </optgroup>
-        <optgroup label="── OSS モデル / DeepInfra ──">
-          <option value="deepinfra:Qwen/Qwen3-235B-A22B">Qwen3 235B（DeepInfra）</option>
-          <option value="deepinfra:meta-llama/Llama-3.3-70B-Instruct">Llama 3.3 70B（DeepInfra）</option>
-        </optgroup>
-      </select>
+      <select id="modalModel" style="width:100%;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;background:#fff;" onchange="updateModelDesc('modal')"></select>
+      <div id="modalModelDesc" class="model-desc-card" style="display:none;"></div>
+      <button type="button" class="recommend-btn" id="modalRecommendBtn" onclick="recommendModel('modal')">🤖 AIにおすすめを聞く</button>
+      <div id="modalRecommendResult" class="recommend-result" style="display:none;"></div>
     </div>
     <div class="modal-btns">
       <button class="modal-btn-cancel" onclick="closeModal()">キャンセル</button>
@@ -450,6 +448,7 @@ const _skillCache = {};
   await Promise.all([loadTasks(), loadSkills()]);
   renderRules(currentUser.role);
   loadCustomRules();
+  buildModelSelects();
 })();
 
 function renderUserBadge(me) {
@@ -748,6 +747,8 @@ function openEditTask(id) {
     document.getElementById('editWeeklyMin').value = t.schedule_minute ?? 0;
   }
   document.getElementById('editTaskModel').value = t.model || 'sonnet';
+  document.getElementById('editRecommendResult').style.display = 'none';
+  updateModelDesc('edit');
   document.getElementById('editTaskModal').classList.add('open');
 }
 function editOnSchedTypeChange() {
@@ -987,6 +988,8 @@ function openModal(skillId, skillTitle) {
   document.getElementById('modalSkillTitle').textContent = skillTitle;
   document.getElementById('modalInterval').value = '60';
   document.getElementById('modalModel').value = 'sonnet';
+  document.getElementById('modalRecommendResult').style.display = 'none';
+  updateModelDesc('modal');
   document.querySelector('input[name="mgTaskType"][value="recurring"]').checked = true;
   document.querySelector('input[name="mgSchedType"][value="interval"]').checked = true;
   document.getElementById('mgRecurringField').style.display = '';
@@ -1136,6 +1139,101 @@ function toggleSteps(id, btn) {
   btn.innerHTML = `📋 指示内容を${open ? '閉じる' : '確認'} <span>${open ? '▲' : '▼'}</span>`;
 }
 
+// ─ モデル選択 ─
+const MODEL_OPTIONS = [
+  { key: 'sonnet',  name: 'Claude Sonnet 4.6', provider: 'Anthropic',   cost_label: '約3〜4円/回',  quality: 5, speed: 3, kospa: 3, tags: ['高品質', 'ツール連携安定', '複雑な判断'],      best_for: '重要な業務・複雑な判断・品質最優先タスク' },
+  { key: 'haiku',   name: 'Claude Haiku 4.5',  provider: 'Anthropic',   cost_label: '約1円/回',     quality: 3, speed: 5, kospa: 4, tags: ['高速', '低コスト', 'シンプル作業'],            best_for: 'シンプルな通知・定型データ取得・高頻度実行' },
+  { key: 'openrouter:deepseek/deepseek-chat',                 name: 'DeepSeek V3',         provider: 'OpenRouter', cost_label: '約0.1円/回',   quality: 4, speed: 4, kospa: 5, tags: ['コーディング', 'データ分析', '超低コスト'],       best_for: 'コード生成・データ処理・分析・コスト最優先' },
+  { key: 'openrouter:deepseek/deepseek-r1',                   name: 'DeepSeek R1 推論',    provider: 'OpenRouter', cost_label: '約0.6円/回',   quality: 5, speed: 2, kospa: 4, tags: ['推論', '論理', '数学', '複雑問題解決'],           best_for: '複雑な推論・論理問題・数学的処理（やや遅め）' },
+  { key: 'deepinfra:deepseek-ai/DeepSeek-V3',                 name: 'DeepSeek V3',         provider: 'DeepInfra',  cost_label: '約0.3円/回',   quality: 4, speed: 4, kospa: 5, tags: ['コーディング', 'データ分析', '低コスト'],          best_for: 'コード生成・データ処理・DeepInfra経由で安定' },
+  { key: 'deepinfra:deepseek-ai/DeepSeek-R1',                 name: 'DeepSeek R1 推論',    provider: 'DeepInfra',  cost_label: '約0.6円/回',   quality: 5, speed: 2, kospa: 4, tags: ['推論', '論理', '数学'],                         best_for: '複雑な推論・数学・DeepInfra経由' },
+  { key: 'openrouter:qwen/qwen3-235b-a22b',                   name: 'Qwen3 235B',          provider: 'OpenRouter', cost_label: '約0.2円/回',   quality: 4, speed: 3, kospa: 5, tags: ['日本語強', '多言語', 'バランス良'],               best_for: '日本語タスク・多言語処理・コスパ重視の汎用作業' },
+  { key: 'openrouter:qwen/qwen3-30b-a3b',                     name: 'Qwen3 30B',           provider: 'OpenRouter', cost_label: '約0.03円/回',  quality: 3, speed: 5, kospa: 5, tags: ['超軽量', '超低コスト', '日本語'],                 best_for: '高頻度の軽量タスク・日本語シンプル処理・超低コスト重視' },
+  { key: 'deepinfra:Qwen/Qwen3-235B-A22B',                    name: 'Qwen3 235B',          provider: 'DeepInfra',  cost_label: '約0.2円/回',   quality: 4, speed: 3, kospa: 5, tags: ['日本語', '多言語', '低コスト'],                  best_for: '日本語タスク・多言語処理・DeepInfra経由' },
+  { key: 'openrouter:meta-llama/llama-4-maverick',             name: 'Llama 4 Maverick',    provider: 'OpenRouter', cost_label: '約0.2円/回',   quality: 4, speed: 4, kospa: 5, tags: ['最新Llama', '汎用', 'マルチモーダル', '英語強'],  best_for: '英語中心の汎用タスク・最新Llamaモデル' },
+  { key: 'openrouter:meta-llama/llama-4-scout',                name: 'Llama 4 Scout',       provider: 'OpenRouter', cost_label: '約0.2円/回',   quality: 3, speed: 5, kospa: 5, tags: ['軽量Llama4', '高速', '低コスト'],                best_for: 'シンプルな英語タスク・高速レスポンス重視' },
+  { key: 'deepinfra:meta-llama/Llama-3.3-70B-Instruct',       name: 'Llama 3.3 70B',       provider: 'DeepInfra',  cost_label: '約0.1円/回',   quality: 4, speed: 4, kospa: 5, tags: ['汎用', '英語強', '低コスト'],                   best_for: '英語汎用タスク・Llama系での安定した実行' },
+  { key: 'openrouter:mistralai/mistral-small-3.1-24b-instruct',name: 'Mistral Small 3.1',   provider: 'OpenRouter', cost_label: '約0.1円/回',   quality: 3, speed: 5, kospa: 5, tags: ['効率的', 'ツール対応', '低コスト'],              best_for: 'シンプルなツール呼び出し・低コスト重視タスク' },
+];
+
+function buildModelSelects() {
+  const anthropic = MODEL_OPTIONS.filter(m => m.provider === 'Anthropic');
+  const or = MODEL_OPTIONS.filter(m => m.provider === 'OpenRouter');
+  const di = MODEL_OPTIONS.filter(m => m.provider === 'DeepInfra');
+  const html =
+    anthropic.map(m => `<option value="${m.key}">${m.name}（${m.provider}）</option>`).join('') +
+    '<optgroup label="── OSS / OpenRouter ──">' +
+    or.map(m => `<option value="${m.key}">${m.name}（OR）</option>`).join('') +
+    '</optgroup><optgroup label="── OSS / DeepInfra ──">' +
+    di.map(m => `<option value="${m.key}">${m.name}（DI）</option>`).join('') +
+    '</optgroup>';
+  ['modalModel', 'editTaskModel'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  });
+}
+
+function updateModelDesc(context) {
+  const selId = context === 'modal' ? 'modalModel' : 'editTaskModel';
+  const descId = context === 'modal' ? 'modalModelDesc' : 'editTaskModelDesc';
+  const key = document.getElementById(selId)?.value;
+  const m = MODEL_OPTIONS.find(o => o.key === key);
+  const descEl = document.getElementById(descId);
+  if (!descEl) return;
+  if (!m) { descEl.style.display = 'none'; return; }
+  const bar = (label, val, isKospa) => {
+    const cls = (isKospa && val >= 5) ? ' high' : '';
+    return `<span class="model-bar-label">${label}</span><div class="model-bar-track"><div class="model-bar-fill${cls}" style="width:${val * 20}%"></div></div>`;
+  };
+  descEl.innerHTML = `
+    <div class="model-desc-header">
+      <span class="model-provider-chip">${m.provider}</span>
+      <span class="model-cost-chip">${m.cost_label}</span>
+    </div>
+    <div class="model-tags">${m.tags.map(t => `<span class="model-tag">${t}</span>`).join('')}</div>
+    <div class="model-bars">${bar('品質', m.quality, false)}${bar('速度', m.speed, false)}${bar('コスパ', m.kospa, true)}</div>
+    <div class="model-best-for">💡 ${m.best_for}</div>`;
+  descEl.style.display = 'block';
+}
+
+async function recommendModel(context) {
+  const selId = context === 'modal' ? 'modalModel' : 'editTaskModel';
+  const resultId = context === 'modal' ? 'modalRecommendResult' : 'editRecommendResult';
+  const btnId = context === 'modal' ? 'modalRecommendBtn' : 'editRecommendBtn';
+  const title = context === 'modal'
+    ? (document.getElementById('modalSkillTitle')?.textContent || '')
+    : (document.getElementById('editTaskTitle')?.value || '');
+  const steps = context === 'edit' ? (document.getElementById('editTaskSteps')?.value || '') : '';
+  const btn = document.getElementById(btnId);
+  const resultEl = document.getElementById(resultId);
+  if (btn) { btn.disabled = true; btn.textContent = '🤖 AIが分析中...'; }
+  if (resultEl) resultEl.style.display = 'none';
+  try {
+    const resp = await fetch('/api/recommend-model', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, steps })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '取得失敗');
+    if (data.model) {
+      document.getElementById(selId).value = data.model;
+      updateModelDesc(context);
+    }
+    if (resultEl) {
+      const modelName = MODEL_OPTIONS.find(m => m.key === data.model)?.name || data.model;
+      resultEl.innerHTML = `<strong>🤖 おすすめ：</strong>${esc(modelName)}<br>${esc(data.reason)}<br><span style="color:#276749;font-weight:600;">${esc(data.cost_note)}</span>`;
+      resultEl.style.display = 'block';
+    }
+  } catch(e) {
+    if (resultEl) {
+      resultEl.innerHTML = `<span style="color:var(--danger);">⚠️ ${esc(e.message)}</span>`;
+      resultEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🤖 AIにおすすめを聞く'; }
+  }
+}
+
 // ─ ユーティリティ ─
 function esc(t) {
   return String(t || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1154,6 +1252,8 @@ function intervalLabel(min) {
   return '24時間ごと';
 }
 function modelDisplayName(model) {
+  const m = MODEL_OPTIONS.find(o => o.key === model);
+  if (m) return m.provider === 'Anthropic' ? m.name : `${m.name} (${m.provider === 'OpenRouter' ? 'OR' : 'DI'})`;
   if (!model || model === 'sonnet') return 'Claude Sonnet 4.6';
   if (model === 'haiku') return 'Claude Haiku 4.5';
   if (model.startsWith('openrouter:')) return model.slice(11).split('/').pop() + ' (OR)';
