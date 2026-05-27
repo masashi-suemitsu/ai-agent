@@ -292,11 +292,27 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 .input-area {
   background: #fff;
   border-top: 1px solid var(--border);
-  padding: 14px 20px;
+  padding: 10px 20px 14px;
   display: flex;
-  gap: 10px;
-  align-items: flex-end;
+  flex-direction: column;
+  gap: 6px;
 }
+.input-row { display: flex; gap: 10px; align-items: flex-end; }
+.model-selector { display: flex; gap: 6px; }
+.model-btn {
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 13px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: none;
+  color: var(--text-light);
+  transition: all .15s;
+  line-height: 1.7;
+}
+.model-btn.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+.model-btn:hover:not(.active) { border-color: #a0aec0; color: var(--text); }
 .input-wrapper { flex: 1; position: relative; }
 textarea {
   width: 100%;
@@ -504,8 +520,8 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
 <body>
 <header>
   <div class="header-left">
-    <div class="header-logo"><img src="/assets/logo.png" alt="タスクAIエージェント"></div>
-    <h1>タスクAIエージェント<small>仕事を任せる</small></h1>
+    <a href="/" style="display:contents;text-decoration:none;cursor:pointer;" title="ホームに戻る"><div class="header-logo"><img src="/assets/logo.png" alt="タスクAIエージェント"></div>
+    <h1 style="color:inherit;">タスクAIエージェント<small>仕事を任せる</small></h1></a>
   </div>
   <div class="header-right">
     <span id="userBadge" style="font-size:12px;color:#718096;"></span>
@@ -550,11 +566,17 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
     </div>
     <div class="attach-bar" id="attachBar" style="display:none;"></div>
     <div class="input-area">
-      <div class="input-wrapper">
-        <textarea id="input" placeholder="どんな仕事を任せますか？" rows="1"
-          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <div class="model-selector">
+        <button class="model-btn" id="modelBtnHaiku" onclick="setModel('haiku')">⚡ Haiku　速い</button>
+        <button class="model-btn active" id="modelBtnSonnet" onclick="setModel('sonnet')">✦ Sonnet　じっくり</button>
       </div>
-      <button class="send-btn" id="sendBtn" onclick="send()">依頼する</button>
+      <div class="input-row">
+        <div class="input-wrapper">
+          <textarea id="input" placeholder="どんな仕事を任せますか？" rows="1"
+            onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        </div>
+        <button class="send-btn" id="sendBtn" onclick="send()">送信</button>
+      </div>
     </div>
   </div>
 
@@ -650,6 +672,22 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
   </div>
 </div>
 
+<!-- ─ Run Confirm Modal ─ -->
+<div class="modal-overlay" id="runConfirmModal" onclick="if(event.target===this)closeRunConfirmModal()">
+  <div class="modal-box">
+    <div class="modal-title">▶ スキルを実行</div>
+    <div class="modal-subtitle" id="runConfirmTitle" style="margin-bottom:16px;"></div>
+    <div id="runEstimateArea" style="background:#f7f8fc;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:4px;font-size:13px;line-height:1.9;color:var(--text);">
+      <span style="color:var(--text-light);">コスト算出中...</span>
+    </div>
+    <div style="font-size:11px;color:var(--text-light);margin-bottom:2px;padding:0 2px;">※ 見込みです。実際の使用量により変動します</div>
+    <div class="modal-btns" style="margin-top:16px;">
+      <button class="modal-btn-cancel" onclick="closeRunConfirmModal()">キャンセル</button>
+      <button class="modal-btn-save" id="runConfirmBtn" onclick="doRunSkill()" disabled>実行する</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─ Schedule Modal ─ -->
 <div class="modal-overlay" id="scheduleModal" onclick="if(event.target===this)closeScheduleModal()">
   <div class="modal-box">
@@ -703,6 +741,13 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
 let currentConvId = null;
 let sending = false;
 let driveAttachments = [];  // [{ name, content }]
+let currentModel = 'sonnet';
+
+function setModel(m) {
+  currentModel = m;
+  document.getElementById('modelBtnHaiku').classList.toggle('active', m === 'haiku');
+  document.getElementById('modelBtnSonnet').classList.toggle('active', m === 'sonnet');
+}
 let currentUser = null;
 
 // ─ 初期化 ─
@@ -926,7 +971,7 @@ async function send() {
   const resp = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: fullMsg, conversationId: currentConvId })
+    body: JSON.stringify({ message: fullMsg, conversationId: currentConvId, model: currentModel })
   });
 
   // ストリーミング受信（typing indicator はここでは消さない）
@@ -1088,8 +1133,50 @@ async function toggleShareSkill(id, shared) {
   await loadSidebar();
 }
 
-// ─ スキル実行 ─
+// ─ スキル実行（コスト確認モーダル付き） ─
+let _runConfirmId = null;
+let _runConfirmTitle = null;
+
 async function runSkill(id, title) {
+  _runConfirmId = id;
+  _runConfirmTitle = title;
+  document.getElementById('runConfirmTitle').textContent = title;
+  document.getElementById('runConfirmBtn').disabled = true;
+  document.getElementById('runEstimateArea').innerHTML = '<span style="color:var(--text-light);">コスト算出中...</span>';
+  document.getElementById('runConfirmModal').classList.add('open');
+
+  try {
+    const r = await fetch(`/api/skills/${id}/estimate`);
+    const est = await r.json();
+    const jpy = est.cost_jpy ?? 0;
+    const inp = (est.input_tokens || 0).toLocaleString();
+    const out = (est.output_tokens || 0).toLocaleString();
+    const rounds = est.estimated_rounds || 1;
+    document.getElementById('runEstimateArea').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;">
+        <span style="color:var(--text-light);">入力トークン(推定)</span><span style="font-weight:600;">${inp}</span>
+        <span style="color:var(--text-light);">出力トークン(推定)</span><span style="font-weight:600;">${out}</span>
+        <span style="color:var(--text-light);">ツール呼び出し(推定)</span><span style="font-weight:600;">${rounds} 回</span>
+        <span style="color:var(--text-light);">コスト見込み</span><span style="font-weight:700;color:${jpy >= 1 ? '#e53e3e' : '#2b6cb0'};">約 ${jpy === 0 ? '< ¥1' : '¥' + jpy}</span>
+      </div>`;
+  } catch {
+    document.getElementById('runEstimateArea').innerHTML = '<span style="color:var(--text-light);">見積もりを取得できませんでした</span>';
+  }
+  document.getElementById('runConfirmBtn').disabled = false;
+}
+
+function closeRunConfirmModal() {
+  document.getElementById('runConfirmModal').classList.remove('open');
+  _runConfirmId = null;
+  _runConfirmTitle = null;
+}
+
+async function doRunSkill() {
+  const id = _runConfirmId;
+  const title = _runConfirmTitle;
+  closeRunConfirmModal();
+  if (!id) return;
+
   removeEmptyState();
   const msgsEl = document.getElementById('messages');
   const div = document.createElement('div');

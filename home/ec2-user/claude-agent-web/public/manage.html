@@ -298,6 +298,22 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   </div>
 </div>
 
+<!-- ─ Run Confirm Modal ─ -->
+<div class="modal-overlay" id="runConfirmModal" onclick="if(event.target===this)closeRunConfirmModal()">
+  <div class="modal-box" style="max-width:400px;">
+    <div class="modal-title">▶ 今すぐ実行</div>
+    <div class="modal-subtitle" id="runConfirmTitle" style="margin-bottom:16px;"></div>
+    <div id="runEstimateArea" style="background:#f7f8fc;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:4px;font-size:13px;line-height:1.9;color:var(--text);">
+      <span style="color:var(--text-light);">コスト算出中...</span>
+    </div>
+    <div style="font-size:11px;color:var(--text-light);margin-bottom:2px;padding:0 2px;">※ 見込みです。実際の使用量により変動します</div>
+    <div class="modal-btns" style="margin-top:16px;">
+      <button class="modal-btn-cancel" onclick="closeRunConfirmModal()">キャンセル</button>
+      <button class="modal-btn-save" id="runConfirmBtn" onclick="doRunSkillNow()" disabled>実行する</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─ Schedule Modal ─ -->
 <div class="modal-overlay" id="scheduleModal" onclick="if(event.target===this)closeModal()">
   <div class="modal-box">
@@ -605,9 +621,49 @@ function renderSkills(skills) {
   }).join('');
 }
 
+let _runConfirmSkillId = null;
+let _runConfirmBtn = null;
+
 async function runSkillNow(id, title, btn) {
-  if (!confirm(`「${title}」を今すぐ実行しますか？`)) return;
-  btn.disabled = true; btn.textContent = '実行中...';
+  _runConfirmSkillId = id;
+  _runConfirmBtn = btn;
+  document.getElementById('runConfirmTitle').textContent = title;
+  document.getElementById('runConfirmBtn').disabled = true;
+  document.getElementById('runEstimateArea').innerHTML = '<span style="color:var(--text-light);">コスト算出中...</span>';
+  document.getElementById('runConfirmModal').classList.add('open');
+
+  try {
+    const r = await fetch(`/api/skills/${id}/estimate`);
+    const est = await r.json();
+    const jpy = est.cost_jpy ?? 0;
+    const inp = (est.input_tokens || 0).toLocaleString();
+    const out = (est.output_tokens || 0).toLocaleString();
+    const rounds = est.estimated_rounds || 1;
+    document.getElementById('runEstimateArea').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;">
+        <span style="color:var(--text-light);">入力トークン(推定)</span><span style="font-weight:600;">${inp}</span>
+        <span style="color:var(--text-light);">出力トークン(推定)</span><span style="font-weight:600;">${out}</span>
+        <span style="color:var(--text-light);">ツール呼び出し(推定)</span><span style="font-weight:600;">${rounds} 回</span>
+        <span style="color:var(--text-light);">コスト見込み</span><span style="font-weight:700;color:${jpy >= 1 ? '#e53e3e' : '#2b6cb0'};">約 ${jpy === 0 ? '< ¥1' : '¥' + jpy}</span>
+      </div>`;
+  } catch {
+    document.getElementById('runEstimateArea').innerHTML = '<span style="color:var(--text-light);">見積もりを取得できませんでした</span>';
+  }
+  document.getElementById('runConfirmBtn').disabled = false;
+}
+
+function closeRunConfirmModal() {
+  document.getElementById('runConfirmModal').classList.remove('open');
+  _runConfirmSkillId = null;
+  _runConfirmBtn = null;
+}
+
+async function doRunSkillNow() {
+  const id = _runConfirmSkillId;
+  const btn = _runConfirmBtn;
+  closeRunConfirmModal();
+  if (!id) return;
+  if (btn) { btn.disabled = true; btn.textContent = '実行中...'; }
   try {
     const resp = await fetch(`/api/skills/${id}/run`, { method: 'POST' });
     const reader = resp.body.getReader();
@@ -622,12 +678,13 @@ async function runSkillNow(id, title, btn) {
         if (!line.startsWith('data:')) continue;
         try {
           const d = JSON.parse(line.slice(5));
-          if (d.done) { btn.textContent = '✓ 実行完了'; setTimeout(() => { btn.disabled = false; btn.textContent = '▶ 今すぐ実行'; }, 3000); }
+          if (d.done && btn) { btn.textContent = '✓ 実行完了'; setTimeout(() => { btn.disabled = false; btn.textContent = '▶ 今すぐ実行'; }, 3000); }
         } catch {}
       }
     }
   } catch(e) {
-    alert(e.message); btn.disabled = false; btn.textContent = '▶ 今すぐ実行';
+    alert(e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '▶ 今すぐ実行'; }
   }
 }
 

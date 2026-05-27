@@ -56,10 +56,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','update_sheet_range','list_calendar_events','list_gmail_messages','register_task']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','update_sheet_range','list_calendar_events','list_gmail_messages','register_task']),
-  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','update_sheet_range','list_calendar_events','list_gmail_messages','register_task']),
-  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','read_drive_file','update_sheet_range','list_calendar_events','list_gmail_messages','register_task'])
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
 };
 
 app.set('trust proxy', 1);
@@ -238,6 +238,29 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_fblog_rep ON feedback_status_log(report_id, id);
 `);
 
+// トークン使用量テーブル
+db.exec(`
+  CREATE TABLE IF NOT EXISTS token_usage (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    email         TEXT NOT NULL,
+    name          TEXT,
+    input_tokens  INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    model         TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
+    context       TEXT NOT NULL DEFAULT 'chat',
+    ts            TEXT DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_tu_email ON token_usage(email, ts DESC);
+  CREATE INDEX IF NOT EXISTS idx_tu_ts    ON token_usage(ts DESC);
+`);
+
+function recordUsage(email, name, inputTokens, outputTokens, model, context) {
+  try {
+    db.prepare('INSERT INTO token_usage (email,name,input_tokens,output_tokens,model,context) VALUES (?,?,?,?,?,?)')
+      .run(email, name || '', inputTokens || 0, outputTokens || 0, model || 'claude-sonnet-4-6', context || 'chat');
+  } catch(e) { console.error('usage record err:', e.message); }
+}
+
 // スケジュール拡張カラム（既存DBへの追加）
 ['ALTER TABLE scheduled_tasks ADD COLUMN schedule_type TEXT DEFAULT \'interval\'',
  'ALTER TABLE scheduled_tasks ADD COLUMN schedule_hour INTEGER',
@@ -322,8 +345,11 @@ app.get('/auth/google', (req, res, next) => {
   scope: [
     'profile', 'email',
     'https://www.googleapis.com/auth/drive.readonly',
+    'https://www.googleapis.com/auth/drive.file',
     'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/calendar.readonly'
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.send'
   ],
   accessType: 'offline',
   hd: ALLOWED_DOMAIN
@@ -573,7 +599,9 @@ function getSystemPrompt(role) {
 - \`send_chatwork_message\`（個人アカウント送信）は必ずユーザーに内容確認してから実行
 - \`send_system_notification\`（システム通知アカウント送信）はユーザー確認不要で送信可能。定期タスクや自動通知に使用する
 - WP公開は必ずユーザーに内容確認してから実行
-- \`update_sheet_range\`（Sheets書き込み）は必ず2段階フロー: ①confirmed なしで呼ぶ → プレビューが返る → ②ユーザーに「○○シートの○○セルに○○を書きます。よろしいですか？」と提示 → ③ユーザーが「OK」「実行して」「はい」等で承認 → ④confirmed:true を付けて再呼出 → 実際に書き込み。スケジュールタスクからの呼出時は、タスク登録時にユーザーが steps を確認しているため confirmed:true で直接呼んでよい
+- \`update_sheet_range\` / \`append_sheet_rows\`（Sheets書き込み）, \`send_gmail\`（Gmail送信）, \`create_calendar_event\`（予定作成）, \`create_drive_file\`（Driveファイル作成）はすべて2段階フロー必須: ①confirmed なしで呼ぶ → プレビューが返る → ②ユーザーに「○○を○○します。よろしいですか？」と提示 → ③ユーザーが「OK」「実行して」「はい」等で承認 → ④confirmed:true を付けて再呼出 → 実際に実行。スケジュールタスクからの呼出時は confirmed:true で直接呼んでよい
+- \`fetch_url\` は任意のWebページを取得可能。社内/ローカルIPは自動ブロック。HTMLはタグ除去テキストで返される（mode=html で生取得も可）
+- スプレッドシートをファイル名で探したいときは \`search_drive_files\` を使う（mime_type: "application/vnd.google-apps.spreadsheet" を指定すると絞り込める）
 - DBはSELECTのみ。更新系は不可
 - ツールがエラーになっても代替手段があれば黙って試す。すべての手段が尽きてから初めてユーザーに報告する
 
@@ -825,6 +853,33 @@ const TOOLS = [
       required: ['file_id', 'range', 'values']
     }
   },
+  {
+    name: 'append_sheet_rows',
+    description: 'Google Sheetsの末尾にデータ行を追加する。ログ記録・新規レコード追加など既存データの後ろに追記したい場合に使う。update_sheet_rangeと同じく2段階フロー必須: ①confirmed なしでプレビュー → ②ユーザー承認後に confirmed:true で実行。スケジュールタスクからの呼出時は confirmed:true で直接呼んでよい。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_id:    { type: 'string', description: 'スプレッドシートのID' },
+        sheet_name: { type: 'string', description: 'タブ名（例: "Sheet1"、"ログ"）。省略時は先頭タブ' },
+        values:     { type: 'array', description: '追加する行の2次元配列（例: [["2024-01-01","田中","完了"]]）', items: { type: 'array', items: {} } },
+        confirmed:  { type: 'boolean', description: 'true の場合のみ実際に追記する。省略時はプレビューを返す' }
+      },
+      required: ['file_id', 'values']
+    }
+  },
+  {
+    name: 'search_drive_files',
+    description: 'Google Driveをファイル名・MIMEタイプで検索する。スプレッドシートやドキュメントをファイル名で探してIDを取得したい場合に使う。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query:       { type: 'string', description: '検索するファイル名（部分一致）' },
+        mime_type:   { type: 'string', description: 'MIMEタイプフィルタ。スプレッドシート: application/vnd.google-apps.spreadsheet、ドキュメント: application/vnd.google-apps.document。省略時は全種類' },
+        max_results: { type: 'number', description: '最大件数（デフォルト20）' }
+      },
+      required: ['query']
+    }
+  },
   // fetch_corp_api / fetch_corp_page は corp 側 /api/agent.php が現在閉鎖中（503）のため
   // 一時的にツール定義から除外しています。corp が再開されたら復活させてください。
   // 復活時の参照: CORP_API_ALLOWED, executeTool 内の case 'fetch_corp_api' / 'fetch_corp_page'
@@ -881,6 +936,66 @@ const TOOLS = [
         body:    { type: 'string', description: '送信するメッセージ本文（Chatwork記法可）' }
       },
       required: ['room_id', 'body']
+    }
+  },
+  {
+    name: 'fetch_url',
+    description: '任意のWebページのURLを取得して内容をテキストとして返す。競合調査・ニュース取得・公開情報の参照に使う。HTMLは自動でテキストに変換される（タグ除去）。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: '取得するURL（https://...）' },
+        mode: { type: 'string', enum: ['text', 'html', 'json'], description: 'text=タグ除去テキスト(既定) / html=生HTML / json=JSONパース結果' }
+      },
+      required: ['url']
+    }
+  },
+  {
+    name: 'send_gmail',
+    description: 'Gmailからメールを送信する。必ず2段階フロー: ①confirmed なしで呼ぶ → プレビューを返す → ②ユーザーに「○○宛に件名○○で送ります。よろしいですか？」と提示 → ③ユーザー承認 → ④confirmed:true で再呼出して送信。スケジュールタスクからは confirmed:true で直接送信可。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: '宛先メールアドレス（カンマ区切りで複数可）' },
+        subject: { type: 'string', description: '件名' },
+        body: { type: 'string', description: '本文（プレーンテキスト）' },
+        cc: { type: 'string', description: 'CC（任意）' },
+        bcc: { type: 'string', description: 'BCC（任意）' },
+        confirmed: { type: 'boolean', description: 'true の場合のみ実際に送信。falseまたは省略時はプレビュー' }
+      },
+      required: ['to', 'subject', 'body']
+    }
+  },
+  {
+    name: 'create_calendar_event',
+    description: 'Googleカレンダーに予定を新規作成する。必ず2段階フロー: ①confirmed なしでプレビュー → ②ユーザー承認 → ③confirmed:true で実行。日時はISO 8601形式（例: 2026-06-01T09:00:00+09:00）。スケジュールタスクからは confirmed:true で直接実行可。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        summary: { type: 'string', description: '予定タイトル' },
+        start: { type: 'string', description: '開始日時 ISO 8601 (例: 2026-06-01T09:00:00+09:00)' },
+        end: { type: 'string', description: '終了日時 ISO 8601 (例: 2026-06-01T10:00:00+09:00)' },
+        description: { type: 'string', description: '予定の詳細（任意）' },
+        location: { type: 'string', description: '場所（任意）' },
+        attendees: { type: 'array', description: '参加者のメールアドレス配列（任意）', items: { type: 'string' } },
+        confirmed: { type: 'boolean', description: 'true の場合のみ実際に作成' }
+      },
+      required: ['summary', 'start', 'end']
+    }
+  },
+  {
+    name: 'create_drive_file',
+    description: 'Google Driveに新規ファイルを作成する。対応: Google Docs(text), Google Sheets(CSV文字列), 通常テキストファイル。必ず2段階フロー: ①confirmed なしでプレビュー → ②ユーザー承認 → ③confirmed:true で実行。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'ファイル名' },
+        type: { type: 'string', enum: ['doc', 'sheet', 'text'], description: 'doc=Google Docs, sheet=Google Sheets, text=テキストファイル' },
+        content: { type: 'string', description: 'ファイル内容。docはプレーンテキスト、sheetはCSV、textはそのまま' },
+        folder_id: { type: 'string', description: '保存先フォルダID（任意。省略時はマイドライブ直下）' },
+        confirmed: { type: 'boolean', description: 'true の場合のみ実際に作成' }
+      },
+      required: ['name', 'type', 'content']
     }
   }
 ];
@@ -1085,6 +1200,53 @@ async function executeTool(name, input, user) {
         updatedCells: r.data.updatedCells
       };
     }
+    case 'append_sheet_rows': {
+      const sheets = getSheetsClientForUser(user);
+      const meta = await sheets.spreadsheets.get({ spreadsheetId: input.file_id, fields: 'properties.title,sheets.properties.title' });
+      const allSheetTitles = (meta.data.sheets || []).map(s => s.properties.title);
+      const targetSheet = input.sheet_name || allSheetTitles[0];
+      if (!targetSheet) throw new Error('スプレッドシートにタブがありません');
+      if (input.sheet_name && !allSheetTitles.includes(input.sheet_name)) {
+        return { error: `タブ「${input.sheet_name}」が見つかりません。利用可能: ${allSheetTitles.join(', ')}` };
+      }
+      if (!input.confirmed) {
+        audit(user.email, user.name, 'tool.sheet_append.preview', { fileId: input.file_id, sheet: targetSheet, rows: input.values?.length });
+        return {
+          preview: true,
+          message: 'これは追記プレビューです。ユーザーに対象シート名・追記内容を提示し、明示的な承認（「OK」「実行して」など）を得てから confirmed:true を付けて再度呼んでください。',
+          spreadsheet_title: meta.data.properties?.title,
+          sheet_name: targetSheet,
+          rows_to_append: input.values
+        };
+      }
+      audit(user.email, user.name, 'tool.sheet_append.execute', { fileId: input.file_id, sheet: targetSheet, rows: input.values?.length });
+      const r = await sheets.spreadsheets.values.append({
+        spreadsheetId: input.file_id,
+        range: targetSheet,
+        valueInputOption: 'USER_ENTERED',
+        insertDataOption: 'INSERT_ROWS',
+        requestBody: { values: input.values }
+      });
+      return {
+        ok: true,
+        updatedRange: r.data.updates?.updatedRange,
+        updatedRows: r.data.updates?.updatedRows,
+        updatedCells: r.data.updates?.updatedCells
+      };
+    }
+    case 'search_drive_files': {
+      audit(user.email, user.name, 'tool.drive_search', { query: input.query });
+      const drive = getDriveClientForUser(user);
+      let q = `name contains '${input.query.replace(/'/g, "\\'")}' and trashed=false`;
+      if (input.mime_type) q += ` and mimeType='${input.mime_type}'`;
+      const r = await drive.files.list({
+        q,
+        fields: 'files(id,name,mimeType,modifiedTime,parents)',
+        orderBy: 'modifiedTime desc',
+        pageSize: input.max_results || 20
+      });
+      return r.data.files || [];
+    }
     // case 'fetch_corp_api' / 'fetch_corp_page' は corp 側 agent.php が現在閉鎖中（503）のため
     // ツール定義から除外しています。corp 側を再開する際に git history から復元してください。
     // 復元元コミット: 7251ba0 / ec7d66c7 より前
@@ -1189,6 +1351,122 @@ async function executeTool(name, input, user) {
       });
       if (!res.ok) throw new Error(`システム通知送信エラー: ${res.status} ${await res.text()}`);
       return await res.json();
+    }
+    case 'fetch_url': {
+      const u = new URL(input.url);
+      if (!['http:', 'https:'].includes(u.protocol)) throw new Error('http(s) URLのみ対応');
+      // SSRF対策: ローカル/プライベートアドレスをブロック
+      const host = u.hostname.toLowerCase();
+      if (host === 'localhost' || host === '0.0.0.0' || host.startsWith('127.') || host.startsWith('10.') || host.startsWith('192.168.') || host.startsWith('169.254.') || /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host) || host.endsWith('.internal') || host.endsWith('.local')) {
+        throw new Error(`内部アドレス ${host} へのアクセスは禁止されています`);
+      }
+      audit(user.email, user.name, 'tool.fetch_url', { url: input.url, mode: input.mode });
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 15000);
+      const r = await fetch(input.url, { signal: ctrl.signal, headers: { 'User-Agent': 'Acrovision-AI-Agent/1.0' }, redirect: 'follow' });
+      clearTimeout(to);
+      if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
+      const raw = await r.text();
+      const mode = input.mode || 'text';
+      if (mode === 'json') {
+        try { return { url: input.url, status: r.status, json: JSON.parse(raw) }; } catch(e) { throw new Error('JSONとしてパースできません: ' + e.message); }
+      }
+      if (mode === 'html') {
+        return { url: input.url, status: r.status, content: raw.slice(0, 60000) };
+      }
+      // text: HTMLタグを除去
+      const text = raw
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+        .replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*\n/g, '\n\n').trim();
+      return { url: input.url, status: r.status, content: text.slice(0, 60000) };
+    }
+    case 'send_gmail': {
+      const gmail = getGmailClientForUser(user);
+      if (!input.confirmed) {
+        audit(user.email, user.name, 'tool.gmail_send.preview', { to: input.to, subject: input.subject });
+        return {
+          preview: true,
+          message: 'これはメール送信プレビューです。ユーザーに宛先・件名・本文を提示し、明示的な承認を得てから confirmed:true で再度呼んでください。',
+          from: user.email,
+          to: input.to,
+          cc: input.cc || '',
+          bcc: input.bcc || '',
+          subject: input.subject,
+          body_preview: input.body.slice(0, 1000)
+        };
+      }
+      audit(user.email, user.name, 'tool.gmail_send.execute', { to: input.to, subject: input.subject });
+      const headers = [
+        `To: ${input.to}`,
+        input.cc ? `Cc: ${input.cc}` : null,
+        input.bcc ? `Bcc: ${input.bcc}` : null,
+        `Subject: =?UTF-8?B?${Buffer.from(input.subject).toString('base64')}?=`,
+        'MIME-Version: 1.0',
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: base64'
+      ].filter(Boolean).join('\r\n');
+      const message = headers + '\r\n\r\n' + Buffer.from(input.body).toString('base64');
+      const raw = Buffer.from(message).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const r = await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
+      return { ok: true, id: r.data.id, threadId: r.data.threadId };
+    }
+    case 'create_calendar_event': {
+      const cal = getCalendarClientForUser(user);
+      if (!input.confirmed) {
+        audit(user.email, user.name, 'tool.calendar_create.preview', { summary: input.summary });
+        return {
+          preview: true,
+          message: 'これは予定作成プレビューです。ユーザーに内容を提示し、明示的な承認を得てから confirmed:true で再度呼んでください。',
+          summary: input.summary,
+          start: input.start,
+          end: input.end,
+          description: input.description || '',
+          location: input.location || '',
+          attendees: input.attendees || []
+        };
+      }
+      audit(user.email, user.name, 'tool.calendar_create.execute', { summary: input.summary, start: input.start });
+      const event = {
+        summary: input.summary,
+        start: { dateTime: input.start },
+        end: { dateTime: input.end },
+        description: input.description,
+        location: input.location,
+        attendees: (input.attendees || []).map(email => ({ email }))
+      };
+      const r = await cal.events.insert({ calendarId: 'primary', requestBody: event });
+      return { ok: true, id: r.data.id, htmlLink: r.data.htmlLink, summary: r.data.summary, start: r.data.start, end: r.data.end };
+    }
+    case 'create_drive_file': {
+      const drive = getDriveClientForUser(user);
+      if (!input.confirmed) {
+        audit(user.email, user.name, 'tool.drive_create.preview', { name: input.name, type: input.type });
+        return {
+          preview: true,
+          message: 'これはDriveファイル作成プレビューです。ユーザーに内容を提示し、明示的な承認を得てから confirmed:true で再度呼んでください。',
+          file_name: input.name,
+          file_type: input.type,
+          folder_id: input.folder_id || '（マイドライブ直下）',
+          content_preview: input.content.slice(0, 500)
+        };
+      }
+      audit(user.email, user.name, 'tool.drive_create.execute', { name: input.name, type: input.type });
+      const mimeMap = {
+        doc: { source: 'text/plain', target: 'application/vnd.google-apps.document' },
+        sheet: { source: 'text/csv', target: 'application/vnd.google-apps.spreadsheet' },
+        text: { source: 'text/plain', target: null }
+      };
+      const m = mimeMap[input.type];
+      if (!m) throw new Error('type は doc / sheet / text のいずれか');
+      const fileMetadata = { name: input.name };
+      if (m.target) fileMetadata.mimeType = m.target;
+      if (input.folder_id) fileMetadata.parents = [input.folder_id];
+      const media = { mimeType: m.source, body: input.content };
+      const r = await drive.files.create({ requestBody: fileMetadata, media, fields: 'id,name,mimeType,webViewLink' });
+      return { ok: true, id: r.data.id, name: r.data.name, mimeType: r.data.mimeType, webViewLink: r.data.webViewLink };
     }
     default:
       throw new Error(`Unknown tool: ${name}`);
@@ -1946,9 +2224,15 @@ app.post('/api/ai/chat', async (req, res) => {
 
 // ── Google Calendar API ──
 function getCalendarClientForUser(user) {
-  const tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_calendar_tokens WHERE email=?').get(user.email);
+  let tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_calendar_tokens WHERE email=?').get(user.email);
+  let tableName = 'user_calendar_tokens';
   if (!tokenRow?.refresh_token) {
-    throw new Error('Googleカレンダーが未連携です。カレンダーボタンから連携してください');
+    // メインログインのスコープに calendar が含まれるためフォールバック
+    tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
+    tableName = 'user_drive_tokens';
+  }
+  if (!tokenRow?.refresh_token) {
+    throw new Error('Googleカレンダー未連携。一度ログアウトして再ログインし、カレンダー権限を許可してください');
   }
   const oauth2 = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -1957,7 +2241,7 @@ function getCalendarClientForUser(user) {
   oauth2.setCredentials({ access_token: tokenRow.access_token, refresh_token: tokenRow.refresh_token });
   oauth2.on('tokens', tokens => {
     if (tokens.access_token) {
-      db.prepare("UPDATE user_calendar_tokens SET access_token=?, updated_at=datetime('now','localtime') WHERE email=?")
+      db.prepare(`UPDATE ${tableName} SET access_token=?, updated_at=datetime('now','localtime') WHERE email=?`)
         .run(tokens.access_token, user.email);
     }
   });
@@ -2099,9 +2383,14 @@ app.get('/api/drive/read/:id', async (req, res) => {
 
 // ── Gmail API ──
 function getGmailClientForUser(user) {
-  const tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_gmail_tokens WHERE email=?').get(user.email);
+  let tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_gmail_tokens WHERE email=?').get(user.email);
+  let tableName = 'user_gmail_tokens';
   if (!tokenRow?.refresh_token) {
-    throw new Error('Gmailが未連携です。GmailボタンからGmailに連携してください');
+    tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
+    tableName = 'user_drive_tokens';
+  }
+  if (!tokenRow?.refresh_token) {
+    throw new Error('Gmail未連携。一度ログアウトして再ログインし、Gmail権限を許可してください');
   }
   const oauth2 = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -2110,7 +2399,7 @@ function getGmailClientForUser(user) {
   oauth2.setCredentials({ access_token: tokenRow.access_token, refresh_token: tokenRow.refresh_token });
   oauth2.on('tokens', tokens => {
     if (tokens.access_token) {
-      db.prepare("UPDATE user_gmail_tokens SET access_token=?, updated_at=datetime('now','localtime') WHERE email=?")
+      db.prepare(`UPDATE ${tableName} SET access_token=?, updated_at=datetime('now','localtime') WHERE email=?`)
         .run(tokens.access_token, user.email);
     }
   });
