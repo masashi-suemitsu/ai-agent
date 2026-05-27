@@ -39,11 +39,8 @@ header {
   box-shadow: 0 1px 4px rgba(0,0,0,.05);
 }
 .header-left { display: flex; align-items: center; gap: 10px; }
-.header-logo {
-  width: 28px; height: 28px; background: var(--primary); border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 14px; font-weight: 800;
-}
+.header-logo { width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; }
+.header-logo img { width: 100%; height: 100%; display: block; border-radius: 8px; }
 header h1 { font-size: 15px; font-weight: 700; }
 header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); margin-left: 8px; }
 .back-btn {
@@ -165,7 +162,7 @@ td.muted { color: var(--text-light); }
 <body>
 <header>
   <div class="header-left">
-    <div class="header-logo">T</div>
+    <div class="header-logo"><img src="/assets/logo.png" alt="タスクAIエージェント"></div>
     <h1>タスクAIエージェント<small>サービス概要</small></h1>
   </div>
   <a href="/" class="back-btn">← チャットに戻る</a>

@@ -148,7 +148,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 </header>
 
 <div class="page">
-  <div class="tab-nav">
+  <div class="tab-nav" id="tabNav">
     <button class="tab-btn active" onclick="switchTab('tasks')">⏰ タスク</button>
     <button class="tab-btn" onclick="switchTab('history')">📊 実行履歴</button>
     <button class="tab-btn" onclick="switchTab('skills')">⚙️ スキル</button>
@@ -184,6 +184,11 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   <!-- ─ 権限・ルール ─ -->
   <div class="tab-content" id="tab-rules">
     <div id="rulesContent"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+  </div>
+
+  <!-- ─ ユーザー管理（管理者専用） ─ -->
+  <div class="tab-content" id="tab-users">
+    <div id="userMgmtContent"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
 </div>
 
@@ -235,6 +240,53 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <label>実行手順</label>
       <textarea id="editTaskSteps" rows="9" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;line-height:1.75;resize:vertical;outline:none;font-family:inherit;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
     </div>
+    <div class="modal-field" id="editScheduleField">
+      <label>スケジュール</label>
+      <div style="display:flex;gap:12px;margin:6px 0 10px;">
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:normal;">
+          <input type="radio" name="editSchedType" value="interval" checked onchange="editOnSchedTypeChange()"> 間隔指定
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:normal;">
+          <input type="radio" name="editSchedType" value="daily" onchange="editOnSchedTypeChange()"> 毎日
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:normal;">
+          <input type="radio" name="editSchedType" value="weekly" onchange="editOnSchedTypeChange()"> 毎週
+        </label>
+      </div>
+      <div id="editIntervalSub">
+        <select id="editInterval" style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;">
+          <option value="30">30分ごと</option>
+          <option value="60">1時間ごと</option>
+          <option value="120">2時間ごと</option>
+          <option value="240">4時間ごと</option>
+          <option value="480">8時間ごと</option>
+          <option value="1440">24時間ごと</option>
+        </select>
+      </div>
+      <div id="editDailySub" style="display:none;">
+        <label style="font-size:12px;color:var(--text-light);font-weight:normal;">実行時刻（JST）</label>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+          <input type="number" id="editDailyHour" min="0" max="23" value="9" style="width:60px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;"> 時
+          <input type="number" id="editDailyMin" min="0" max="59" value="0" style="width:60px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;"> 分
+        </div>
+      </div>
+      <div id="editWeeklySub" style="display:none;">
+        <label style="font-size:12px;color:var(--text-light);font-weight:normal;">実行曜日と時刻（JST）</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
+          <select id="editWeekday" style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;">
+            <option value="1">月曜</option>
+            <option value="2">火曜</option>
+            <option value="3">水曜</option>
+            <option value="4">木曜</option>
+            <option value="5">金曜</option>
+            <option value="6">土曜</option>
+            <option value="0">日曜</option>
+          </select>
+          <input type="number" id="editWeeklyHour" min="0" max="23" value="9" style="width:60px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;"> 時
+          <input type="number" id="editWeeklyMin" min="0" max="59" value="0" style="width:60px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;"> 分
+        </div>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeEditTask()">キャンセル</button>
       <button class="btn btn-primary" id="editTaskSaveBtn" onclick="saveEditTask()">保存する</button>
@@ -259,15 +311,51 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       </div>
     </div>
     <div class="modal-field" id="mgRecurringField">
-      <label>実行間隔</label>
-      <select id="modalInterval">
-        <option value="30">30分ごと</option>
-        <option value="60" selected>1時間ごと</option>
-        <option value="120">2時間ごと</option>
-        <option value="240">4時間ごと</option>
-        <option value="480">8時間ごと</option>
-        <option value="1440">毎日（24時間ごと）</option>
-      </select>
+      <label>繰り返しパターン</label>
+      <div style="display:flex;gap:12px;margin:6px 0 10px;">
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:normal;">
+          <input type="radio" name="mgSchedType" value="interval" checked onchange="mgOnSchedTypeChange()"> 間隔指定
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:normal;">
+          <input type="radio" name="mgSchedType" value="daily" onchange="mgOnSchedTypeChange()"> 毎日
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:normal;">
+          <input type="radio" name="mgSchedType" value="weekly" onchange="mgOnSchedTypeChange()"> 毎週
+        </label>
+      </div>
+      <div id="mgIntervalSub">
+        <select id="modalInterval">
+          <option value="30">30分ごと</option>
+          <option value="60" selected>1時間ごと</option>
+          <option value="120">2時間ごと</option>
+          <option value="240">4時間ごと</option>
+          <option value="480">8時間ごと</option>
+          <option value="1440">24時間ごと</option>
+        </select>
+      </div>
+      <div id="mgDailySub" style="display:none;">
+        <label style="font-size:12px;color:var(--text-light);font-weight:normal;">実行時刻（JST）</label>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+          <input type="number" id="mgDailyHour" min="0" max="23" value="9" style="width:60px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;"> 時
+          <input type="number" id="mgDailyMin" min="0" max="59" value="0" style="width:60px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;"> 分
+        </div>
+      </div>
+      <div id="mgWeeklySub" style="display:none;">
+        <label style="font-size:12px;color:var(--text-light);font-weight:normal;">実行曜日と時刻（JST）</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
+          <select id="mgWeekday" style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;">
+            <option value="1">月曜</option>
+            <option value="2">火曜</option>
+            <option value="3">水曜</option>
+            <option value="4">木曜</option>
+            <option value="5">金曜</option>
+            <option value="6">土曜</option>
+            <option value="0">日曜</option>
+          </select>
+          <input type="number" id="mgWeeklyHour" min="0" max="23" value="9" style="width:60px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;"> 時
+          <input type="number" id="mgWeeklyMin" min="0" max="59" value="0" style="width:60px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;"> 分
+        </div>
+      </div>
     </div>
     <div class="modal-field" id="mgOnceField" style="display:none;">
       <label>実行日時</label>
@@ -293,6 +381,14 @@ const _skillCache = {};
   currentUser = await fetch('/api/me').then(r => r.json());
   if (!currentUser) { location.href = '/login'; return; }
   renderUserBadge(currentUser);
+  if (currentUser.role === 'admin') {
+    const nav = document.getElementById('tabNav');
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn';
+    btn.textContent = '👤 ユーザー';
+    btn.onclick = () => switchTab('users');
+    nav.appendChild(btn);
+  }
   await Promise.all([loadTasks(), loadSkills()]);
   renderRules(currentUser.role);
   loadCustomRules();
@@ -324,6 +420,7 @@ function switchTab(name) {
   event.currentTarget.classList.add('active');
   if (name === 'history') loadHistory();
   if (name === 'rules') loadCustomRules();
+  if (name === 'users') loadUsers();
 }
 
 // ─ 定期タスク ─
@@ -368,7 +465,7 @@ function renderTasks(tasks) {
       : `<span class="badge badge-gray">${isOnce && t.last_status === 'done' ? '✓ 実行済' : '⏸ 停止中'}</span>`;
     const scheduleMeta = isOnce
       ? `<span>実行日時: ${nextRun}</span><span>前回: ${lastRun}</span>`
-      : `<span>🔄 ${esc(intervalLabel(t.interval_min))}</span><span>次回: ${nextRun}</span><span>前回: ${lastRun}</span>`;
+      : `<span>🔄 ${esc(scheduleLabel(t))}</span><span>次回: ${nextRun}</span><span>前回: ${lastRun}</span>`;
     return `<div class="card" id="task-card-${t.id}">
       <div class="card-header">
         <div class="card-title">${typeBadge} ${esc(t.skill_title || t.skill_name)}</div>
@@ -397,28 +494,10 @@ function renderTasks(tasks) {
         </div>
         <button class="btn btn-outline" onclick="runTaskNow(${t.id}, this)" title="今すぐ実行">▶ 実行</button>
         <button class="btn btn-outline" onclick="openEditTask(${t.id})">✏️ 編集</button>
-        ${!isOnce ? `<button class="btn btn-outline" onclick="openIntervalEdit(${t.id}, ${t.interval_min})">間隔を変更</button>` : ''}
         <button class="btn btn-danger" onclick="deleteTask(${t.id})">削除</button>
-      </div>
-      <div class="interval-row" id="interval-row-${t.id}">
-        <select id="interval-select-${t.id}">
-          <option value="30">30分ごと</option>
-          <option value="60">1時間ごと</option>
-          <option value="120">2時間ごと</option>
-          <option value="240">4時間ごと</option>
-          <option value="480">8時間ごと</option>
-          <option value="1440">毎日</option>
-        </select>
-        <button class="btn btn-primary" onclick="saveInterval(${t.id})">保存</button>
-        <button class="btn btn-outline" onclick="closeIntervalEdit(${t.id})">キャンセル</button>
       </div>
     </div>`;
   }).join('');
-  // interval select の初期値をセット
-  tasks.forEach(t => {
-    const sel = document.getElementById(`interval-select-${t.id}`);
-    if (sel) sel.value = String(t.interval_min);
-  });
 }
 
 function openIntervalEdit(id, current) {
@@ -553,7 +632,28 @@ function openEditTask(id) {
   document.getElementById('editTaskId').value = id;
   document.getElementById('editTaskTitle').value = t.skill_title || t.skill_name || '';
   document.getElementById('editTaskSteps').value = t.steps || '';
+  const isOnce = t.task_type === 'once';
+  document.getElementById('editScheduleField').style.display = isOnce ? 'none' : '';
+  if (!isOnce) {
+    const st = t.schedule_type || 'interval';
+    document.querySelector(`input[name="editSchedType"][value="${st}"]`).checked = true;
+    document.getElementById('editIntervalSub').style.display = st === 'interval' ? '' : 'none';
+    document.getElementById('editDailySub').style.display = st === 'daily' ? '' : 'none';
+    document.getElementById('editWeeklySub').style.display = st === 'weekly' ? '' : 'none';
+    document.getElementById('editInterval').value = String(t.interval_min || 60);
+    document.getElementById('editDailyHour').value = t.schedule_hour ?? 9;
+    document.getElementById('editDailyMin').value = t.schedule_minute ?? 0;
+    document.getElementById('editWeekday').value = t.schedule_weekday ?? 1;
+    document.getElementById('editWeeklyHour').value = t.schedule_hour ?? 9;
+    document.getElementById('editWeeklyMin').value = t.schedule_minute ?? 0;
+  }
   document.getElementById('editTaskModal').classList.add('open');
+}
+function editOnSchedTypeChange() {
+  const t = document.querySelector('input[name="editSchedType"]:checked').value;
+  document.getElementById('editIntervalSub').style.display = t === 'interval' ? '' : 'none';
+  document.getElementById('editDailySub').style.display = t === 'daily' ? '' : 'none';
+  document.getElementById('editWeeklySub').style.display = t === 'weekly' ? '' : 'none';
 }
 function closeEditTask() {
   document.getElementById('editTaskModal').classList.remove('open');
@@ -566,9 +666,25 @@ async function saveEditTask() {
   const btn = document.getElementById('editTaskSaveBtn');
   btn.disabled = true; btn.textContent = '保存中...';
   try {
+    const body = { skill_title, steps };
+    const t = _taskCache[id] || {};
+    if (t.task_type !== 'once') {
+      const st = document.querySelector('input[name="editSchedType"]:checked').value;
+      body.schedule_type = st;
+      if (st === 'interval') {
+        body.interval_min = parseInt(document.getElementById('editInterval').value);
+      } else if (st === 'daily') {
+        body.schedule_hour = parseInt(document.getElementById('editDailyHour').value);
+        body.schedule_minute = parseInt(document.getElementById('editDailyMin').value);
+      } else if (st === 'weekly') {
+        body.schedule_weekday = parseInt(document.getElementById('editWeekday').value);
+        body.schedule_hour = parseInt(document.getElementById('editWeeklyHour').value);
+        body.schedule_minute = parseInt(document.getElementById('editWeeklyMin').value);
+      }
+    }
     const resp = await fetch(`/api/scheduled-tasks/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skill_title, steps })
+      body: JSON.stringify(body)
     });
     if (!resp.ok) throw new Error((await resp.json()).error || '保存失敗');
     closeEditTask();
@@ -759,13 +875,23 @@ function mgOnTaskTypeChange() {
     document.getElementById('mgRunAt').value = d.toISOString().slice(0, 16);
   }
 }
+function mgOnSchedTypeChange() {
+  const t = document.querySelector('input[name="mgSchedType"]:checked').value;
+  document.getElementById('mgIntervalSub').style.display = t === 'interval' ? '' : 'none';
+  document.getElementById('mgDailySub').style.display = t === 'daily' ? '' : 'none';
+  document.getElementById('mgWeeklySub').style.display = t === 'weekly' ? '' : 'none';
+}
 function openModal(skillId, skillTitle) {
   modalSkillId = skillId;
   document.getElementById('modalSkillTitle').textContent = skillTitle;
   document.getElementById('modalInterval').value = '60';
   document.querySelector('input[name="mgTaskType"][value="recurring"]').checked = true;
+  document.querySelector('input[name="mgSchedType"][value="interval"]').checked = true;
   document.getElementById('mgRecurringField').style.display = '';
   document.getElementById('mgOnceField').style.display = 'none';
+  document.getElementById('mgIntervalSub').style.display = '';
+  document.getElementById('mgDailySub').style.display = 'none';
+  document.getElementById('mgWeeklySub').style.display = 'none';
   document.getElementById('scheduleModal').classList.add('open');
 }
 function closeModal() {
@@ -784,7 +910,18 @@ async function saveSchedule() {
       if (!runAt) { alert('実行日時を指定してください'); btn.disabled = false; btn.textContent = '登録する'; return; }
       body.run_at = new Date(runAt).toISOString();
     } else {
-      body.interval_min = parseInt(document.getElementById('modalInterval').value);
+      const schedType = document.querySelector('input[name="mgSchedType"]:checked').value;
+      body.schedule_type = schedType;
+      if (schedType === 'interval') {
+        body.interval_min = parseInt(document.getElementById('modalInterval').value);
+      } else if (schedType === 'daily') {
+        body.schedule_hour = parseInt(document.getElementById('mgDailyHour').value);
+        body.schedule_minute = parseInt(document.getElementById('mgDailyMin').value);
+      } else if (schedType === 'weekly') {
+        body.schedule_weekday = parseInt(document.getElementById('mgWeekday').value);
+        body.schedule_hour = parseInt(document.getElementById('mgWeeklyHour').value);
+        body.schedule_minute = parseInt(document.getElementById('mgWeeklyMin').value);
+      }
     }
     const resp = await fetch('/api/scheduled-tasks', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -804,10 +941,11 @@ async function saveSchedule() {
 function switchTabByName(name) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  const idx = { tasks: 0, history: 1, skills: 2, rules: 3 };
+  document.getElementById('tab-' + name)?.classList.add('active');
+  const tabNames = ['tasks','history','skills','rules','users'];
+  const idx = tabNames.indexOf(name);
   const btns = document.querySelectorAll('.tab-btn');
-  if (btns[idx[name] ?? 0]) btns[idx[name] ?? 0].classList.add('active');
+  if (btns[idx >= 0 ? idx : 0]) btns[idx >= 0 ? idx : 0].classList.add('active');
   if (name === 'history') loadHistory();
 }
 
@@ -837,7 +975,8 @@ function renderHistory(runs) {
     return;
   }
   runs.forEach(r => { _resultCache[r.id] = r; });
-  el.innerHTML = runs.map(r => {
+  const countNote = `<div style="font-size:11px;color:#a0aec0;text-align:right;margin-bottom:6px;">${runs.length}件表示（直近100件まで）</div>`;
+  el.innerHTML = countNote + runs.map(r => {
     const statusColor = r.status === 'done' ? 'badge-green' : r.status === 'error' ? 'badge-red' : 'badge-orange';
     const statusText  = r.status === 'done' ? '✓ 成功' : r.status === 'error' ? '✗ エラー' : '⟳ 実行中';
     const started  = fmtDt(r.started_at);
@@ -910,13 +1049,103 @@ function intervalLabel(min) {
   if (min < 60)   return `${min}分ごと`;
   if (min === 60) return '1時間ごと';
   if (min < 1440) return `${min/60}時間ごと`;
-  return '毎日';
+  return '24時間ごと';
+}
+function scheduleLabel(t) {
+  if (t.schedule_type === 'daily' && t.schedule_hour != null) {
+    return `毎日 ${String(t.schedule_hour).padStart(2,'0')}:${String(t.schedule_minute||0).padStart(2,'0')}`;
+  }
+  if (t.schedule_type === 'weekly' && t.schedule_hour != null) {
+    const days = ['日','月','火','水','木','金','土'];
+    return `毎週${days[t.schedule_weekday??1]}曜 ${String(t.schedule_hour).padStart(2,'0')}:${String(t.schedule_minute||0).padStart(2,'0')}`;
+  }
+  return intervalLabel(t.interval_min);
 }
 function statusLabel(s) {
   return { done:'完了', running:'実行中', error:'エラー' }[s] || s;
 }
 function statusColor(s) {
   return { done:'badge-green', running:'badge-orange', error:'badge-red' }[s] || 'badge-gray';
+}
+
+// ─ ユーザー管理 ─
+async function loadUsers() {
+  try {
+    const users = await fetch('/api/admin/users').then(r => r.json());
+    renderUsers(users);
+  } catch(e) {
+    document.getElementById('userMgmtContent').innerHTML = `<div class="empty"><p>${esc(e.message)}</p></div>`;
+  }
+}
+
+function renderUsers(users) {
+  const el = document.getElementById('userMgmtContent');
+  if (!users.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">👤</div><h3>ユーザーなし</h3></div>`;
+    return;
+  }
+  const ROLE_LABELS = { admin:'管理者', gyoumu:'業務管理部', eigyo:'営業', recruit:'採用', user:'一般' };
+  const ROLE_COLORS = { admin:'#e53e3e', gyoumu:'#2b6cb0', eigyo:'#276749', recruit:'#6b46c1', user:'#718096' };
+  el.innerHTML = `
+    <div style="font-size:11px;color:#a0aec0;text-align:right;margin-bottom:8px;">${users.length}人</div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#f7f8fc;border-bottom:2px solid var(--border);">
+          <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--text-light);">ユーザー</th>
+          <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--text-light);">ロール</th>
+          <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--text-light);">最終ログイン</th>
+          <th style="padding:10px 12px;text-align:right;font-weight:600;color:var(--text-light);">操作回数</th>
+          <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--text-light);">ロール変更</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${users.map(u => {
+          const roleColor = ROLE_COLORS[u.role] || '#718096';
+          const roleLabel = ROLE_LABELS[u.role] || u.role;
+          const isLocked = u.role_source === 'env_admin';
+          const selectHtml = isLocked
+            ? `<span style="font-size:11px;color:#a0aec0;">変更不可（env）</span>`
+            : `<select onchange="changeUserRole('${esc(u.email)}', this)" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;">
+                ${['admin','gyoumu','eigyo','recruit','user'].map(r =>
+                  `<option value="${r}"${r === u.role ? ' selected' : ''}>${ROLE_LABELS[r]}</option>`
+                ).join('')}
+               </select>`;
+          const updInfo = u.role_updated_at
+            ? `<br><span style="font-size:10px;color:#a0aec0;">${fmtDt(u.role_updated_at)} by ${esc(u.role_updated_by||'')}</span>`
+            : (u.role_source === 'env' ? `<br><span style="font-size:10px;color:#a0aec0;">環境変数</span>` : '');
+          return `<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:10px 12px;">
+              <div style="font-weight:600;">${esc(u.name || u.email)}</div>
+              <div style="font-size:11px;color:#a0aec0;">${esc(u.email)}</div>
+            </td>
+            <td style="padding:10px 12px;">
+              <span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;color:${roleColor};background:${roleColor}18;">${roleLabel}</span>
+              ${updInfo}
+            </td>
+            <td style="padding:10px 12px;color:var(--text-light);">${fmtDt(u.last_login)}</td>
+            <td style="padding:10px 12px;text-align:right;color:var(--text-light);">${u.action_count}</td>
+            <td style="padding:10px 12px;text-align:center;">${selectHtml}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    </div>`;
+}
+
+async function changeUserRole(email, sel) {
+  const role = sel.value;
+  try {
+    const resp = await fetch(`/api/admin/users/${encodeURIComponent(email)}/role`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role })
+    });
+    if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || '失敗'); }
+    await loadUsers();
+  } catch(e) {
+    alert(e.message);
+    await loadUsers();
+  }
 }
 </script>
 </body>

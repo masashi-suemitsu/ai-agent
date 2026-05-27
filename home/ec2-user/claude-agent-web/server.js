@@ -25,6 +25,12 @@ const KANRI_SA_KEY = process.env.KANRI_DRIVE_SA_KEY || path.join(HOME, 'kanri-dr
 function getUserRole(email) {
   const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim());
   if (adminEmails.includes(email)) return 'admin';
+  // DB登録ロールを優先
+  try {
+    const dbRow = db.prepare('SELECT role FROM user_roles WHERE email=?').get(email);
+    if (dbRow) return dbRow.role;
+  } catch(e) {}
+  // 環境変数フォールバック
   const map = {};
   (process.env.ROLE_MAP || '').split(',').forEach(pair => {
     const [e, r] = pair.trim().split(':');
@@ -173,6 +179,23 @@ db.exec(`
   );
 `);
 
+// ユーザーロールテーブル（DBベース管理）
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_roles (
+    email      TEXT PRIMARY KEY,
+    role       TEXT NOT NULL DEFAULT 'user',
+    updated_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_by TEXT
+  );
+`);
+
+// スケジュール拡張カラム（既存DBへの追加）
+['ALTER TABLE scheduled_tasks ADD COLUMN schedule_type TEXT DEFAULT \'interval\'',
+ 'ALTER TABLE scheduled_tasks ADD COLUMN schedule_hour INTEGER',
+ 'ALTER TABLE scheduled_tasks ADD COLUMN schedule_minute INTEGER DEFAULT 0',
+ 'ALTER TABLE scheduled_tasks ADD COLUMN schedule_weekday INTEGER'
+].forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
+
 function audit(email, name, action, details = {}) {
   try {
     db.prepare('INSERT INTO audit_logs (email,name,action,details) VALUES (?,?,?,?)')
@@ -253,7 +276,6 @@ app.get('/auth/google', (req, res, next) => {
     'https://www.googleapis.com/auth/calendar.readonly'
   ],
   accessType: 'offline',
-  prompt: 'consent',
   hd: ALLOWED_DOMAIN
 }));
 
@@ -402,16 +424,24 @@ app.get('/auth/gmail/callback', async (req, res) => {
 
 app.get('/api/me', (req, res) => {
   if (req.isAuthenticated()) {
-    const role = req.user.role || getUserRole(req.user.email);
+    const role = getUserRole(req.user.email);
     return res.json({ ...req.user, role });
   }
   res.json(null);
 });
 
+// ── 公開アセット（ロゴ等。認証前にマウント） ──
+app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), { maxAge: '1d' }));
+
 // ── 認証必須ルート ──
 app.use(requireAuth);
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
+app.use(express.static(path.join(__dirname, 'public'), {
+  extensions: ['html'],
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  }
+}));
 
 // ── 監査ログ閲覧 ──
 app.get('/api/admin/logs', (req, res) => {
@@ -421,6 +451,57 @@ app.get('/api/admin/logs', (req, res) => {
     ? db.prepare('SELECT * FROM audit_logs ORDER BY ts DESC LIMIT 1000').all()
     : db.prepare('SELECT * FROM audit_logs WHERE email=? ORDER BY ts DESC LIMIT 200').all(req.user.email);
   res.json(rows);
+});
+
+// ── ユーザー管理 API（管理者専用） ──
+app.get('/api/admin/users', (req, res) => {
+  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim());
+  if (!adminEmails.includes(req.user.email)) return res.status(403).json({ error: '管理者専用' });
+
+  const users = db.prepare(`
+    SELECT email, MAX(name) as name, MAX(ts) as last_login, COUNT(*) as action_count
+    FROM audit_logs WHERE email != 'unknown'
+    GROUP BY email ORDER BY last_login DESC
+  `).all();
+
+  const dbRoles = {};
+  db.prepare('SELECT email, role, updated_at, updated_by FROM user_roles').all()
+    .forEach(r => { dbRoles[r.email] = r; });
+  const envMap = {};
+  (process.env.ROLE_MAP || '').split(',').forEach(pair => {
+    const [e, r] = pair.trim().split(':');
+    if (e && r) envMap[e.trim()] = r.trim();
+  });
+
+  const result = users.map(u => {
+    const isEnvAdmin = adminEmails.includes(u.email);
+    const dbEntry = dbRoles[u.email];
+    return {
+      ...u,
+      role: isEnvAdmin ? 'admin' : (dbEntry?.role || envMap[u.email] || 'user'),
+      role_source: isEnvAdmin ? 'env_admin' : (dbEntry ? 'db' : (envMap[u.email] ? 'env' : 'default')),
+      role_updated_at: dbEntry?.updated_at || null,
+      role_updated_by: dbEntry?.updated_by || null
+    };
+  });
+  res.json(result);
+});
+
+app.put('/api/admin/users/:email/role', (req, res) => {
+  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim());
+  if (!adminEmails.includes(req.user.email)) return res.status(403).json({ error: '管理者専用' });
+  const { role } = req.body;
+  const validRoles = ['admin', 'gyoumu', 'eigyo', 'recruit', 'user'];
+  if (!validRoles.includes(role)) return res.status(400).json({ error: '無効なロール' });
+  const email = req.params.email;
+  if (adminEmails.includes(email)) return res.status(400).json({ error: 'ADMIN_EMAILS 登録済みのユーザーは変更できません' });
+  db.prepare(`
+    INSERT INTO user_roles (email, role, updated_at, updated_by)
+    VALUES (?, ?, datetime('now','localtime'), ?)
+    ON CONFLICT(email) DO UPDATE SET role=excluded.role, updated_at=excluded.updated_at, updated_by=excluded.updated_by
+  `).run(email, role, req.user.email);
+  audit(req.user.email, req.user.name, 'admin.role_change', { target: email, role });
+  res.json({ ok: true });
 });
 
 // ── Chat API ──
@@ -461,11 +542,16 @@ function getSystemPrompt(role) {
 ## タスクの自動実行（register_task ツール）
 \`register_task\` ツールを使うと、ユーザーの代わりにタスクを自動実行スケジュールに登録できます。
 
-**定期タスク（recurring）**: 指定した間隔（分）で繰り返し自動実行
+**定期タスク（recurring）**: 指定したスケジュールで繰り返し自動実行
+- \`schedule_type='interval'\`（デフォルト）: \`interval_min\` で間隔指定（30/60/120/240/480/1440分）
+- \`schedule_type='daily'\`: 毎日指定時刻に実行（\`schedule_hour\`=時・JST、\`schedule_minute\`=分・省略時0）
+- \`schedule_type='weekly'\`: 毎週指定曜日・時刻に実行（\`schedule_weekday\`=0日/1月/2火/3水/4木/5金/6土）
 **単発タスク（once）**: 指定した日時に1回だけ自動実行
 
 ユーザーが以下のような発言をしたとき、積極的に \`register_task\` を提案・実行してください：
-- 「毎朝○○して」「毎日○○を確認して」→ 定期タスクを提案
+- 「毎朝9時に○○して」「毎日○○を確認して」→ \`schedule_type='daily', schedule_hour=9\` で定期タスクを登録
+- 「毎週月曜9時に○○して」→ \`schedule_type='weekly', schedule_weekday=1, schedule_hour=9\` で定期タスクを登録
+- 「○時間ごとに○○して」→ \`schedule_type='interval', interval_min=X\` で定期タスクを登録
 - 「○時に○○して」「来週月曜に○○して」「明日の朝○○して」→ 単発タスクを提案
 
 タスクを登録する際：
@@ -709,8 +795,12 @@ const TOOLS = [
         skill_title: { type: 'string', description: 'タスクの表示タイトル（省略時はskill_nameと同じ）' },
         description: { type: 'string', description: 'タスクの目的・概要' },
         steps:       { type: 'string', description: 'AIが実行する具体的な手順・指示（Markdown形式）' },
-        interval_min:{ type: 'number', description: '定期タスクの間隔（分）。30/60/120/240/480/1440など。省略時60' },
-        run_at:      { type: 'string', description: '単発タスクの実行日時（ISO 8601形式 例: 2025-06-01T09:00:00）' }
+        schedule_type:   { type: 'string', enum: ['interval','daily','weekly'], description: '繰り返しパターン。interval=間隔指定（省略時デフォルト）、daily=毎日指定時刻、weekly=毎週指定曜日・時刻' },
+        interval_min:    { type: 'number', description: 'schedule_type=intervalのときの間隔（分）。30/60/120/240/480/1440など。省略時60' },
+        schedule_hour:   { type: 'number', description: 'daily/weeklyのとき実行する時刻（時・JST）。例: 9=9時' },
+        schedule_minute: { type: 'number', description: 'daily/weeklyのとき実行する時刻（分）。省略時0' },
+        schedule_weekday:{ type: 'number', description: 'weeklyのとき実行する曜日。0=日/1=月/2=火/3=水/4=木/5=金/6=土' },
+        run_at:          { type: 'string', description: '単発タスクの実行日時（ISO 8601形式 例: 2025-06-01T09:00:00）' }
       },
       required: ['task_type', 'skill_name', 'steps']
     }
@@ -884,7 +974,11 @@ async function executeTool(name, input, user) {
         skill_title,
         description: taskDesc = '',
         steps,
+        schedule_type = 'interval',
         interval_min = 60,
+        schedule_hour,
+        schedule_minute = 0,
+        schedule_weekday,
         run_at
       } = input;
       if (!skill_name || !steps) throw new Error('skill_name と steps は必須です');
@@ -899,17 +993,22 @@ async function executeTool(name, input, user) {
         if (isNaN(d.getTime())) throw new Error(`run_at の形式が不正です: ${run_at}`);
         nextRunAt = toUtcStr(d);
       } else {
-        nextRunAt = toUtcStr(Date.now() + Number(interval_min) * 60000);
+        nextRunAt = calcNextRunAt({ schedule_type, schedule_hour, schedule_minute, schedule_weekday, interval_min });
       }
       const ins = db.prepare(
         `INSERT INTO scheduled_tasks
-           (owner_email, task_type, skill_id, skill_name, skill_title, description, steps, interval_min, run_at, enabled, next_run_at)
-         VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, 1, ?)`
-      ).run(user.email, task_type, skill_name, skill_title || skill_name, taskDesc, steps, Number(interval_min), run_at || null, nextRunAt);
-      audit(user.email, user.name, 'scheduled_task.create_via_chat', { id: ins.lastInsertRowid, task_type, skill_name });
+           (owner_email, task_type, skill_id, skill_name, skill_title, description, steps, interval_min, run_at, enabled, next_run_at, schedule_type, schedule_hour, schedule_minute, schedule_weekday)
+         VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`
+      ).run(user.email, task_type, skill_name, skill_title || skill_name, taskDesc, steps, Number(interval_min), run_at || null, nextRunAt, schedule_type, schedule_hour ?? null, Number(schedule_minute), schedule_weekday ?? null);
+      audit(user.email, user.name, 'scheduled_task.create_via_chat', { id: ins.lastInsertRowid, task_type, skill_name, schedule_type });
+      const wdays = ['日','月','火','水','木','金','土'];
       const label = task_type === 'once'
         ? `単発タスク「${skill_name}」を ${run_at} に登録しました（ID: ${ins.lastInsertRowid}）`
-        : `定期タスク「${skill_name}」を${interval_min}分ごとに実行するよう登録しました（ID: ${ins.lastInsertRowid}）`;
+        : schedule_type === 'daily'
+          ? `定期タスク「${skill_name}」を毎日${schedule_hour}:${String(schedule_minute).padStart(2,'0')}に実行するよう登録しました（ID: ${ins.lastInsertRowid}）`
+          : schedule_type === 'weekly'
+            ? `定期タスク「${skill_name}」を毎週${wdays[schedule_weekday]}曜${schedule_hour}:${String(schedule_minute).padStart(2,'0')}に実行するよう登録しました（ID: ${ins.lastInsertRowid}）`
+            : `定期タスク「${skill_name}」を${interval_min}分ごとに実行するよう登録しました（ID: ${ins.lastInsertRowid}）`;
       return { ok: true, id: ins.lastInsertRowid, message: label };
     }
     case 'send_system_notification': {
@@ -1012,7 +1111,11 @@ app.post('/api/chat', async (req, res) => {
           const result = await executeTool(block.name, block.input, user);
           const resultStr = JSON.stringify(result).slice(0, 80000);
           toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: resultStr });
-          res.write(`data: ${JSON.stringify({ tool: block.name, status: 'done' })}\n\n`);
+          const doneEvent = { tool: block.name, status: 'done' };
+          if (block.name === 'register_task' && result?.ok && result?.id) {
+            doneEvent.task = { id: result.id, title: block.input.skill_title || block.input.skill_name, task_type: block.input.task_type };
+          }
+          res.write(`data: ${JSON.stringify(doneEvent)}\n\n`);
         } catch(e) {
           toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
           res.write(`data: ${JSON.stringify({ tool: block.name, status: 'error', error: e.message })}\n\n`);
@@ -1814,6 +1917,25 @@ function toUtcStr(d) {
   return new Date(d).toISOString().replace('T', ' ').slice(0, 19);
 }
 
+function calcNextRunAt(task) {
+  const JST = 9 * 3600 * 1000;
+  if ((task.schedule_type === 'daily' || task.schedule_type === 'weekly') && task.schedule_hour != null) {
+    const nowMs = Date.now();
+    const nowJst = new Date(nowMs + JST);
+    const target = new Date(nowMs + JST);
+    target.setUTCHours(task.schedule_hour, task.schedule_minute || 0, 0, 0);
+    if (task.schedule_type === 'weekly' && task.schedule_weekday != null) {
+      const diff = (task.schedule_weekday - nowJst.getUTCDay() + 7) % 7;
+      target.setUTCDate(target.getUTCDate() + diff);
+    }
+    if (target <= nowJst) {
+      target.setUTCDate(target.getUTCDate() + (task.schedule_type === 'weekly' ? 7 : 1));
+    }
+    return toUtcStr(target.getTime() - JST);
+  }
+  return toUtcStr(Date.now() + (task.interval_min || 60) * 60000);
+}
+
 // GET /api/scheduled-tasks
 app.get('/api/scheduled-tasks', (req, res) => {
   try {
@@ -1824,7 +1946,7 @@ app.get('/api/scheduled-tasks', (req, res) => {
 
 // POST /api/scheduled-tasks
 app.post('/api/scheduled-tasks', (req, res) => {
-  const { skill_id, task_type = 'recurring', interval_min = 60, run_at } = req.body;
+  const { skill_id, task_type = 'recurring', interval_min = 60, run_at, schedule_type = 'interval', schedule_hour, schedule_minute = 0, schedule_weekday } = req.body;
 
   let taskData = {};
   if (skill_id) {
@@ -1840,25 +1962,25 @@ app.post('/api/scheduled-tasks', (req, res) => {
     if (!run_at) return res.status(400).json({ error: '単発タスクには run_at が必要です' });
     nextRunAt = toUtcStr(run_at);
   } else {
-    nextRunAt = toUtcStr(Date.now() + Number(interval_min) * 60000);
+    nextRunAt = calcNextRunAt({ schedule_type, schedule_hour, schedule_minute, schedule_weekday, interval_min });
   }
 
-  audit(req.user.email, req.user.name, 'scheduled_task.create', { skill_id, task_type, interval_min });
+  audit(req.user.email, req.user.name, 'scheduled_task.create', { skill_id, task_type, interval_min, schedule_type });
   try {
     const result = db.prepare(
       `INSERT INTO scheduled_tasks
-         (owner_email, task_type, skill_id, skill_name, skill_title, description, steps, interval_min, run_at, enabled, next_run_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`
-    ).run(req.user.email, task_type, taskData.skill_id, taskData.skill_name, taskData.skill_title, taskData.description, taskData.steps, Number(interval_min), run_at || null, nextRunAt);
+         (owner_email, task_type, skill_id, skill_name, skill_title, description, steps, interval_min, run_at, enabled, next_run_at, schedule_type, schedule_hour, schedule_minute, schedule_weekday)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`
+    ).run(req.user.email, task_type, taskData.skill_id, taskData.skill_name, taskData.skill_title, taskData.description, taskData.steps, Number(interval_min), run_at || null, nextRunAt, schedule_type, schedule_hour ?? null, Number(schedule_minute), schedule_weekday ?? null);
     res.json({ ok: true, id: result.lastInsertRowid });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // PUT /api/scheduled-tasks/:id
 app.put('/api/scheduled-tasks/:id', (req, res) => {
-  const { interval_min, enabled, skill_title, description, steps } = req.body;
+  const { interval_min, enabled, skill_title, description, steps, schedule_type, schedule_hour, schedule_minute, schedule_weekday } = req.body;
   try {
-    const row = db.prepare('SELECT id FROM scheduled_tasks WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
+    const row = db.prepare('SELECT * FROM scheduled_tasks WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
     if (!row) return res.status(403).json({ error: '権限がありません' });
 
     const updates = [];
@@ -1868,6 +1990,22 @@ app.put('/api/scheduled-tasks/:id', (req, res) => {
     if (skill_title !== undefined) { updates.push('skill_title=?'); params.push(skill_title); }
     if (description !== undefined) { updates.push('description=?'); params.push(description); }
     if (steps !== undefined) { updates.push('steps=?'); params.push(steps); }
+    if (schedule_type !== undefined) { updates.push('schedule_type=?'); params.push(schedule_type); }
+    if (schedule_hour !== undefined) { updates.push('schedule_hour=?'); params.push(schedule_hour); }
+    if (schedule_minute !== undefined) { updates.push('schedule_minute=?'); params.push(schedule_minute); }
+    if (schedule_weekday !== undefined) { updates.push('schedule_weekday=?'); params.push(schedule_weekday); }
+    const schedChanged = schedule_type !== undefined || schedule_hour !== undefined || schedule_minute !== undefined || schedule_weekday !== undefined || interval_min !== undefined;
+    if (schedChanged && row.task_type === 'recurring') {
+      const merged = {
+        schedule_type: schedule_type ?? row.schedule_type ?? 'interval',
+        schedule_hour: schedule_hour ?? row.schedule_hour,
+        schedule_minute: schedule_minute ?? row.schedule_minute ?? 0,
+        schedule_weekday: schedule_weekday ?? row.schedule_weekday,
+        interval_min: interval_min ?? row.interval_min ?? 60
+      };
+      updates.push('next_run_at=?');
+      params.push(calcNextRunAt(merged));
+    }
     if (!updates.length) return res.status(400).json({ error: '更新項目がありません' });
 
     params.push(req.params.id, req.user.email);
@@ -2044,7 +2182,7 @@ function runScheduler() {
           "UPDATE scheduled_tasks SET enabled=0, last_run_at=?, last_status='running' WHERE id=?"
         ).run(now, task.id);
       } else {
-        const nextRun = toUtcStr(Date.now() + task.interval_min * 60000);
+        const nextRun = calcNextRunAt(task);
         db.prepare(
           "UPDATE scheduled_tasks SET next_run_at=?, last_run_at=?, last_status='running' WHERE id=?"
         ).run(nextRun, now, task.id);
