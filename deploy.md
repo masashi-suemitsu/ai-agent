@@ -2,68 +2,62 @@
 
 ## サーバー情報
 - EC2 (claude-agent-server): `52.68.18.9`
-- アプリディレクトリ: `/home/ec2-user/claude-agent-web/`
-- SSH キー: `C:\Users\masashi suemitsu\OneDrive\AWS\claude-agent-key.pem`
+- SSH エイリアス: `claude-agent`（`~/.ssh/config` 設定済み）
+- SSH キー: `C:\Users\masas\OneDrive\AWS\claude-agent-key.pem`
+- アプリディレクトリ: `~/claude-agent-web/`（git リポジトリ）
+- CloudFront: `https://d2jjp21sq86i80.cloudfront.net`
+- プロセス管理: PM2（アプリ名: `claude-agent-web`）
 
-## ローカル ↔ サーバー パス対応
+## リポジトリ構成（2026-05-28 フラット化後）
 
-| ローカル | サーバー |
-|---|---|
-| `home/ec2-user/claude-agent-web/` | `/home/ec2-user/claude-agent-web/` |
+| ローカル | EC2 | GitHub |
+|---|---|---|
+| `C:\Users\masas\OneDrive\Dev-gitacro\ai-agent\` | `/home/ec2-user/claude-agent-web/` | `masashi-suemitsu/ai-agent` |
 
----
+リポジトリルートが EC2 の `~/claude-agent-web/` と 1:1 対応。
 
-## デプロイコマンド
-
-### server.js
 ```
-scp -i "C:\Users\masashi suemitsu\OneDrive\AWS\claude-agent-key.pem" "C:\Users\masashi suemitsu\OneDrive\Dev-gitacro\ai-agent\home\ec2-user\claude-agent-web\server.js" ec2-user@52.68.18.9:/home/ec2-user/claude-agent-web/server.js
-```
-→ pm2 再起動:
-```
-ssh -i "C:\Users\masashi suemitsu\OneDrive\AWS\claude-agent-key.pem" ec2-user@52.68.18.9 "pm2 restart claude-agent-web"
-```
-
-### public/index.html
-```
-scp -i "C:\Users\masashi suemitsu\OneDrive\AWS\claude-agent-key.pem" "C:\Users\masashi suemitsu\OneDrive\Dev-gitacro\ai-agent\home\ec2-user\claude-agent-web\public\index.html" ec2-user@52.68.18.9:/home/ec2-user/claude-agent-web/public/index.html
-```
-
-### public/login.html
-```
-scp -i "C:\Users\masashi suemitsu\OneDrive\AWS\claude-agent-key.pem" "C:\Users\masashi suemitsu\OneDrive\Dev-gitacro\ai-agent\home\ec2-user\claude-agent-web\public\login.html" ec2-user@52.68.18.9:/home/ec2-user/claude-agent-web/public/login.html
+ai-agent/
+├── server.js
+├── public/
+│   ├── index.html
+│   ├── manage.html
+│   └── ...
+├── audit.db / sessions.db  ← git 管理外・EC2 上に保持
+└── node_modules/            ← git 管理外
 ```
 
 ---
 
-## 開発フロー
+## デプロイフロー（git pull 方式）
 
-1. `C:\Users\masashi suemitsu\OneDrive\Dev-gitacro\ai-agent\` でファイル編集
-2. 上記 SCP コマンドでサーバーに反映（pm2 再起動が必要なファイルは再起動）
-3. ブラウザで https://d2jjp21sq86i80.cloudfront.net/ 動作確認
-4. `git commit` & `git push origin main`
+```bash
+# 1. ローカルで編集 → コミット → プッシュ
+git add <files>
+git commit -m "feat/fix/ops: 変更内容"
+git push origin main
 
-## Git
+# 2. EC2 に反映
+ssh claude-agent "cd ~/claude-agent-web && git pull && pm2 restart all"
+```
 
-- ローカル: `C:\Users\masashi suemitsu\OneDrive\Dev-gitacro\ai-agent\`
-- リモート: `https://github.com/masashi-suemitsu/ai-agent`
-- ブランチ: `main`
+> HTML/CSS のみ変更の場合は `pm2 restart` 不要（静的ファイルは即反映）。
 
 ---
 
-## セキュリティ設定 (2026-05-27 ハードニング)
+## セキュリティ設定
 
 ### CloudFront → Origin 認証
 - nginx `/etc/nginx/conf.d/claude-agent.conf` で `X-CloudFront-Secret` ヘッダ照合（不一致は 444 silent close）
 - シークレット値は `.claude/projects/.../memory/reference_cloudfront_secret.md` 参照
-- 直接 `http://52.68.18.9/` を叩いても通らない。テストは CloudFront 経由（`https://d2jjp21sq86i80.cloudfront.net/`）または `-H "X-CloudFront-Secret: <値>"` 付きで
+- 直接 `http://52.68.18.9/` は通らない。テストは CloudFront 経由 または `-H "X-CloudFront-Secret: <値>"` 付きで
 
 ### SSH 制限
-- Security Group `claude-agent-sg` (sg-0034bad266cf52701) で SSH(22) は corp 系と同じ管理者 IP リストのみ許可（27件）
+- Security Group `claude-agent-sg` (sg-0034bad266cf52701) で SSH(22) は管理者 IP のみ許可
 - 新規 IP からアクセスする場合は AWS Console で SG に追加が必要
 - fail2ban (sshd jail, ban=1h) も有効
 
 ### サーバー更新運用
-- OS: Amazon Linux 2023, `sudo dnf upgrade --releasever=<次バージョン>` で minor 更新
-- Node: nodejs22 がデフォルト alternatives (`/etc/alternatives/node -> node-22`)
-- PM2: 7.0.1, Node 22 配下で動作
+- OS: Amazon Linux 2023
+- Node: nodejs22 (`/etc/alternatives/node -> node-22`)
+- PM2: 7.0.1
