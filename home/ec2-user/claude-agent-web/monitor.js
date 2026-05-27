@@ -16,7 +16,7 @@ if (fs.existsSync(ENV_PATH)) {
 
 const STATE_FILE = '/tmp/claude-agent-monitor-state';
 const SECRET = '48fd61e4704a9f597a109489c99325fe1d4f6a1db1f3f37a7b401781a26791c6';
-const NOTIFY_TO = process.env.MONITOR_NOTIFY_TO || 'claude@acrovision.co.jp';
+const NOTIFY_TO = process.env.MONITOR_NOTIFY_TO || 'marketing@acrovision.co.jp';
 const ALERT_AFTER = 2;
 
 function check() {
