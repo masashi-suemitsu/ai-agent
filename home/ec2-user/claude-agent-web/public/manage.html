@@ -746,6 +746,7 @@ function openEditTask(id) {
     document.getElementById('editWeeklyHour').value = t.schedule_hour ?? 9;
     document.getElementById('editWeeklyMin').value = t.schedule_minute ?? 0;
   }
+  document.getElementById('editTaskModel').value = t.model || 'sonnet';
   document.getElementById('editTaskModal').classList.add('open');
 }
 function editOnSchedTypeChange() {
@@ -765,7 +766,7 @@ async function saveEditTask() {
   const btn = document.getElementById('editTaskSaveBtn');
   btn.disabled = true; btn.textContent = '保存中...';
   try {
-    const body = { skill_title, steps };
+    const body = { skill_title, steps, model: document.getElementById('editTaskModel').value };
     const t = _taskCache[id] || {};
     if (t.task_type !== 'once') {
       const st = document.querySelector('input[name="editSchedType"]:checked').value;
@@ -984,6 +985,7 @@ function openModal(skillId, skillTitle) {
   modalSkillId = skillId;
   document.getElementById('modalSkillTitle').textContent = skillTitle;
   document.getElementById('modalInterval').value = '60';
+  document.getElementById('modalModel').value = 'sonnet';
   document.querySelector('input[name="mgTaskType"][value="recurring"]').checked = true;
   document.querySelector('input[name="mgSchedType"][value="interval"]').checked = true;
   document.getElementById('mgRecurringField').style.display = '';
@@ -1003,7 +1005,7 @@ async function saveSchedule() {
   const btn = document.getElementById('modalSaveBtn');
   btn.disabled = true; btn.textContent = '登録中...';
   try {
-    const body = { skill_id: modalSkillId, task_type };
+    const body = { skill_id: modalSkillId, task_type, model: document.getElementById('modalModel').value };
     if (task_type === 'once') {
       const runAt = document.getElementById('mgRunAt').value;
       if (!runAt) { alert('実行日時を指定してください'); btn.disabled = false; btn.textContent = '登録する'; return; }
