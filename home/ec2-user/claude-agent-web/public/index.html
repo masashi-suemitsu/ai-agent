@@ -327,6 +327,14 @@ textarea:focus { border-color: var(--primary); background: #fff; }
 .send-btn:disabled { background: #a0aec0; cursor: default; }
 
 /* ─ Chatwork Panel ─ */
+.panel-backdrop {
+  position: fixed; top: 52px; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,.18); z-index: 100;
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s ease;
+}
+.panel-backdrop.open { opacity: 1; pointer-events: auto; }
+
 .cw-panel {
   position: fixed; top: 52px; right: -440px; width: 420px; bottom: 0;
   background: #fff; border-left: 1px solid var(--border); display: flex;
@@ -498,10 +506,14 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
     <span id="userBadge" style="font-size:12px;color:#718096;"></span>
     <span id="roleBadge" style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;display:none;"></span>
     <a href="/about" class="header-btn" style="text-decoration:none;" title="サービス概要・使い方">❔ ヘルプ</a>
+    <a href="/feedback" class="header-btn" style="text-decoration:none;" title="不具合・改善要望を報告">💡 改善提案</a>
     <a href="/manage" class="header-btn" style="text-decoration:none;">⚙️ 管理</a>
     <a href="/logout" class="header-btn" style="text-decoration:none;">ログアウト</a>
   </div>
 </header>
+
+<!-- ─ Panel Backdrop ─ -->
+<div class="panel-backdrop" id="panelBackdrop" onclick="closeAllPanels()"></div>
 
 <div class="layout">
   <!-- ─ Sidebar ─ -->
@@ -526,6 +538,9 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
           <button class="example-btn" onclick="setExample(this.dataset.text)" data-text="毎週月曜に先週の案件状況をまとめてChatworkに送ってほしい"><span class="ex-icon">📅</span>毎週月曜に先週の案件状況をまとめてChatworkに送ってほしい</button>
           <button class="example-btn" onclick="setExample(this.dataset.text)" data-text="サーバーの状態を毎日チェックして異常があればすぐ知らせてほしい"><span class="ex-icon">🖥️</span>サーバーの状態を毎日チェックして異常があればすぐ知らせてほしい</button>
         </div>
+        <a href="/feedback" style="display:inline-flex;align-items:center;gap:8px;margin-top:24px;padding:10px 18px;background:#fff8e1;border:1px solid #f1e2a8;border-radius:10px;color:#7a5d00;text-decoration:none;font-size:13px;font-weight:600;transition:all .15s;" onmouseover="this.style.background='#fef3c7';this.style.borderColor='#f59f00';" onmouseout="this.style.background='#fff8e1';this.style.borderColor='#f1e2a8';">
+          💡 不具合・改善要望はこちら → 改善提案ボックス
+        </a>
       </div>
     </div>
     <div class="attach-bar" id="attachBar" style="display:none;"></div>
@@ -1079,6 +1094,7 @@ async function toggleHistory() {
   const panel = document.getElementById('historyPanel');
   const btn = document.getElementById('rs-history-btn');
   const isOpen = panel.classList.contains('open');
+  closeAllPanels('historyPanel');
   if (isOpen) {
     panel.classList.remove('open');
     btn.classList.remove('active');
@@ -1087,6 +1103,7 @@ async function toggleHistory() {
     btn.classList.add('active');
     await loadHistory();
   }
+  syncBackdrop();
 }
 
 async function loadHistory() {
@@ -1145,6 +1162,7 @@ async function toggleCw() {
   closeAllPanels('cwPanel');
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
+  syncBackdrop();
   if (!isOpen) {
     await loadChatworkStatus();
   }
@@ -1268,7 +1286,18 @@ const ALL_PANELS = ['cwPanel','drivePanel','calendarPanel','gmailPanel','history
 const ALL_BTNS   = ['rs-chatwork','rs-drive','rs-calendar','rs-gmail','rs-history-btn','rs-schedule-btn'];
 function closeAllPanels(except) {
   ALL_PANELS.forEach((id, i) => { if (id !== except) { document.getElementById(id)?.classList.remove('open'); document.getElementById(ALL_BTNS[i])?.classList.remove('active'); } });
+  syncBackdrop();
 }
+
+function syncBackdrop() {
+  const anyOpen = ALL_PANELS.some(id => document.getElementById(id)?.classList.contains('open'));
+  document.getElementById('panelBackdrop')?.classList.toggle('open', anyOpen);
+}
+
+// ESCキーで開いているパネルを全部閉じる
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeAllPanels();
+});
 
 // ─ 右サイドバー ステータス読み込み ─
 async function loadRightSidebarStatuses() {
@@ -1299,6 +1328,7 @@ async function toggleDrive() {
   closeAllPanels('drivePanel');
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
+  syncBackdrop();
   if (!isOpen) await loadDriveStatus();
 }
 
@@ -1343,6 +1373,7 @@ async function toggleCalendar() {
   closeAllPanels('calendarPanel');
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
+  syncBackdrop();
   if (!isOpen) await loadCalendarStatus();
 }
 
@@ -1413,6 +1444,7 @@ async function toggleGmail() {
   closeAllPanels('gmailPanel');
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
+  syncBackdrop();
   if (!isOpen) await loadGmailStatus();
 }
 
@@ -1575,6 +1607,7 @@ function toggleSchedule() {
   closeAllPanels('schedulePanel');
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
+  syncBackdrop();
   if (!isOpen) loadScheduledTasks();
 }
 

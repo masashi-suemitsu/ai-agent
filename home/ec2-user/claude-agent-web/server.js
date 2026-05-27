@@ -189,6 +189,53 @@ db.exec(`
   );
 `);
 
+// 改善提案・フィードバックボックス
+db.exec(`
+  CREATE TABLE IF NOT EXISTS feedback_reports (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id        TEXT NOT NULL,
+    reporter_email    TEXT NOT NULL,
+    reporter_name     TEXT,
+    title             TEXT NOT NULL,
+    summary           TEXT NOT NULL,
+    reproduce_steps   TEXT DEFAULT '',
+    expected_behavior TEXT DEFAULT '',
+    actual_behavior   TEXT DEFAULT '',
+    affected_url      TEXT DEFAULT '',
+    category          TEXT DEFAULT 'bug',
+    priority          TEXT DEFAULT 'medium',
+    status            TEXT DEFAULT 'submitted',
+    admin_note        TEXT DEFAULT '',
+    created_at        TEXT DEFAULT (datetime('now','localtime')),
+    updated_at        TEXT DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_fb_reporter ON feedback_reports(reporter_email, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_fb_status   ON feedback_reports(status, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_fb_session  ON feedback_reports(session_id);
+
+  CREATE TABLE IF NOT EXISTS feedback_messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  TEXT NOT NULL,
+    email       TEXT NOT NULL,
+    role        TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_fbmsg_sid ON feedback_messages(session_id, id);
+
+  CREATE TABLE IF NOT EXISTS feedback_status_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_id       INTEGER NOT NULL,
+    status_before   TEXT,
+    status_after    TEXT NOT NULL,
+    changed_by_email TEXT,
+    changed_by_name  TEXT,
+    note            TEXT DEFAULT '',
+    created_at      TEXT DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_fblog_rep ON feedback_status_log(report_id, id);
+`);
+
 // スケジュール拡張カラム（既存DBへの追加）
 ['ALTER TABLE scheduled_tasks ADD COLUMN schedule_type TEXT DEFAULT \'interval\'',
  'ALTER TABLE scheduled_tasks ADD COLUMN schedule_hour INTEGER',
@@ -2040,6 +2087,371 @@ app.delete('/api/scheduled-tasks/:id', (req, res) => {
     audit(req.user.email, req.user.name, 'scheduled_task.delete', { id: req.params.id });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Feedback (改善提案・不具合報告) ──
+const FEEDBACK_NOTIFY_TO = process.env.FEEDBACK_NOTIFY_TO || 'marketing@acrovision.co.jp';
+const FEEDBACK_LABELS = {
+  status: {
+    submitted:    { label: '受付', color: '#0a84ff' },
+    investigating:{ label: '確認中', color: '#f59f00' },
+    in_progress:  { label: '対応中', color: '#1a8917' },
+    done:         { label: '完了', color: '#666' },
+    rejected:     { label: '却下', color: '#c92a2a' }
+  },
+  category: {
+    bug:         { label: '不具合',   color: '#fa5252' },
+    improvement: { label: '改善要望', color: '#1a8917' },
+    operation:   { label: '運用要望', color: '#7048e8' },
+    question:    { label: '質問',     color: '#0a84ff' }
+  },
+  priority: {
+    urgent: { label: '緊急', color: '#c92a2a' },
+    high:   { label: '高',   color: '#fa5252' },
+    medium: { label: '中',   color: '#888'    },
+    low:    { label: '低',   color: '#aaa'    }
+  }
+};
+
+function feedbackIsAdmin(email) {
+  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim());
+  return adminEmails.includes(email);
+}
+
+function feedbackGetOrCreateSession(req) {
+  if (!req.session.feedback_sid) {
+    req.session.feedback_sid = 'fbk_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+  }
+  return req.session.feedback_sid;
+}
+
+function feedbackLogStatus(reportId, before, after, user, note = '') {
+  db.prepare(`INSERT INTO feedback_status_log
+    (report_id, status_before, status_after, changed_by_email, changed_by_name, note)
+    VALUES (?, ?, ?, ?, ?, ?)`)
+    .run(reportId, before, after, user.email || '', user.name || '', note || '');
+}
+
+async function feedbackNotifyByEmail(report, reporterEmail, reporterName) {
+  if (!process.env.SES_USER) {
+    console.log('[feedback] SES未設定のためメール通知スキップ');
+    return false;
+  }
+  const cat = FEEDBACK_LABELS.category[report.category]?.label || report.category;
+  const pri = FEEDBACK_LABELS.priority[report.priority]?.label || report.priority;
+  const jst = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+  const baseUrl = process.env.APP_BASE_URL || 'https://d2jjp21sq86i80.cloudfront.net';
+  const detailUrl = `${baseUrl}/feedback-detail?id=${report.id}`;
+  const text =
+`💡 改善提案ボックスに新しい報告が届きました（#${report.id}）
+
+報告者: ${reporterName} <${reporterEmail}>
+受付日時: ${jst} (JST)
+カテゴリ: ${cat} / 優先度: ${pri}
+
+タイトル:
+${report.title}
+
+要約:
+${report.summary}
+
+${report.affected_url ? `対象URL: ${report.affected_url}\n` : ''}${report.reproduce_steps ? `再現手順:\n${report.reproduce_steps}\n\n` : ''}${report.expected_behavior ? `期待動作:\n${report.expected_behavior}\n\n` : ''}${report.actual_behavior ? `実際の動作:\n${report.actual_behavior}\n\n` : ''}
+詳細・対応: ${detailUrl}
+`;
+  try {
+    await getSesTransport().sendMail({
+      from: process.env.SES_FROM || 'info@acrovision.co.jp',
+      to: FEEDBACK_NOTIFY_TO,
+      replyTo: reporterEmail,
+      subject: `💡 [改善提案 #${report.id}] ${cat} - ${report.title}`,
+      text
+    });
+    return true;
+  } catch(e) {
+    console.error('[feedback] メール通知失敗:', e.message);
+    return false;
+  }
+}
+
+const FEEDBACK_HEARING_PROMPT = `あなたは社内の改善提案・不具合報告を整理するヒアリング担当AIです。ユーザーは社員で、業務システムやAIエージェントの不具合・改善要望・運用相談を持ってきます。
+
+# あなたの役割
+1. ユーザーの困りごとを丁寧に聞き取り、共感的な口調で整理する
+2. 必要な情報（再現手順・期待動作・実際の動作・対象URL）を1〜2項目ずつ自然な会話で引き出す
+3. 情報が十分集まったら、最後に以下の構造化JSONを **<<FINALIZE>>** と **<<END>>** で囲んで出力する
+
+# FINALIZEを出すタイミング
+- ユーザーが「これで報告して」「もう十分」「以上です」等と言ったとき
+- または3〜4ターン程度の対話で要点（何が・どこで・どうなる）が揃ったとき
+- ユーザーが質問だけで終わる場合は無理に出さなくてよい
+
+# FINALIZE出力フォーマット（最終ターンのみ、画面では除去される）
+<<FINALIZE>>
+{
+  "title": "30文字以内の簡潔なタイトル",
+  "summary": "報告の要約（200〜400文字）",
+  "category": "bug | improvement | operation | question のいずれか",
+  "priority": "urgent | high | medium | low のいずれか",
+  "reproduce_steps": "再現手順（不明なら空文字）",
+  "expected_behavior": "期待される動作（不明なら空文字）",
+  "actual_behavior": "実際の動作（不明なら空文字）",
+  "affected_url": "対象URL（あれば、なければ空文字）"
+}
+<<END>>
+
+# 注意
+- FINALIZE は本文の最後に必ずマーカー付きで出力する。前後に説明を付けてOK
+- カテゴリ判定: 動かない/エラー=bug、新機能/改善=improvement、運用ルール/権限=operation、わからない=question
+- 優先度: 業務停止級=urgent、業務に支障=high、不便=medium、要望=low
+- 共感的に、しかし冗長にならず、1メッセージ2〜4行程度`;
+
+// POST /api/feedback/chat (SSE)
+app.post('/api/feedback/chat', async (req, res) => {
+  const { message } = req.body;
+  if (!message?.trim()) return res.status(400).json({ error: '空メッセージ' });
+  const user = req.user;
+  const sessionId = feedbackGetOrCreateSession(req);
+
+  audit(user.email, user.name, 'feedback.chat', { preview: message.slice(0, 100), sessionId });
+
+  // ユーザーメッセージ保存
+  db.prepare('INSERT INTO feedback_messages (session_id, email, role, content) VALUES (?,?,?,?)')
+    .run(sessionId, user.email, 'user', message);
+
+  // 履歴取得（user/assistantのみ、直近20件）
+  const history = db.prepare(
+    `SELECT role, content FROM feedback_messages
+     WHERE session_id=? AND role IN ('user','assistant') ORDER BY id DESC LIMIT 20`
+  ).all(sessionId).reverse();
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  let fullText = '';
+  try {
+    const messages = history.map(m => ({ role: m.role, content: m.content }));
+    const stream = anthropic.messages.stream({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1500,
+      system: FEEDBACK_HEARING_PROMPT,
+      messages
+    });
+    for await (const ev of stream) {
+      if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') {
+        fullText += ev.delta.text;
+        // FINALIZE マーカー中はクライアントに出さない（マーカー含まないなら都度送る）
+        // 簡易: クライアント側で除去するため、全テキスト都度送出
+        res.write(`data: ${JSON.stringify({ text: ev.delta.text })}\n\n`);
+      }
+    }
+    await stream.finalMessage();
+
+    // FINALIZE 検出
+    let finalizeJson = null;
+    const m = fullText.match(/<<FINALIZE>>\s*(\{[\s\S]*?\})\s*<<END>>/);
+    if (m) {
+      try { finalizeJson = JSON.parse(m[1]); } catch(e) {}
+    }
+    const displayText = m
+      ? fullText.replace(/<<FINALIZE>>[\s\S]*?<<END>>/, '').trim()
+      : fullText;
+
+    // assistant 保存（表示用テキスト）
+    if (displayText) {
+      db.prepare('INSERT INTO feedback_messages (session_id, email, role, content) VALUES (?,?,?,?)')
+        .run(sessionId, user.email, 'assistant', displayText);
+    }
+    // FINALIZE は system ロールで保存
+    if (finalizeJson) {
+      db.prepare('INSERT INTO feedback_messages (session_id, email, role, content) VALUES (?,?,?,?)')
+        .run(sessionId, user.email, 'system', JSON.stringify(finalizeJson));
+      res.write(`data: ${JSON.stringify({ finalize: true })}\n\n`);
+    }
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+  } catch(e) {
+    console.error('[feedback.chat] error:', e.message);
+    res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
+  }
+  res.end();
+});
+
+// GET /api/feedback/session — 現在のセッションID / 履歴 / finalize有無
+app.get('/api/feedback/session', (req, res) => {
+  const sessionId = feedbackGetOrCreateSession(req);
+  const messages = db.prepare(
+    `SELECT role, content, created_at FROM feedback_messages
+     WHERE session_id=? AND role IN ('user','assistant') ORDER BY id ASC LIMIT 100`
+  ).all(sessionId);
+  // 既にreport化されているか
+  const exists = db.prepare('SELECT id FROM feedback_reports WHERE session_id=?').get(sessionId);
+  // 最新FINALIZE
+  const lastFinal = db.prepare(
+    `SELECT content FROM feedback_messages WHERE session_id=? AND role='system' ORDER BY id DESC LIMIT 1`
+  ).get(sessionId);
+  res.json({
+    sessionId,
+    messages,
+    canFinalize: !!lastFinal && !exists,
+    reportId: exists?.id || null,
+    hasMessages: messages.length > 0
+  });
+});
+
+// POST /api/feedback/reset — 新規報告のためセッションをローテート
+app.post('/api/feedback/reset', (req, res) => {
+  delete req.session.feedback_sid;
+  res.json({ ok: true });
+});
+
+// POST /api/feedback/finalize — チャット内容を確定して報告化
+app.post('/api/feedback/finalize', async (req, res) => {
+  const user = req.user;
+  const sessionId = feedbackGetOrCreateSession(req);
+
+  // 既存チェック
+  const existing = db.prepare('SELECT id FROM feedback_reports WHERE session_id=?').get(sessionId);
+  if (existing) return res.json({ ok: true, id: existing.id, alreadyExists: true });
+
+  // 最新FINALIZE取得。なければ簡易ヒアリング(=最後のユーザー発言から)で生成
+  let draft = null;
+  const last = db.prepare(
+    `SELECT content FROM feedback_messages WHERE session_id=? AND role='system' ORDER BY id DESC LIMIT 1`
+  ).get(sessionId);
+  if (last) {
+    try { draft = JSON.parse(last.content); } catch(e) {}
+  }
+
+  // FINALIZEがない場合は user/assistant 履歴からHaikuでワンショット生成
+  if (!draft) {
+    const msgs = db.prepare(
+      `SELECT role, content FROM feedback_messages
+       WHERE session_id=? AND role IN ('user','assistant') ORDER BY id ASC LIMIT 30`
+    ).all(sessionId);
+    if (msgs.length === 0) return res.status(400).json({ error: 'まだ報告内容がありません' });
+    const transcript = msgs.map(m => (m.role === 'user' ? '【ユーザー】' : '【AI】') + ' ' + m.content).join('\n');
+    try {
+      const r = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 800,
+        messages: [{
+          role: 'user',
+          content: `以下の社員と整理AIの対話から、改善提案/不具合報告のJSONを生成してください。
+必ず以下のキーを持つJSONのみを返してください（マークダウンや説明文は不要）：
+{"title": "...", "summary": "...", "category": "bug|improvement|operation|question", "priority": "urgent|high|medium|low", "reproduce_steps": "", "expected_behavior": "", "actual_behavior": "", "affected_url": ""}
+
+対話:
+${transcript}`
+        }]
+      });
+      const text = r.content[0]?.text || '';
+      const jm = text.match(/\{[\s\S]*\}/);
+      if (jm) draft = JSON.parse(jm[0]);
+    } catch(e) {
+      console.error('[feedback.finalize] auto draft error:', e.message);
+    }
+    if (!draft) return res.status(400).json({ error: '報告内容の整理に失敗しました。もう少し詳しく入力してください' });
+  }
+
+  const title = String(draft.title || '').trim();
+  const summary = String(draft.summary || '').trim();
+  if (!title || !summary) return res.status(400).json({ error: 'タイトルまたは要約が空です' });
+
+  let category = String(draft.category || 'bug');
+  if (!['bug','improvement','operation','question'].includes(category)) category = 'bug';
+  let priority = String(draft.priority || 'medium');
+  if (!['urgent','high','medium','low'].includes(priority)) priority = 'medium';
+
+  const info = db.prepare(`INSERT INTO feedback_reports
+    (session_id, reporter_email, reporter_name, title, summary,
+     reproduce_steps, expected_behavior, actual_behavior, affected_url,
+     category, priority, status)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      sessionId, user.email, user.name || '',
+      title.slice(0, 200), summary,
+      String(draft.reproduce_steps || ''),
+      String(draft.expected_behavior || ''),
+      String(draft.actual_behavior || ''),
+      String(draft.affected_url || '').slice(0, 500),
+      category, priority, 'submitted'
+    );
+  const reportId = info.lastInsertRowid;
+  feedbackLogStatus(reportId, null, 'submitted', user, '報告受付');
+
+  audit(user.email, user.name, 'feedback.submit', { id: reportId, title: title.slice(0, 80), category, priority });
+
+  // 報告本体取得
+  const report = db.prepare('SELECT * FROM feedback_reports WHERE id=?').get(reportId);
+  // 通知（非同期）
+  feedbackNotifyByEmail(report, user.email, user.name || '').then(ok => {
+    if (ok) audit(user.email, user.name, 'feedback.notify.sent', { id: reportId, to: FEEDBACK_NOTIFY_TO });
+  }).catch(() => {});
+
+  // 次回の報告は新セッション
+  delete req.session.feedback_sid;
+
+  res.json({ ok: true, id: reportId });
+});
+
+// GET /api/feedback — 自分の報告一覧 (admin は全件)
+app.get('/api/feedback', (req, res) => {
+  const isAdmin = feedbackIsAdmin(req.user.email);
+  const status = req.query.status || '';
+  const all = req.query.all === '1' && isAdmin;
+  const params = [];
+  let sql = 'SELECT id, reporter_email, reporter_name, title, category, priority, status, created_at FROM feedback_reports WHERE 1=1';
+  if (!all) { sql += ' AND reporter_email=?'; params.push(req.user.email); }
+  if (status && FEEDBACK_LABELS.status[status]) { sql += ' AND status=?'; params.push(status); }
+  sql += ' ORDER BY id DESC LIMIT 200';
+  const rows = db.prepare(sql).all(...params);
+  res.json({ items: rows, isAdmin });
+});
+
+// GET /api/feedback/:id — 詳細
+app.get('/api/feedback/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  const r = db.prepare('SELECT * FROM feedback_reports WHERE id=?').get(id);
+  if (!r) return res.status(404).json({ error: '見つかりません' });
+  const isAdmin = feedbackIsAdmin(req.user.email);
+  if (!isAdmin && r.reporter_email !== req.user.email) {
+    return res.status(403).json({ error: '閲覧権限がありません' });
+  }
+  const logs = db.prepare('SELECT * FROM feedback_status_log WHERE report_id=? ORDER BY id ASC').all(id);
+  const chat = db.prepare(
+    `SELECT role, content, created_at FROM feedback_messages
+     WHERE session_id=? AND role IN ('user','assistant') ORDER BY id ASC`
+  ).all(r.session_id);
+  res.json({ report: r, logs, chat, isAdmin });
+});
+
+// PUT /api/feedback/:id — admin: ステータス更新
+app.put('/api/feedback/:id', (req, res) => {
+  if (!feedbackIsAdmin(req.user.email)) return res.status(403).json({ error: '管理者専用' });
+  const id = parseInt(req.params.id);
+  const r = db.prepare('SELECT * FROM feedback_reports WHERE id=?').get(id);
+  if (!r) return res.status(404).json({ error: '見つかりません' });
+  const { status, priority, category, admin_note } = req.body;
+  const changes = [];
+  const params = [];
+  if (status && FEEDBACK_LABELS.status[status] && status !== r.status) {
+    changes.push('status=?'); params.push(status);
+    feedbackLogStatus(id, r.status, status, req.user, admin_note || '');
+  }
+  if (priority && FEEDBACK_LABELS.priority[priority]) { changes.push('priority=?'); params.push(priority); }
+  if (category && FEEDBACK_LABELS.category[category]) { changes.push('category=?'); params.push(category); }
+  if (typeof admin_note === 'string') { changes.push('admin_note=?'); params.push(admin_note); }
+  if (changes.length === 0) return res.json({ ok: true });
+  changes.push("updated_at=datetime('now','localtime')");
+  params.push(id);
+  db.prepare(`UPDATE feedback_reports SET ${changes.join(', ')} WHERE id=?`).run(...params);
+  audit(req.user.email, req.user.name, 'feedback.update', { id, status, priority, category });
+  res.json({ ok: true });
+});
+
+// GET /api/feedback/labels — UIで使うラベル定義
+app.get('/api/feedback-labels', (req, res) => {
+  res.json(FEEDBACK_LABELS);
 });
 
 // ── Task Validator ──

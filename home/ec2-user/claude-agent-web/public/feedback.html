@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>💡 改善提案・フィードバックボックス</title>
+<style>
+* { box-sizing: border-box; }
+body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans',sans-serif; background:#f4f6fb; color:#2d3748; }
+header { background:#fff; border-bottom:1px solid #e2e8f0; padding:0 20px; height:52px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+header .h-left { display:flex; align-items:center; gap:10px; }
+header h1 { font-size:15px; font-weight:700; margin:0; }
+header h1 small { font-size:11px; font-weight:400; color:#718096; margin-left:8px; }
+header .h-right a { color:#718096; text-decoration:none; font-size:12px; border:1px solid #e2e8f0; border-radius:7px; padding:5px 12px; margin-left:6px; transition:all .15s; }
+header .h-right a:hover { border-color:#5b6eff; color:#5b6eff; }
+
+.wrap { max-width:1100px; margin:0 auto; padding:18px; display:grid; grid-template-columns:280px 1fr; gap:18px; }
+@media (max-width:780px) { .wrap { grid-template-columns:1fr; } .side { order:2; } }
+
+.side { background:#fff; border-radius:10px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.05); align-self:start; }
+.side h2 { margin:0 0 8px; font-size:12px; color:#718096; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+.new-btn { display:block; text-align:center; background:#5b6eff; color:#fff; text-decoration:none; padding:9px; border-radius:8px; margin-bottom:12px; font-size:13px; font-weight:600; transition:background .15s; cursor:pointer; border:none; width:100%; }
+.new-btn:hover { background:#4a5ce8; }
+.rep-item { display:block; padding:9px 8px; border-bottom:1px solid #f0f2f8; text-decoration:none; color:#2d3748; font-size:12px; transition:background .12s; }
+.rep-item:hover { background:#f9fafb; }
+.rep-title { font-weight:600; margin-bottom:3px; line-height:1.4; word-break:break-word; }
+.rep-meta { color:#a0aec0; font-size:10.5px; }
+.rep-status { display:inline-block; padding:1px 7px; border-radius:10px; color:#fff; font-size:10px; margin-right:4px; font-weight:600; }
+.side-empty { color:#a0aec0; font-size:12px; padding:10px 6px; text-align:center; }
+
+.main { background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.05); display:flex; flex-direction:column; min-height:75vh; }
+.banner { padding:14px 18px; background:#e6f7e0; color:#1b5e20; font-size:13px; border-radius:10px 10px 0 0; line-height:1.6; }
+.banner b { color:#0d3a0d; }
+.messages { flex:1; overflow-y:auto; padding:16px 20px; }
+.msg { margin-bottom:14px; max-width:88%; }
+.msg.user { margin-left:auto; text-align:right; }
+.msg .bubble { display:inline-block; text-align:left; padding:10px 14px; border-radius:14px; box-shadow:0 1px 2px rgba(0,0,0,.06); white-space:pre-wrap; word-break:break-word; font-size:14px; line-height:1.6; }
+.msg.user .bubble { background:#5b6eff; color:#fff; border-bottom-right-radius:4px; }
+.msg.ai .bubble { background:#f4f6fb; color:#2d3748; border-bottom-left-radius:4px; }
+.msg .meta { font-size:10.5px; color:#a0aec0; margin-top:4px; padding:0 4px; }
+
+.action-row { padding:12px 14px; background:#fff8e1; border-top:1px solid #f1e2a8; display:none; gap:10px; align-items:center; }
+.action-row.show { display:flex; }
+.action-row .hint { flex:1; font-size:12.5px; color:#7a5d00; }
+.action-row .confirm { background:#f59f00; color:#fff; border:none; padding:9px 18px; border-radius:8px; cursor:pointer; font-weight:700; font-size:13px; }
+.action-row .confirm:hover { background:#e08e00; }
+.action-row .confirm:disabled { background:#d4b86c; cursor:wait; }
+
+.input-row { padding:12px 14px; border-top:1px solid #edf0f5; background:#fafbfc; border-radius:0 0 10px 10px; }
+.input-box { display:flex; gap:8px; }
+.input-box textarea { flex:1; resize:none; border:1.5px solid #e2e8f0; border-radius:10px; outline:none; padding:10px 13px; font-size:14px; min-height:48px; max-height:160px; font-family:inherit; line-height:1.5; background:#f9fafb; transition:border .15s; }
+.input-box textarea:focus { border-color:#5b6eff; background:#fff; }
+.input-box button { background:#5b6eff; color:#fff; border:none; padding:0 22px; border-radius:10px; cursor:pointer; font-weight:700; font-size:14px; height:48px; transition:background .15s; }
+.input-box button:hover:not(:disabled) { background:#4a5ce8; }
+.input-box button:disabled { background:#a0aec0; cursor:wait; }
+
+.typing { display:inline-block; color:#a0aec0; font-size:13px; padding:6px 12px; }
+.typing::after { content:'…'; animation:dots 1.4s infinite; }
+@keyframes dots { 0%{content:''} 33%{content:'.'} 66%{content:'..'} 100%{content:'…'} }
+.system-hint { text-align:center; color:#a0aec0; font-size:13px; margin:18px 0; padding:0 16px; line-height:1.7; }
+.system-hint .ex { color:#4a5568; }
+</style>
+</head>
+<body>
+<header>
+    <div class="h-left">
+        <h1>💡 改善提案・フィードバックボックス <small>不具合・要望・困りごとを気軽に</small></h1>
+    </div>
+    <div class="h-right">
+        <a href="javascript:void(0)" onclick="newReport()">＋ 新しい報告</a>
+        <a href="/">トップ</a>
+    </div>
+</header>
+<div class="wrap">
+    <aside class="side">
+        <h2>📋 自分の過去報告</h2>
+        <button class="new-btn" onclick="newReport()">＋ 新しく報告する</button>
+        <div id="myReports"><div class="side-empty">読み込み中…</div></div>
+    </aside>
+
+    <section class="main">
+        <div class="banner">
+            🌱 <b id="userName">こんにちは</b> さん、不具合・改善要望・困りごとを気軽にお寄せください。<br>
+            AIが対話しながら整理し、内容をマーケティング部にお伝えします。
+        </div>
+        <div class="messages" id="messages">
+            <div class="system-hint" id="systemHint">
+                <div>例えばこんな内容、なんでもどうぞ：</div>
+                <div class="ex" style="margin-top:6px;">
+                    「経費申請の画面で添付ファイルが消えてしまう」<br>
+                    「メール一括送信機能が欲しい」<br>
+                    「タスク登録画面の項目が分かりにくい」
+                </div>
+            </div>
+        </div>
+        <div class="action-row" id="actionRow">
+            <span class="hint">💬 いつでも「現時点の内容で報告」できます。追加したいことがあれば下から会話継続もOKです。</span>
+            <button class="confirm" id="confirmBtn">📨 現時点の内容で報告する</button>
+        </div>
+        <div class="input-row">
+            <div class="input-box">
+                <textarea id="q" placeholder="現状や困りごとを入力（Enter=送信、Shift+Enter=改行）"></textarea>
+                <button id="send">送信</button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+const labelsState = { status:{}, category:{}, priority:{} };
+let sessionId = null;
+let canFinalize = false;
+let hasMessages = false;
+let userName = '';
+
+const messagesEl = document.getElementById('messages');
+const systemHintEl = document.getElementById('systemHint');
+const qEl = document.getElementById('q');
+const sendBtn = document.getElementById('send');
+const actionRow = document.getElementById('actionRow');
+const confirmBtn = document.getElementById('confirmBtn');
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+
+function renderMessage(role, text) {
+    if (systemHintEl) systemHintEl.style.display = 'none';
+    const wrap = document.createElement('div');
+    wrap.className = 'msg ' + (role === 'user' ? 'user' : 'ai');
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+    wrap.appendChild(bubble);
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = (role === 'user' ? userName : '改善提案AI') + ' • ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+    wrap.appendChild(meta);
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return bubble;
+}
+
+async function loadSession() {
+    const r = await fetch('/api/feedback/session');
+    const data = await r.json();
+    sessionId = data.sessionId;
+    canFinalize = data.canFinalize;
+    hasMessages = data.hasMessages;
+
+    if (data.messages?.length) {
+        if (systemHintEl) systemHintEl.style.display = 'none';
+        data.messages.forEach(m => renderMessage(m.role, m.content));
+    }
+    if (hasMessages) actionRow.classList.add('show');
+    if (data.reportId) {
+        actionRow.classList.add('show');
+        confirmBtn.textContent = `📄 報告 #${data.reportId} を表示`;
+        confirmBtn.onclick = () => location.href = `/feedback-detail?id=${data.reportId}`;
+    }
+}
+
+async function loadMyReports() {
+    const r = await fetch('/api/feedback');
+    if (!r.ok) return;
+    const data = await r.json();
+    const el = document.getElementById('myReports');
+    if (!data.items.length) {
+        el.innerHTML = '<div class="side-empty">まだ報告はありません</div>';
+        return;
+    }
+    el.innerHTML = data.items.map(it => {
+        const s = labelsState.status[it.status] || { label: it.status, color: '#888' };
+        return `<a class="rep-item" href="/feedback-detail?id=${it.id}">
+            <div class="rep-title">${escapeHtml(it.title || '(無題)')}</div>
+            <div class="rep-meta">
+                <span class="rep-status" style="background:${s.color}">${escapeHtml(s.label)}</span>
+                ${escapeHtml((it.created_at||'').slice(0,10))}
+            </div>
+        </a>`;
+    }).join('');
+}
+
+async function loadLabels() {
+    try {
+        const r = await fetch('/api/feedback-labels');
+        const data = await r.json();
+        Object.assign(labelsState, data);
+    } catch(e) {}
+}
+
+async function loadMe() {
+    try {
+        const r = await fetch('/api/me');
+        const me = await r.json();
+        if (me?.name) {
+            userName = me.name;
+            document.getElementById('userName').textContent = me.name;
+        }
+    } catch(e) {}
+}
+
+async function send() {
+    const text = qEl.value.trim();
+    if (!text) return;
+    qEl.value = '';
+    qEl.disabled = true;
+    sendBtn.disabled = true;
+    renderMessage('user', text);
+
+    const typing = document.createElement('div');
+    typing.className = 'typing';
+    typing.textContent = '🤔 整理しています';
+    messagesEl.appendChild(typing);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    let bubble = null;
+    let aiText = '';
+
+    try {
+        const resp = await fetch('/api/feedback/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text })
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let idx;
+            while ((idx = buffer.indexOf('\n\n')) !== -1) {
+                const chunk = buffer.slice(0, idx);
+                buffer = buffer.slice(idx + 2);
+                if (!chunk.startsWith('data: ')) continue;
+                let obj;
+                try { obj = JSON.parse(chunk.slice(6)); } catch(e) { continue; }
+                if (obj.text) {
+                    if (!bubble) { typing.remove(); bubble = renderMessage('ai', ''); }
+                    aiText += obj.text;
+                    const display = aiText.replace(/<<FINALIZE>>[\s\S]*?<<END>>/g, '').replace(/<<FINALIZE>>[\s\S]*$/g, '').trim();
+                    bubble.textContent = display;
+                    messagesEl.scrollTop = messagesEl.scrollHeight;
+                } else if (obj.finalize) {
+                    canFinalize = true;
+                } else if (obj.error) {
+                    if (typing.parentNode) typing.remove();
+                    renderMessage('ai', '❌ エラー: ' + obj.error);
+                }
+            }
+        }
+        actionRow.classList.add('show');
+    } catch(e) {
+        if (typing.parentNode) typing.remove();
+        renderMessage('ai', '❌ 通信エラー: ' + e.message);
+    } finally {
+        qEl.disabled = false;
+        sendBtn.disabled = false;
+        qEl.focus();
+    }
+}
+
+async function newReport() {
+    await fetch('/api/feedback/reset', { method: 'POST' });
+    location.href = '/feedback';
+}
+
+confirmBtn.addEventListener('click', async () => {
+    if (confirmBtn.disabled) return;
+    if (!confirm('現時点の内容で報告を確定します。よろしいですか？\n（マーケティング部に通知されます）')) return;
+    confirmBtn.disabled = true;
+    const orig = confirmBtn.textContent;
+    confirmBtn.textContent = '⏳ 送信中…';
+    try {
+        const r = await fetch('/api/feedback/finalize', { method: 'POST' });
+        const j = await r.json();
+        if (!j.ok) {
+            alert('確定エラー: ' + (j.error || 'unknown'));
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = orig;
+            return;
+        }
+        location.href = `/feedback-detail?id=${j.id}&just_submitted=1`;
+    } catch(e) {
+        alert('通信エラー: ' + e.message);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = orig;
+    }
+});
+
+sendBtn.addEventListener('click', send);
+qEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+(async () => {
+    await loadLabels();
+    await loadMe();
+    await loadMyReports();
+    await loadSession();
+    qEl.focus();
+})();
+</script>
+</body>
+</html>

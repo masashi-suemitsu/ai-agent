@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>⚙ 改善提案 管理画面</title>
+<style>
+* { box-sizing: border-box; }
+body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans',sans-serif; background:#f4f6fb; color:#2d3748; }
+header { background:#fff; border-bottom:1px solid #e2e8f0; padding:0 20px; height:52px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+header h1 { font-size:15px; font-weight:700; margin:0; }
+header .h-right a { color:#718096; text-decoration:none; font-size:12px; border:1px solid #e2e8f0; border-radius:7px; padding:5px 12px; margin-left:6px; transition:all .15s; }
+header .h-right a:hover { border-color:#5b6eff; color:#5b6eff; }
+
+.wrap { max-width:1200px; margin:0 auto; padding:18px; }
+.toolbar { background:#fff; border-radius:10px; padding:12px 16px; box-shadow:0 1px 3px rgba(0,0,0,.05); margin-bottom:14px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+.toolbar label { font-size:12px; color:#718096; font-weight:600; }
+.toolbar select { padding:6px 12px; border:1px solid #e2e8f0; border-radius:7px; font-size:13px; background:#fff; }
+.kpis { display:grid; grid-template-columns:repeat(5, 1fr); gap:10px; margin-bottom:14px; }
+@media (max-width:780px) { .kpis { grid-template-columns:repeat(2, 1fr); } }
+.kpi { background:#fff; border-radius:10px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+.kpi .lbl { font-size:11px; color:#a0aec0; font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
+.kpi .val { font-size:22px; font-weight:700; color:#5b6eff; margin-top:4px; }
+.kpi .sub { font-size:10.5px; color:#a0aec0; margin-top:2px; }
+
+.list { background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.05); overflow:hidden; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { background:#f9fafb; color:#718096; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:10px 12px; text-align:left; border-bottom:1px solid #edf0f5; }
+td { padding:11px 12px; border-bottom:1px solid #f4f6fb; vertical-align:middle; }
+tr:hover { background:#f9fafb; }
+tr { cursor:pointer; }
+.chip { display:inline-block; padding:2px 9px; border-radius:11px; color:#fff; font-size:11px; font-weight:700; }
+.title-cell { font-weight:600; color:#2d3748; max-width:480px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.reporter { color:#718096; font-size:12px; }
+.empty { padding:40px; text-align:center; color:#a0aec0; font-size:13px; }
+.loader { padding:40px; text-align:center; color:#a0aec0; font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+    <h1>⚙ 改善提案 管理画面</h1>
+    <div class="h-right">
+        <a href="/feedback">💬 報告画面</a>
+        <a href="/">トップ</a>
+    </div>
+</header>
+<div class="wrap">
+    <div class="toolbar">
+        <label>ステータス絞り込み</label>
+        <select id="filterStatus">
+            <option value="">すべて</option>
+        </select>
+        <span style="flex:1"></span>
+        <span style="color:#a0aec0;font-size:12px;">行をクリックで詳細・操作</span>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div class="list" id="list"><div class="loader">読み込み中…</div></div>
+</div>
+
+<script>
+const labelsState = { status:{}, category:{}, priority:{} };
+
+function escapeHtml(s) {
+    return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+
+async function loadLabels() {
+    const r = await fetch('/api/feedback-labels');
+    Object.assign(labelsState, await r.json());
+    const sel = document.getElementById('filterStatus');
+    Object.entries(labelsState.status).forEach(([k, v]) => {
+        const opt = document.createElement('option');
+        opt.value = k; opt.textContent = v.label;
+        sel.appendChild(opt);
+    });
+}
+
+async function loadList() {
+    const status = document.getElementById('filterStatus').value;
+    const r = await fetch('/api/feedback?all=1' + (status ? '&status=' + status : ''));
+    if (r.status === 403) {
+        document.getElementById('list').innerHTML = '<div class="empty">❌ 管理者専用ページです</div>';
+        document.getElementById('kpis').innerHTML = '';
+        return;
+    }
+    if (!r.ok) {
+        document.getElementById('list').innerHTML = '<div class="empty">❌ 読み込みエラー</div>';
+        return;
+    }
+    const data = await r.json();
+    renderKpis(data.items);
+    renderList(data.items);
+}
+
+function renderKpis(items) {
+    const total = items.length;
+    const submitted = items.filter(i => i.status === 'submitted').length;
+    const investigating = items.filter(i => i.status === 'investigating').length;
+    const inProgress = items.filter(i => i.status === 'in_progress').length;
+    const done = items.filter(i => i.status === 'done').length;
+    document.getElementById('kpis').innerHTML = `
+        <div class="kpi"><div class="lbl">総数</div><div class="val">${total}</div><div class="sub">過去200件まで</div></div>
+        <div class="kpi"><div class="lbl">受付</div><div class="val" style="color:#0a84ff">${submitted}</div><div class="sub">未着手</div></div>
+        <div class="kpi"><div class="lbl">確認中</div><div class="val" style="color:#f59f00">${investigating}</div><div class="sub">情報集め</div></div>
+        <div class="kpi"><div class="lbl">対応中</div><div class="val" style="color:#1a8917">${inProgress}</div><div class="sub">作業中</div></div>
+        <div class="kpi"><div class="lbl">完了</div><div class="val" style="color:#666">${done}</div><div class="sub">クローズ済</div></div>
+    `;
+}
+
+function renderList(items) {
+    if (!items.length) {
+        document.getElementById('list').innerHTML = '<div class="empty">該当する報告はありません</div>';
+        return;
+    }
+    const rows = items.map(it => {
+        const s = labelsState.status[it.status] || { label:it.status, color:'#888' };
+        const c = labelsState.category[it.category] || { label:it.category, color:'#888' };
+        const p = labelsState.priority[it.priority] || { label:it.priority, color:'#888' };
+        return `<tr onclick="location.href='/feedback-detail?id=${it.id}'">
+            <td style="color:#a0aec0;font-weight:600">#${it.id}</td>
+            <td><span class="chip" style="background:${s.color}">${escapeHtml(s.label)}</span></td>
+            <td><span class="chip" style="background:${c.color}">${escapeHtml(c.label)}</span></td>
+            <td><span class="chip" style="background:${p.color}">${escapeHtml(p.label)}</span></td>
+            <td class="title-cell">${escapeHtml(it.title)}</td>
+            <td class="reporter">${escapeHtml(it.reporter_name || it.reporter_email)}</td>
+            <td class="reporter">${escapeHtml((it.created_at||'').slice(0,16))}</td>
+        </tr>`;
+    }).join('');
+    document.getElementById('list').innerHTML = `<table>
+        <thead><tr><th>ID</th><th>ステータス</th><th>カテゴリ</th><th>優先度</th><th>タイトル</th><th>報告者</th><th>受付日時</th></tr></thead>
+        <tbody>${rows}</tbody>
+    </table>`;
+}
+
+document.getElementById('filterStatus').addEventListener('change', loadList);
+
+(async () => {
+    await loadLabels();
+    await loadList();
+})();
+</script>
+</body>
+</html>
