@@ -114,18 +114,21 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 .role-info h2 { font-size: 17px; font-weight: 700; color: var(--primary-dark); }
 .role-info p { font-size: 13px; color: #4a5568; margin-top: 5px; line-height: 1.65; }
 
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .2s; padding: 16px; }
 .modal-overlay.open { opacity: 1; pointer-events: all; }
-.modal-box { background: #fff; border-radius: 16px; padding: 24px; width: 340px; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
-.modal-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.modal-box { background: #fff; border-radius: 16px; padding: 28px 32px; width: min(480px, 100%); max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+.modal-box.modal-lg { width: min(720px, 100%); }
+.modal-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
 .modal-subtitle { font-size: 13px; color: var(--primary-dark); font-weight: 600; margin-bottom: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.modal-field label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+.modal-field { margin-bottom: 16px; }
+.modal-field label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--text-light); letter-spacing: .03em; }
 .modal-field select { width: 100%; border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; }
 .modal-field select:focus { border-color: var(--primary); }
-.modal-btns { display: flex; gap: 8px; margin-top: 20px; }
-.modal-btn-cancel { flex: 1; background: none; border: 1px solid var(--border); border-radius: 8px; padding: 9px; font-size: 13px; cursor: pointer; }
-.modal-btn-save { flex: 2; background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.modal-btns { display: flex; gap: 8px; margin-top: 24px; }
+.modal-btn-cancel { flex: 1; background: none; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 13px; cursor: pointer; }
+.modal-btn-save { flex: 2; background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .modal-btn-save:disabled { opacity: .6; cursor: default; }
+.modal-actions { display: flex; gap: 8px; margin-top: 24px; }
 
 @media (max-width: 600px) {
   .page { padding: 16px 12px; }
@@ -195,20 +198,20 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 
 <!-- ─ Skill Edit Modal ─ -->
 <div class="modal-overlay" id="editSkillModal" onclick="if(event.target===this)closeEditSkill()">
-  <div class="modal-box">
+  <div class="modal-box modal-lg">
     <div class="modal-title">✏️ スキルを編集</div>
     <input type="hidden" id="editSkillId">
     <div class="modal-field">
       <label>タイトル</label>
-      <input type="text" id="editSkillTitle" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+      <input type="text" id="editSkillTitle" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:14px;outline:none;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
     </div>
     <div class="modal-field">
       <label>説明（1行）</label>
-      <input type="text" id="editSkillDesc" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+      <input type="text" id="editSkillDesc" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:14px;outline:none;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
     </div>
     <div class="modal-field">
-      <label>実行手順</label>
-      <textarea id="editSkillSteps" rows="8" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;line-height:1.75;resize:vertical;outline:none;font-family:inherit;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+      <label>実行手順（AIへの指示）</label>
+      <textarea id="editSkillSteps" rows="14" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.8;resize:vertical;outline:none;font-family:inherit;min-height:260px;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeEditSkill()">キャンセル</button>
@@ -230,16 +233,16 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 
 <!-- ─ Task Edit Modal ─ -->
 <div class="modal-overlay" id="editTaskModal" onclick="if(event.target===this)closeEditTask()">
-  <div class="modal-box" style="max-width:580px;">
+  <div class="modal-box modal-lg">
     <div class="modal-title">✏️ タスクを編集</div>
     <input type="hidden" id="editTaskId">
     <div class="modal-field">
       <label>タスク名</label>
-      <input type="text" id="editTaskTitle" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+      <input type="text" id="editTaskTitle" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:14px;outline:none;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
     </div>
     <div class="modal-field">
-      <label>実行手順</label>
-      <textarea id="editTaskSteps" rows="9" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;line-height:1.75;resize:vertical;outline:none;font-family:inherit;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+      <label>実行手順（AIへの指示）</label>
+      <textarea id="editTaskSteps" rows="12" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.8;resize:vertical;outline:none;font-family:inherit;min-height:220px;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
     </div>
     <div class="modal-field" id="editScheduleField">
       <label>スケジュール</label>
