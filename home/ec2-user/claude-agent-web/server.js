@@ -1219,9 +1219,13 @@ app.delete('/api/conversations/:id', (req, res) => {
 
 // GET /api/skills
 app.get('/api/skills', (req, res) => {
-  const rows = db.prepare(
-    'SELECT * FROM user_skills WHERE owner_email=? OR shared=1 ORDER BY updated_at DESC'
-  ).all(req.user.email);
+  const rows = db.prepare(`
+    SELECT us.*,
+      (SELECT al.name FROM audit_logs al WHERE al.email = us.owner_email AND al.name != '' ORDER BY al.ts DESC LIMIT 1) as owner_name
+    FROM user_skills us
+    WHERE us.owner_email=? OR us.shared=1
+    ORDER BY us.updated_at DESC
+  `).all(req.user.email);
   res.json(rows);
 });
 
@@ -1256,10 +1260,20 @@ app.post('/api/skills', (req, res) => {
 app.put('/api/skills/:id', (req, res) => {
   const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
   if (!skill) return res.status(403).json({ error: '見つかりません' });
-  const { title, description, steps } = req.body;
+  const { title, description, steps, shared } = req.body;
+
+  // shared のみ更新（共有トグル）
+  if (shared !== undefined && title === undefined && description === undefined && steps === undefined) {
+    db.prepare(`UPDATE user_skills SET shared=?, updated_at=datetime('now','localtime') WHERE id=?`)
+      .run(shared ? 1 : 0, req.params.id);
+    audit(req.user.email, req.user.name, shared ? 'skill.share' : 'skill.unshare', { id: req.params.id, name: skill.name });
+    return res.json({ ok: true });
+  }
+
   if (!title?.trim()) return res.status(400).json({ error: 'title は必須' });
-  db.prepare('UPDATE user_skills SET title=?, description=?, steps=? WHERE id=?')
-    .run(title.trim(), description || '', steps || '', req.params.id);
+  db.prepare(`UPDATE user_skills SET title=?, description=?, steps=?, shared=?, updated_at=datetime('now','localtime') WHERE id=?`)
+    .run(title.trim(), description ?? skill.description, steps ?? skill.steps,
+      shared !== undefined ? (shared ? 1 : 0) : skill.shared, req.params.id);
   audit(req.user.email, req.user.name, 'skill.update', { id: req.params.id });
   res.json({ ok: true });
 });

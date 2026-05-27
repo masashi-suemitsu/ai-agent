@@ -151,6 +151,11 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 .skill-del-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 12px; padding: 2px; opacity: 0; }
 .skill-item:hover .skill-del-btn { opacity: .6; }
 .skill-del-btn:hover { opacity: 1 !important; }
+.skill-share-btn { background: none; border: none; cursor: pointer; font-size: 13px; padding: 2px 3px; opacity: 0; transition: opacity .12s; line-height: 1; }
+.skill-item:hover .skill-share-btn { opacity: .5; }
+.skill-share-btn.shared { opacity: 1 !important; }
+.skill-share-btn:hover { opacity: 1 !important; }
+.skill-owner-badge { font-size: 9px; color: var(--primary); background: rgba(102,126,234,0.13); border-radius: 3px; padding: 1px 5px; margin-left: 5px; font-weight: 600; white-space: nowrap; }
 
 .sidebar-empty { color: var(--sidebar-text); font-size: 11px; text-align: center; padding: 14px 12px; line-height: 1.6; opacity: .7; }
 
@@ -698,11 +703,13 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
 let currentConvId = null;
 let sending = false;
 let driveAttachments = [];  // [{ name, content }]
+let currentUser = null;
 
 // ─ 初期化 ─
 (async () => {
   const me = await fetch('/api/me').then(r => r.json());
   if (me) {
+    currentUser = me;
     document.getElementById('userBadge').textContent = me.name || me.email;
     const roleLabels = { admin: ['管理者','#e53e3e','#fff5f5'], gyoumu: ['業務管理部','#2b6cb0','#ebf8ff'], eigyo: ['営業','#276749','#f0fff4'], recruit: ['採用','#6b46c1','#faf5ff'], user: ['一般','#718096','#f7fafc'] };
     const rl = roleLabels[me.role] || roleLabels.user;
@@ -750,23 +757,48 @@ async function loadSidebar() {
       </div>`).join('');
   }
 
+  // スキルを自分のものとチームのものに分ける
+  const myEmail = currentUser?.email || '';
+  const mySkills = skills.filter(s => s.owner_email === myEmail);
+  const teamSkills = skills.filter(s => s.owner_email !== myEmail && s.shared);
+
   // マイスキル
   html += `<div class="sidebar-section-header" style="margin-top:8px;">マイスキル</div>`;
-  if (skills.length === 0) {
+  if (mySkills.length === 0) {
     html += `<div class="sidebar-empty">保存したスキルがここに表示されます</div>`;
   } else {
-    html += skills.map(s => `
+    html += mySkills.map(s => `
       <div class="skill-item">
         <div class="skill-info">
           <div class="skill-title">${esc(s.title)}</div>
           <div class="skill-desc">${esc(s.description || '')}</div>
         </div>
         <div class="skill-actions">
+          <button class="skill-share-btn ${s.shared ? 'shared' : ''}" onclick="toggleShareSkill(${s.id}, ${!s.shared})" title="${s.shared ? '共有中（クリックで非公開に）' : 'チームに共有する'}">${s.shared ? '🌐' : '🔒'}</button>
           <button class="skill-run-btn" style="background:#ed8936;" onclick="openScheduleModal(${s.id}, ${JSON.stringify(s.title)})" title="定期実行を設定">⏰</button>
           <button class="skill-run-btn" onclick="runSkill(${s.id}, ${JSON.stringify(s.title)})">実行</button>
           <button class="skill-del-btn" onclick="deleteSkill(${s.id})" title="削除">✕</button>
         </div>
       </div>`).join('');
+  }
+
+  // チームのスキル
+  if (teamSkills.length > 0) {
+    html += `<div class="sidebar-section-header" style="margin-top:8px;">チームのスキル</div>`;
+    html += teamSkills.map(s => {
+      const ownerLabel = s.owner_name || s.owner_email.split('@')[0];
+      return `
+      <div class="skill-item">
+        <div class="skill-info">
+          <div class="skill-title">${esc(s.title)}<span class="skill-owner-badge">${esc(ownerLabel)}</span></div>
+          <div class="skill-desc">${esc(s.description || '')}</div>
+        </div>
+        <div class="skill-actions">
+          <button class="skill-run-btn" style="background:#ed8936;" onclick="openScheduleModal(${s.id}, ${JSON.stringify(s.title)})" title="定期実行を設定">⏰</button>
+          <button class="skill-run-btn" onclick="runSkill(${s.id}, ${JSON.stringify(s.title)})">実行</button>
+        </div>
+      </div>`;
+    }).join('');
   }
 
   container.innerHTML = html;
@@ -1042,6 +1074,17 @@ async function saveSkill(btn) {
 async function deleteSkill(id) {
   if (!confirm('このスキルを削除しますか？')) return;
   await fetch(`/api/skills/${id}`, { method: 'DELETE' });
+  await loadSidebar();
+}
+
+// ─ スキル共有トグル ─
+async function toggleShareSkill(id, shared) {
+  const resp = await fetch(`/api/skills/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shared })
+  });
+  if (!resp.ok) { alert('共有設定の変更に失敗しました'); return; }
   await loadSidebar();
 }
 
