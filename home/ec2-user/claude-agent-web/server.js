@@ -11,6 +11,8 @@ const Database = require('better-sqlite3');
 const { google } = require('googleapis');
 const mysql = require('mysql2/promise');
 const nodemailer = require('nodemailer');
+const xlsx = require('xlsx');
+const mammoth = require('mammoth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,10 +56,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','register_task']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','register_task']),
-  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','register_task']),
-  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','read_drive_file','list_calendar_events','list_gmail_messages','register_task'])
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','update_sheet_range','list_calendar_events','list_gmail_messages','register_task']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','update_sheet_range','list_calendar_events','list_gmail_messages','register_task']),
+  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','read_drive_file','update_sheet_range','list_calendar_events','list_gmail_messages','register_task']),
+  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','read_drive_file','update_sheet_range','list_calendar_events','list_gmail_messages','register_task'])
 };
 
 app.set('trust proxy', 1);
@@ -320,6 +322,7 @@ app.get('/auth/google', (req, res, next) => {
   scope: [
     'profile', 'email',
     'https://www.googleapis.com/auth/drive.readonly',
+    'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/calendar.readonly'
   ],
   accessType: 'offline',
@@ -570,6 +573,7 @@ function getSystemPrompt(role) {
 - \`send_chatwork_message\`（個人アカウント送信）は必ずユーザーに内容確認してから実行
 - \`send_system_notification\`（システム通知アカウント送信）はユーザー確認不要で送信可能。定期タスクや自動通知に使用する
 - WP公開は必ずユーザーに内容確認してから実行
+- \`update_sheet_range\`（Sheets書き込み）は必ず2段階フロー: ①confirmed なしで呼ぶ → プレビューが返る → ②ユーザーに「○○シートの○○セルに○○を書きます。よろしいですか？」と提示 → ③ユーザーが「OK」「実行して」「はい」等で承認 → ④confirmed:true を付けて再呼出 → 実際に書き込み。スケジュールタスクからの呼出時は、タスク登録時にユーザーが steps を確認しているため confirmed:true で直接呼んでよい
 - DBはSELECTのみ。更新系は不可
 - ツールがエラーになっても代替手段があれば黙って試す。すべての手段が尽きてから初めてユーザーに報告する
 
@@ -797,13 +801,28 @@ const TOOLS = [
   },
   {
     name: 'read_drive_file',
-    description: 'Google DriveのファイルID指定でDocs/Sheets/テキストの内容を読む。',
+    description: 'Google DriveのファイルID指定で各種ファイルを読む。対応: Google Docs/Sheets/Slides、テキスト/CSV/JSON、画像(JPEG/PNG/GIF/WebP, 5MBまで)、PDF(32MBまで)、Excel(.xlsx/.xls)、Word(.docx)。Sheets/Excelの場合 sheet_name で特定タブを取得。画像・PDFは Claude に自動添付され内容について直接質問できる。',
     input_schema: {
       type: 'object',
       properties: {
-        file_id: { type: 'string' }
+        file_id: { type: 'string' },
+        sheet_name: { type: 'string', description: 'Sheets限定。特定タブ名（例: "延長"）。省略時は全タブ名を返し、先頭タブの内容を取得' }
       },
       required: ['file_id']
+    }
+  },
+  {
+    name: 'update_sheet_range',
+    description: 'Google Sheetsの指定範囲にデータを書き込む。必ず2段階で呼ぶこと: ①最初に confirmed なしで呼ぶとプレビュー（書き込まずに対象シート名・現在の値・書き込み後の値を返す）→ ②ユーザーに見せて明示的に「OK」「実行して」等の承認を得てから confirmed:true で再度呼ぶ → 実際に書き込まれる。スケジュールタスクから呼ぶ場合は、タスクのsteps定義に「書き込みを行う」と明記しておけば confirmed:true で直接呼んでよい。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_id: { type: 'string', description: 'スプレッドシートのID' },
+        range: { type: 'string', description: 'A1記法の範囲（例: "バースデー制度!J100" "シート1!A2:C5"）' },
+        values: { type: 'array', description: '2次元配列。各要素が行、各要素の要素がセル値（例: [["2800"]]）', items: { type: 'array', items: {} } },
+        confirmed: { type: 'boolean', description: 'true の場合のみ実際に書き込む。falseまたは省略時はプレビューを返す' }
+      },
+      required: ['file_id', 'range', 'values']
     }
   },
   // fetch_corp_api / fetch_corp_page は corp 側 /api/agent.php が現在閉鎖中（503）のため
@@ -951,16 +970,77 @@ async function executeTool(name, input, user) {
       return r.data.files || [];
     }
     case 'read_drive_file': {
-      audit(user.email, user.name, 'tool.drive_read', { fileId: input.file_id });
+      audit(user.email, user.name, 'tool.drive_read', { fileId: input.file_id, sheetName: input.sheet_name });
       const drive = getDriveClientForUser(user);
       const meta = await drive.files.get({ fileId: input.file_id, fields: 'name,mimeType' });
       const { mimeType, name } = meta.data;
+      if (mimeType === 'application/vnd.google-apps.spreadsheet') {
+        const sheets = getSheetsClientForUser(user);
+        const ssMeta = await sheets.spreadsheets.get({ spreadsheetId: input.file_id, fields: 'sheets.properties(title,index,gridProperties.rowCount,gridProperties.columnCount)' });
+        const allSheets = (ssMeta.data.sheets || []).map(s => s.properties);
+        const targetTitle = input.sheet_name || allSheets[0]?.title;
+        if (!targetTitle) throw new Error('スプレッドシートにタブがありません');
+        if (input.sheet_name && !allSheets.some(s => s.title === input.sheet_name)) {
+          return { id: input.file_id, name, mimeType, sheets: allSheets.map(s => s.title), error: `タブ「${input.sheet_name}」が見つかりません。利用可能: ${allSheets.map(s => s.title).join(', ')}` };
+        }
+        const values = await sheets.spreadsheets.values.get({ spreadsheetId: input.file_id, range: targetTitle });
+        const rows = values.data.values || [];
+        const csv = rows.map(r => r.map(c => {
+          const s = String(c ?? '');
+          return /[,\"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        }).join(',')).join('\n');
+        return {
+          id: input.file_id,
+          name,
+          mimeType,
+          sheets: allSheets.map(s => s.title),
+          sheet_name: targetTitle,
+          rows: rows.length,
+          content: csv.slice(0, 60000)
+        };
+      }
+      const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      if (IMAGE_MIME.includes(mimeType)) {
+        const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'arraybuffer' });
+        const buf = Buffer.from(r.data);
+        if (buf.length > 5 * 1024 * 1024) {
+          return { id: input.file_id, name, mimeType, error: '画像が5MBを超えるため Claude に渡せません', size: buf.length };
+        }
+        return { id: input.file_id, name, mimeType, image: { mediaType: mimeType, base64: buf.toString('base64') } };
+      }
+      if (mimeType === 'application/pdf') {
+        const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'arraybuffer' });
+        const buf = Buffer.from(r.data);
+        if (buf.length > 32 * 1024 * 1024) {
+          return { id: input.file_id, name, mimeType, error: 'PDFが32MBを超えるため Claude に渡せません', size: buf.length };
+        }
+        return { id: input.file_id, name, mimeType, pdf: { mediaType: 'application/pdf', base64: buf.toString('base64') } };
+      }
+      // Excel (.xlsx / .xls)
+      if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || mimeType === 'application/vnd.ms-excel') {
+        const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'arraybuffer' });
+        const wb = xlsx.read(Buffer.from(r.data), { type: 'buffer' });
+        const sheetNames = wb.SheetNames;
+        const targetSheet = (input.sheet_name && sheetNames.includes(input.sheet_name)) ? input.sheet_name : sheetNames[0];
+        if (input.sheet_name && !sheetNames.includes(input.sheet_name)) {
+          return { id: input.file_id, name, mimeType, sheets: sheetNames, error: `シート「${input.sheet_name}」が見つかりません。利用可能: ${sheetNames.join(', ')}` };
+        }
+        const csv = xlsx.utils.sheet_to_csv(wb.Sheets[targetSheet]);
+        return { id: input.file_id, name, mimeType, sheets: sheetNames, sheet_name: targetSheet, content: csv.slice(0, 60000) };
+      }
+      // Word (.docx)
+      if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'arraybuffer' });
+        const result = await mammoth.extractRawText({ buffer: Buffer.from(r.data) });
+        return { id: input.file_id, name, mimeType, content: result.value.slice(0, 60000) };
+      }
+      // PowerPoint (.pptx) はテキスト抽出が複雑なので、未対応として明示
+      if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+        return { id: input.file_id, name, mimeType, error: 'PowerPoint(.pptx)は未対応です。Google スライドに変換するか、PDFに書き出してください' };
+      }
       let content = '';
       if (mimeType === 'application/vnd.google-apps.document' || mimeType === 'application/vnd.google-apps.presentation') {
         const r = await drive.files.export({ fileId: input.file_id, mimeType: 'text/plain' }, { responseType: 'text' });
-        content = String(r.data);
-      } else if (mimeType === 'application/vnd.google-apps.spreadsheet') {
-        const r = await drive.files.export({ fileId: input.file_id, mimeType: 'text/csv' }, { responseType: 'text' });
         content = String(r.data);
       } else if (mimeType && (mimeType.startsWith('text/') || mimeType === 'application/json')) {
         const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'text' });
@@ -969,6 +1049,41 @@ async function executeTool(name, input, user) {
         throw new Error(`${mimeType} は読み取り非対応です`);
       }
       return { id: input.file_id, name, mimeType, content: content.slice(0, 60000) };
+    }
+    case 'update_sheet_range': {
+      const sheets = getSheetsClientForUser(user);
+      if (!input.confirmed) {
+        // プレビュー: 現在の値を取得して、書き込み予定の値と並べて返す
+        let current = [];
+        try {
+          const cur = await sheets.spreadsheets.values.get({ spreadsheetId: input.file_id, range: input.range });
+          current = cur.data.values || [];
+        } catch(e) { /* 範囲が空でも続行 */ }
+        const meta = await sheets.spreadsheets.get({ spreadsheetId: input.file_id, fields: 'properties.title' });
+        audit(user.email, user.name, 'tool.sheet_write.preview', { fileId: input.file_id, range: input.range });
+        return {
+          preview: true,
+          message: 'これは書き込みプレビューです。ユーザーに対象シート・範囲・現在値・書き込む値を提示し、明示的な承認（「OK」「実行して」など）を得てから、同じパラメータに confirmed:true を追加して再度呼んでください。',
+          spreadsheet_title: meta.data.properties?.title,
+          range: input.range,
+          current_values: current,
+          new_values: input.values
+        };
+      }
+      audit(user.email, user.name, 'tool.sheet_write.execute', { fileId: input.file_id, range: input.range, rows: input.values?.length });
+      const r = await sheets.spreadsheets.values.update({
+        spreadsheetId: input.file_id,
+        range: input.range,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: input.values }
+      });
+      return {
+        ok: true,
+        updatedRange: r.data.updatedRange,
+        updatedRows: r.data.updatedRows,
+        updatedColumns: r.data.updatedColumns,
+        updatedCells: r.data.updatedCells
+      };
     }
     // case 'fetch_corp_api' / 'fetch_corp_page' は corp 側 agent.php が現在閉鎖中（503）のため
     // ツール定義から除外しています。corp 側を再開する際に git history から復元してください。
@@ -1082,7 +1197,9 @@ async function executeTool(name, input, user) {
 
 // POST /api/chat
 app.post('/api/chat', async (req, res) => {
-  const { message, conversationId } = req.body;
+  const { message, conversationId, model: modelPref } = req.body;
+  const MODEL_MAP = { haiku: 'claude-haiku-4-5-20251001', sonnet: 'claude-sonnet-4-6' };
+  const chatModel = MODEL_MAP[modelPref] || 'claude-sonnet-4-6';
   const user = req.user;
 
   if (!message || !message.trim()) return res.status(400).json({ error: '空メッセージ' });
@@ -1131,7 +1248,7 @@ app.post('/api/chat', async (req, res) => {
 
     while (toolRound < 10) {
       const stream = anthropic.messages.stream({
-        model: 'claude-sonnet-4-6',
+        model: chatModel,
         max_tokens: 4096,
         system: systemPrompt,
         tools: activeTools,
@@ -1156,8 +1273,23 @@ app.post('/api/chat', async (req, res) => {
         res.write(`data: ${JSON.stringify({ tool: block.name, status: 'running' })}\n\n`);
         try {
           const result = await executeTool(block.name, block.input, user);
-          const resultStr = JSON.stringify(result).slice(0, 80000);
-          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: resultStr });
+          let toolContent;
+          if (result?.image?.base64) {
+            const meta = { ...result, image: undefined, image_attached: true };
+            toolContent = [
+              { type: 'image', source: { type: 'base64', media_type: result.image.mediaType, data: result.image.base64 } },
+              { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
+            ];
+          } else if (result?.pdf?.base64) {
+            const meta = { ...result, pdf: undefined, pdf_attached: true };
+            toolContent = [
+              { type: 'document', source: { type: 'base64', media_type: result.pdf.mediaType, data: result.pdf.base64 } },
+              { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
+            ];
+          } else {
+            toolContent = JSON.stringify(result).slice(0, 80000);
+          }
+          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: toolContent });
           const doneEvent = { tool: block.name, status: 'done' };
           if (block.name === 'register_task' && result?.ok && result?.id) {
             doneEvent.task = { id: result.id, title: block.input.skill_title || block.input.skill_name, task_type: block.input.task_type };
@@ -1287,6 +1419,46 @@ app.delete('/api/skills/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// GET /api/skills/:id/estimate  — 実行コスト見積もり
+app.get('/api/skills/:id/estimate', (req, res) => {
+  const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR shared=1)').get(req.params.id, req.user.email);
+  if (!skill) return res.status(404).json({ error: 'Not found' });
+
+  const role = req.user.role || getUserRole(req.user.email);
+  const systemPrompt = getSystemPromptForUser(role, req.user.email);
+
+  // システムプロンプト + ツール定義のトークン推定
+  const systemTokens = Math.round(systemPrompt.length / 3);
+  const toolCount = TOOLS_FOR_ROLE[role] ? TOOLS_FOR_ROLE[role].size : TOOLS.length;
+  const toolTokens = toolCount * 110; // ツール定義 1件あたり約110トークン
+
+  // スキル内容のトークン推定（日本語主体: 文字数÷2）
+  const skillText = (skill.title || '') + (skill.description || '') + (skill.steps || '');
+  const skillTokens = Math.round(skillText.length / 2);
+
+  // 手順中のツール呼び出し回数を推定
+  const toolKeywords = ['query_corp_db', 'send_chatwork', 'list_drive', 'read_drive', 'update_sheet', 'list_calendar', 'list_gmail', 'call_oss_ai', 'list_wp', 'create_wp'];
+  const steps = skill.steps || '';
+  const toolHits = toolKeywords.filter(kw => steps.includes(kw)).length;
+  const estimatedRounds = Math.max(toolHits, 1);
+
+  // 入力・出力トークンの推定
+  const inputTokens = systemTokens + toolTokens + skillTokens + estimatedRounds * 350;
+  const outputTokens = 300 + estimatedRounds * 250;
+
+  // claude-sonnet-4-6 料金: 入力 $3/1M、出力 $15/1M
+  const costUsd = (inputTokens / 1e6 * 3) + (outputTokens / 1e6 * 15);
+  const costJpy = Math.ceil(costUsd * 150);
+
+  res.json({
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    estimated_rounds: estimatedRounds,
+    cost_usd: Number(costUsd.toFixed(5)),
+    cost_jpy: costJpy
+  });
+});
+
 // POST /api/skills/:id/run
 app.post('/api/skills/:id/run', async (req, res) => {
   const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR shared=1)').get(req.params.id, req.user.email);
@@ -1310,35 +1482,73 @@ app.post('/api/skills/:id/run', async (req, res) => {
 
   let resultBuffer = '';
   try {
-    const { query } = await import('@anthropic-ai/claude-agent-sdk');
-    for await (const msg of query({
-      prompt,
-      options: {
-        allowedTools: ['Bash', 'Read'],
-        permissionMode: 'bypassPermissions'
-      }
-    })) {
-      if (msg.type === 'assistant') {
-        for (const block of msg.message.content) {
-          if (block.type === 'text' && block.text) {
-            resultBuffer += block.text;
-            res.write(`data: ${JSON.stringify({ text: block.text })}\n\n`);
-          } else if (block.type === 'tool_use') {
-            res.write(`data: ${JSON.stringify({ tool: block.name, status: 'running' })}\n\n`);
-          }
-        }
-      } else if (msg.type === 'result') {
-        if (msg.subtype === 'success') {
-          if (msg.result && !resultBuffer) {
-            resultBuffer = msg.result;
-            res.write(`data: ${JSON.stringify({ text: msg.result })}\n\n`);
-          }
-        } else {
-          const errMsg = (msg.errors || []).join(', ') || msg.subtype;
-          res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
+    const role = req.user.role || getUserRole(req.user.email);
+    const allowedToolNames = TOOLS_FOR_ROLE[role];
+    const activeTools = (allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS)
+      .filter(t => t.name !== 'register_task');
+    const systemPrompt = getSystemPromptForUser(role, req.user.email);
+    const messages = [{ role: 'user', content: prompt }];
+    let toolRound = 0;
+
+    while (toolRound < 10) {
+      const stream = anthropic.messages.stream({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        system: systemPrompt,
+        tools: activeTools,
+        messages
+      });
+
+      for await (const ev of stream) {
+        if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') {
+          resultBuffer += ev.delta.text;
+          res.write(`data: ${JSON.stringify({ text: ev.delta.text })}\n\n`);
         }
       }
+
+      const finalMsg = await stream.finalMessage();
+      if (finalMsg.stop_reason !== 'tool_use') break;
+
+      messages.push({ role: 'assistant', content: finalMsg.content });
+
+      for (const block of finalMsg.content) {
+        if (block.type === 'tool_use') {
+          res.write(`data: ${JSON.stringify({ tool: block.name, status: 'running' })}\n\n`);
+        }
+      }
+
+      const toolResults = [];
+      for (const block of finalMsg.content) {
+        if (block.type !== 'tool_use') continue;
+        try {
+          const result = await executeTool(block.name, block.input, req.user);
+          let toolContent;
+          if (result?.image?.base64) {
+            const meta = { ...result, image: undefined, image_attached: true };
+            toolContent = [
+              { type: 'image', source: { type: 'base64', media_type: result.image.mediaType, data: result.image.base64 } },
+              { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
+            ];
+          } else if (result?.pdf?.base64) {
+            const meta = { ...result, pdf: undefined, pdf_attached: true };
+            toolContent = [
+              { type: 'document', source: { type: 'base64', media_type: result.pdf.mediaType, data: result.pdf.base64 } },
+              { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
+            ];
+          } else {
+            toolContent = JSON.stringify(result).slice(0, 80000);
+          }
+          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: toolContent });
+          res.write(`data: ${JSON.stringify({ tool: block.name, status: 'done' })}\n\n`);
+        } catch(e) {
+          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
+          res.write(`data: ${JSON.stringify({ tool: block.name, status: 'error', error: e.message })}\n\n`);
+        }
+      }
+      messages.push({ role: 'user', content: toolResults });
+      toolRound++;
     }
+
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
       .run('done', resultBuffer.slice(0, 2000), runId);
     res.write(`data: ${JSON.stringify({ done: true, code: 0, runId })}\n\n`);
@@ -1792,7 +2002,7 @@ app.get('/api/calendar/events', async (req, res) => {
 });
 
 // ── Google Drive API ──
-function getDriveClientForUser(user) {
+function getDriveAuthForUser(user) {
   const tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
   if (!tokenRow?.refresh_token) {
     throw new Error('Googleドライブが未連携です。一度ログアウトして再ログインしてください（Drive権限の許可が必要です）');
@@ -1808,7 +2018,13 @@ function getDriveClientForUser(user) {
         .run(tokens.access_token, user.email);
     }
   });
-  return google.drive({ version: 'v3', auth: oauth2 });
+  return oauth2;
+}
+function getDriveClientForUser(user) {
+  return google.drive({ version: 'v3', auth: getDriveAuthForUser(user) });
+}
+function getSheetsClientForUser(user) {
+  return google.sheets({ version: 'v4', auth: getDriveAuthForUser(user) });
 }
 
 const DRIVE_MIME_LABELS = {
@@ -2553,7 +2769,23 @@ async function runSkillBackground(task, ownerEmail) {
         if (block.type !== 'tool_use') continue;
         try {
           const result = await executeTool(block.name, block.input, user);
-          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result).slice(0, 80000) });
+          let toolContent;
+          if (result?.image?.base64) {
+            const meta = { ...result, image: undefined, image_attached: true };
+            toolContent = [
+              { type: 'image', source: { type: 'base64', media_type: result.image.mediaType, data: result.image.base64 } },
+              { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
+            ];
+          } else if (result?.pdf?.base64) {
+            const meta = { ...result, pdf: undefined, pdf_attached: true };
+            toolContent = [
+              { type: 'document', source: { type: 'base64', media_type: result.pdf.mediaType, data: result.pdf.base64 } },
+              { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
+            ];
+          } else {
+            toolContent = JSON.stringify(result).slice(0, 80000);
+          }
+          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: toolContent });
         } catch(e) {
           toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
         }
