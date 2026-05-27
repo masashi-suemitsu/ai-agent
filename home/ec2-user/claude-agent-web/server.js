@@ -265,7 +265,8 @@ function recordUsage(email, name, inputTokens, outputTokens, model, context) {
 ['ALTER TABLE scheduled_tasks ADD COLUMN schedule_type TEXT DEFAULT \'interval\'',
  'ALTER TABLE scheduled_tasks ADD COLUMN schedule_hour INTEGER',
  'ALTER TABLE scheduled_tasks ADD COLUMN schedule_minute INTEGER DEFAULT 0',
- 'ALTER TABLE scheduled_tasks ADD COLUMN schedule_weekday INTEGER'
+ 'ALTER TABLE scheduled_tasks ADD COLUMN schedule_weekday INTEGER',
+ 'ALTER TABLE scheduled_tasks ADD COLUMN model TEXT DEFAULT \'sonnet\''
 ].forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
 function audit(email, name, action, details = {}) {
@@ -921,7 +922,8 @@ const TOOLS = [
         schedule_hour:   { type: 'number', description: 'daily/weeklyのとき実行する時刻（時・JST）。例: 9=9時' },
         schedule_minute: { type: 'number', description: 'daily/weeklyのとき実行する時刻（分）。省略時0' },
         schedule_weekday:{ type: 'number', description: 'weeklyのとき実行する曜日。0=日/1=月/2=火/3=水/4=木/5=金/6=土' },
-        run_at:          { type: 'string', description: '単発タスクの実行日時（ISO 8601形式 例: 2025-06-01T09:00:00）' }
+        run_at:          { type: 'string', description: '単発タスクの実行日時（ISO 8601形式 例: 2025-06-01T09:00:00）' },
+        model:           { type: 'string', description: '使用AIモデル。sonnet（Claude Sonnet 4.6）/ haiku（Claude Haiku 4.5）/ openrouter:モデルID / deepinfra:モデルID。省略時はsonnet' }
       },
       required: ['task_type', 'skill_name', 'steps']
     }
@@ -1303,7 +1305,8 @@ async function executeTool(name, input, user) {
         schedule_hour,
         schedule_minute = 0,
         schedule_weekday,
-        run_at
+        run_at,
+        model: taskModel = 'sonnet'
       } = input;
       if (!skill_name || !steps) throw new Error('skill_name と steps は必須です');
       const validation = await validateTaskSteps(steps, skill_title || skill_name);
@@ -1321,10 +1324,10 @@ async function executeTool(name, input, user) {
       }
       const ins = db.prepare(
         `INSERT INTO scheduled_tasks
-           (owner_email, task_type, skill_id, skill_name, skill_title, description, steps, interval_min, run_at, enabled, next_run_at, schedule_type, schedule_hour, schedule_minute, schedule_weekday)
-         VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`
-      ).run(user.email, task_type, skill_name, skill_title || skill_name, taskDesc, steps, Number(interval_min), run_at || null, nextRunAt, schedule_type, schedule_hour ?? null, Number(schedule_minute), schedule_weekday ?? null);
-      audit(user.email, user.name, 'scheduled_task.create_via_chat', { id: ins.lastInsertRowid, task_type, skill_name, schedule_type });
+           (owner_email, task_type, skill_id, skill_name, skill_title, description, steps, interval_min, run_at, enabled, next_run_at, schedule_type, schedule_hour, schedule_minute, schedule_weekday, model)
+         VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`
+      ).run(user.email, task_type, skill_name, skill_title || skill_name, taskDesc, steps, Number(interval_min), run_at || null, nextRunAt, schedule_type, schedule_hour ?? null, Number(schedule_minute), schedule_weekday ?? null, taskModel);
+      audit(user.email, user.name, 'scheduled_task.create_via_chat', { id: ins.lastInsertRowid, task_type, skill_name, schedule_type, model: taskModel });
       const wdays = ['日','月','火','水','木','金','土'];
       const label = task_type === 'once'
         ? `単発タスク「${skill_name}」を ${run_at} に登録しました（ID: ${ins.lastInsertRowid}）`
@@ -1523,6 +1526,8 @@ app.post('/api/chat', async (req, res) => {
     const messages = history.map(m => ({ role: m.role, content: m.content }));
     let fullAssistantText = '';
     let toolRound = 0;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
 
     while (toolRound < 10) {
       const stream = anthropic.messages.stream({
@@ -1541,6 +1546,8 @@ app.post('/api/chat', async (req, res) => {
       }
 
       const finalMsg = await stream.finalMessage();
+      totalInputTokens += finalMsg.usage?.input_tokens || 0;
+      totalOutputTokens += finalMsg.usage?.output_tokens || 0;
       if (finalMsg.stop_reason !== 'tool_use') break;
 
       messages.push({ role: 'assistant', content: finalMsg.content });
@@ -1583,6 +1590,7 @@ app.post('/api/chat', async (req, res) => {
     }
 
     db.prepare('INSERT INTO messages (conversation_id, role, content) VALUES (?,?,?)').run(convId, 'assistant', fullAssistantText);
+    recordUsage(user.email, user.name, totalInputTokens, totalOutputTokens, chatModel, 'chat');
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
   } catch(e) {
     res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
@@ -1767,6 +1775,8 @@ app.post('/api/skills/:id/run', async (req, res) => {
     const systemPrompt = getSystemPromptForUser(role, req.user.email);
     const messages = [{ role: 'user', content: prompt }];
     let toolRound = 0;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
 
     while (toolRound < 10) {
       const stream = anthropic.messages.stream({
@@ -1785,6 +1795,8 @@ app.post('/api/skills/:id/run', async (req, res) => {
       }
 
       const finalMsg = await stream.finalMessage();
+      totalInputTokens += finalMsg.usage?.input_tokens || 0;
+      totalOutputTokens += finalMsg.usage?.output_tokens || 0;
       if (finalMsg.stop_reason !== 'tool_use') break;
 
       messages.push({ role: 'assistant', content: finalMsg.content });
@@ -1829,6 +1841,7 @@ app.post('/api/skills/:id/run', async (req, res) => {
 
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
       .run('done', resultBuffer.slice(0, 2000), runId);
+    recordUsage(req.user.email, req.user.name, totalInputTokens, totalOutputTokens, 'claude-sonnet-4-6', 'skill_run');
     res.write(`data: ${JSON.stringify({ done: true, code: 0, runId })}\n\n`);
   } catch(e) {
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
@@ -1837,6 +1850,68 @@ app.post('/api/skills/:id/run', async (req, res) => {
     res.write(`data: ${JSON.stringify({ done: true, code: 1, runId })}\n\n`);
   }
   res.end();
+});
+
+// ── Usage API ──
+// Sonnet 4.6: $3/1M input, $15/1M output
+const PRICE_INPUT_PER_M  = 3.0;
+const PRICE_OUTPUT_PER_M = 15.0;
+const JPY_RATE = 150;
+
+function calcCost(inputTokens, outputTokens) {
+  const usd = (inputTokens / 1e6 * PRICE_INPUT_PER_M) + (outputTokens / 1e6 * PRICE_OUTPUT_PER_M);
+  return { usd: Number(usd.toFixed(4)), jpy: Math.ceil(usd * JPY_RATE) };
+}
+
+// GET /api/usage/me  — 本人の月次サマリー（直近3ヶ月）
+app.get('/api/usage/me', (req, res) => {
+  const rows = db.prepare(`
+    SELECT
+      strftime('%Y-%m', ts) AS month,
+      SUM(input_tokens)  AS input_tokens,
+      SUM(output_tokens) AS output_tokens,
+      COUNT(*)           AS requests
+    FROM token_usage
+    WHERE email = ?
+      AND ts >= date('now', '-3 months')
+    GROUP BY month
+    ORDER BY month DESC
+  `).all(req.user.email);
+
+  res.json(rows.map(r => ({ ...r, ...calcCost(r.input_tokens, r.output_tokens) })));
+});
+
+// GET /api/usage/all  — 全ユーザー当月サマリー（admin専用）
+app.get('/api/usage/all', (req, res) => {
+  const role = req.user.role || getUserRole(req.user.email);
+  if (role !== 'admin') return res.status(403).json({ error: '管理者のみ' });
+
+  const month = req.query.month || new Date().toISOString().slice(0, 7);
+  const rows = db.prepare(`
+    SELECT
+      email,
+      MAX(name) AS name,
+      SUM(input_tokens)  AS input_tokens,
+      SUM(output_tokens) AS output_tokens,
+      COUNT(*)           AS requests
+    FROM token_usage
+    WHERE strftime('%Y-%m', ts) = ?
+    GROUP BY email
+    ORDER BY (input_tokens + output_tokens) DESC
+  `).all(month);
+
+  const total = rows.reduce((acc, r) => {
+    acc.input_tokens  += r.input_tokens;
+    acc.output_tokens += r.output_tokens;
+    acc.requests      += r.requests;
+    return acc;
+  }, { input_tokens: 0, output_tokens: 0, requests: 0 });
+
+  res.json({
+    month,
+    users: rows.map(r => ({ ...r, ...calcCost(r.input_tokens, r.output_tokens) })),
+    total: { ...total, ...calcCost(total.input_tokens, total.output_tokens) }
+  });
 });
 
 // ── User Settings API ──
@@ -2512,7 +2587,7 @@ app.get('/api/scheduled-tasks', (req, res) => {
 
 // POST /api/scheduled-tasks
 app.post('/api/scheduled-tasks', (req, res) => {
-  const { skill_id, task_type = 'recurring', interval_min = 60, run_at, schedule_type = 'interval', schedule_hour, schedule_minute = 0, schedule_weekday } = req.body;
+  const { skill_id, task_type = 'recurring', interval_min = 60, run_at, schedule_type = 'interval', schedule_hour, schedule_minute = 0, schedule_weekday, model = 'sonnet' } = req.body;
 
   let taskData = {};
   if (skill_id) {
@@ -2531,20 +2606,20 @@ app.post('/api/scheduled-tasks', (req, res) => {
     nextRunAt = calcNextRunAt({ schedule_type, schedule_hour, schedule_minute, schedule_weekday, interval_min });
   }
 
-  audit(req.user.email, req.user.name, 'scheduled_task.create', { skill_id, task_type, interval_min, schedule_type });
+  audit(req.user.email, req.user.name, 'scheduled_task.create', { skill_id, task_type, interval_min, schedule_type, model });
   try {
     const result = db.prepare(
       `INSERT INTO scheduled_tasks
-         (owner_email, task_type, skill_id, skill_name, skill_title, description, steps, interval_min, run_at, enabled, next_run_at, schedule_type, schedule_hour, schedule_minute, schedule_weekday)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`
-    ).run(req.user.email, task_type, taskData.skill_id, taskData.skill_name, taskData.skill_title, taskData.description, taskData.steps, Number(interval_min), run_at || null, nextRunAt, schedule_type, schedule_hour ?? null, Number(schedule_minute), schedule_weekday ?? null);
+         (owner_email, task_type, skill_id, skill_name, skill_title, description, steps, interval_min, run_at, enabled, next_run_at, schedule_type, schedule_hour, schedule_minute, schedule_weekday, model)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`
+    ).run(req.user.email, task_type, taskData.skill_id, taskData.skill_name, taskData.skill_title, taskData.description, taskData.steps, Number(interval_min), run_at || null, nextRunAt, schedule_type, schedule_hour ?? null, Number(schedule_minute), schedule_weekday ?? null, model);
     res.json({ ok: true, id: result.lastInsertRowid });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // PUT /api/scheduled-tasks/:id
 app.put('/api/scheduled-tasks/:id', (req, res) => {
-  const { interval_min, enabled, skill_title, description, steps, schedule_type, schedule_hour, schedule_minute, schedule_weekday } = req.body;
+  const { interval_min, enabled, skill_title, description, steps, schedule_type, schedule_hour, schedule_minute, schedule_weekday, model } = req.body;
   try {
     const row = db.prepare('SELECT * FROM scheduled_tasks WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
     if (!row) return res.status(403).json({ error: '権限がありません' });
@@ -2560,6 +2635,7 @@ app.put('/api/scheduled-tasks/:id', (req, res) => {
     if (schedule_hour !== undefined) { updates.push('schedule_hour=?'); params.push(schedule_hour); }
     if (schedule_minute !== undefined) { updates.push('schedule_minute=?'); params.push(schedule_minute); }
     if (schedule_weekday !== undefined) { updates.push('schedule_weekday=?'); params.push(schedule_weekday); }
+    if (model !== undefined) { updates.push('model=?'); params.push(model); }
     const schedChanged = schedule_type !== undefined || schedule_hour !== undefined || schedule_minute !== undefined || schedule_weekday !== undefined || interval_min !== undefined;
     if (schedChanged && row.task_type === 'recurring') {
       const merged = {
@@ -3010,6 +3086,31 @@ ${steps}
   }
 }
 
+// ── モデルキー解決 ──
+// "sonnet" / "haiku" → Anthropic
+// "openrouter:model-id" / "deepinfra:model-id" → OSS (OpenAI互換)
+const CLAUDE_MODEL_MAP = {
+  sonnet: 'claude-sonnet-4-6',
+  haiku: 'claude-haiku-4-5-20251001'
+};
+
+function resolveModel(modelKey) {
+  if (!modelKey || CLAUDE_MODEL_MAP[modelKey]) {
+    return { provider: 'anthropic', modelId: CLAUDE_MODEL_MAP[modelKey] || CLAUDE_MODEL_MAP.sonnet };
+  }
+  const colonIdx = modelKey.indexOf(':');
+  if (colonIdx === -1) return { provider: 'anthropic', modelId: CLAUDE_MODEL_MAP.sonnet };
+  return { provider: modelKey.slice(0, colonIdx), modelId: modelKey.slice(colonIdx + 1) };
+}
+
+// Anthropicツール定義をOpenAI形式に変換
+function toOpenAITools(anthropicTools) {
+  return anthropicTools.map(t => ({
+    type: 'function',
+    function: { name: t.name, description: t.description, parameters: t.input_schema }
+  }));
+}
+
 // ── Background Skill Runner ──
 async function runSkillBackground(task, ownerEmail) {
   const role = getUserRole(ownerEmail);
@@ -3035,57 +3136,109 @@ async function runSkillBackground(task, ownerEmail) {
     const allowedToolNames = TOOLS_FOR_ROLE[role];
     const activeTools = (allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS)
       .filter(t => t.name !== 'register_task');
-    const messages = [{ role: 'user', content: prompt }];
-    let toolRound = 0;
 
-    while (toolRound < 10) {
-      const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
-        system: bgSystemPrompt,
-        tools: activeTools,
-        messages
-      });
+    const { provider, modelId } = resolveModel(task.model);
 
-      for (const block of response.content) {
-        if (block.type === 'text') resultBuffer += block.text;
-      }
-      if (response.stop_reason !== 'tool_use') break;
+    if (provider === 'anthropic') {
+      // ── Anthropic (Claude) ──
+      const messages = [{ role: 'user', content: prompt }];
+      let toolRound = 0;
 
-      messages.push({ role: 'assistant', content: response.content });
-      const toolResults = [];
-      for (const block of response.content) {
-        if (block.type !== 'tool_use') continue;
-        try {
-          const result = await executeTool(block.name, block.input, user);
-          let toolContent;
-          if (result?.image?.base64) {
-            const meta = { ...result, image: undefined, image_attached: true };
-            toolContent = [
-              { type: 'image', source: { type: 'base64', media_type: result.image.mediaType, data: result.image.base64 } },
-              { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
-            ];
-          } else if (result?.pdf?.base64) {
-            const meta = { ...result, pdf: undefined, pdf_attached: true };
-            toolContent = [
-              { type: 'document', source: { type: 'base64', media_type: result.pdf.mediaType, data: result.pdf.base64 } },
-              { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
-            ];
-          } else {
-            toolContent = JSON.stringify(result).slice(0, 80000);
-          }
-          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: toolContent });
-        } catch(e) {
-          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
+      while (toolRound < 10) {
+        const response = await anthropic.messages.create({
+          model: modelId,
+          max_tokens: 4096,
+          system: bgSystemPrompt,
+          tools: activeTools,
+          messages
+        });
+
+        for (const block of response.content) {
+          if (block.type === 'text') resultBuffer += block.text;
         }
+        if (response.stop_reason !== 'tool_use') break;
+
+        messages.push({ role: 'assistant', content: response.content });
+        const toolResults = [];
+        for (const block of response.content) {
+          if (block.type !== 'tool_use') continue;
+          try {
+            const result = await executeTool(block.name, block.input, user);
+            let toolContent;
+            if (result?.image?.base64) {
+              const meta = { ...result, image: undefined, image_attached: true };
+              toolContent = [
+                { type: 'image', source: { type: 'base64', media_type: result.image.mediaType, data: result.image.base64 } },
+                { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
+              ];
+            } else if (result?.pdf?.base64) {
+              const meta = { ...result, pdf: undefined, pdf_attached: true };
+              toolContent = [
+                { type: 'document', source: { type: 'base64', media_type: result.pdf.mediaType, data: result.pdf.base64 } },
+                { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
+              ];
+            } else {
+              toolContent = JSON.stringify(result).slice(0, 80000);
+            }
+            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: toolContent });
+          } catch(e) {
+            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
+          }
+        }
+        messages.push({ role: 'user', content: toolResults });
+        toolRound++;
       }
-      messages.push({ role: 'user', content: toolResults });
-      toolRound++;
+    } else {
+      // ── OSS (OpenRouter / DeepInfra) — OpenAI互換API ──
+      const apiKey = provider === 'deepinfra' ? process.env.DEEPINFRA_API_KEY : process.env.OPENROUTER_API_KEY;
+      const baseUrl = provider === 'deepinfra' ? 'https://api.deepinfra.com/v1/openai' : 'https://openrouter.ai/api/v1';
+      if (!apiKey) throw new Error(`${provider} APIキーが未設定です`);
+
+      const openaiTools = toOpenAITools(activeTools);
+      const messages = [
+        { role: 'system', content: bgSystemPrompt },
+        { role: 'user', content: prompt }
+      ];
+      let toolRound = 0;
+
+      while (toolRound < 10) {
+        const r = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            ...(provider === 'openrouter' ? { 'HTTP-Referer': 'https://acrovision.co.jp' } : {})
+          },
+          body: JSON.stringify({ model: modelId, messages, tools: openaiTools, tool_choice: 'auto', max_tokens: 4096 })
+        });
+        if (!r.ok) throw new Error(`${provider} API error: ${r.status} ${await r.text()}`);
+        const data = await r.json();
+        const choice = data.choices?.[0];
+        if (!choice) break;
+
+        if (choice.message?.content) resultBuffer += choice.message.content;
+        if (!choice.message?.tool_calls?.length) break;
+
+        messages.push({ role: 'assistant', content: choice.message.content || null, tool_calls: choice.message.tool_calls });
+
+        for (const tc of choice.message.tool_calls) {
+          let toolResultContent;
+          try {
+            const input = JSON.parse(tc.function.arguments);
+            const result = await executeTool(tc.function.name, input, user);
+            toolResultContent = JSON.stringify(result).slice(0, 80000);
+          } catch(e) {
+            toolResultContent = JSON.stringify({ error: e.message });
+          }
+          messages.push({ role: 'tool', tool_call_id: tc.id, content: toolResultContent });
+        }
+        toolRound++;
+      }
     }
 
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
       .run('done', resultBuffer.slice(0, 2000), runId);
-    audit(ownerEmail, '', 'scheduled_task.ran', { skillName: task.skill_name, runId });
+    audit(ownerEmail, '', 'scheduled_task.ran', { skillName: task.skill_name, runId, model: task.model });
     notifyTaskResult(ownerEmail, task.skill_title || task.skill_name, 'done', resultBuffer).catch(() => {});
     return { ok: true, runId };
   } catch(e) {

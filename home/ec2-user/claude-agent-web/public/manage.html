@@ -157,6 +157,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     <button class="tab-btn" onclick="switchTab('history')">📊 実行履歴</button>
     <button class="tab-btn" onclick="switchTab('skills')">⚙️ スキル</button>
     <button class="tab-btn" onclick="switchTab('rules')">🔒 権限・ルール</button>
+    <button class="tab-btn" onclick="switchTab('usage'); loadUsage();">💰 利用状況</button>
   </div>
 
   <!-- ─ 定期タスク ─ -->
@@ -193,6 +194,11 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   <!-- ─ ユーザー管理（管理者専用） ─ -->
   <div class="tab-content" id="tab-users">
     <div id="userMgmtContent"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+  </div>
+
+  <!-- ─ 利用状況 ─ -->
+  <div class="tab-content" id="tab-usage">
+    <div id="usageContent"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
 </div>
 
@@ -291,6 +297,22 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
         </div>
       </div>
     </div>
+    <div class="modal-field">
+      <label>AIモデル</label>
+      <select id="editTaskModel" style="width:100%;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;background:#fff;">
+        <option value="sonnet">Claude Sonnet 4.6（標準・高品質）</option>
+        <option value="haiku">Claude Haiku 4.5（高速・低コスト）</option>
+        <optgroup label="── OSS モデル / OpenRouter ──">
+          <option value="openrouter:qwen/qwen3-235b-a22b">Qwen3 235B（OpenRouter）</option>
+          <option value="openrouter:meta-llama/llama-4-maverick">Llama 4 Maverick（OpenRouter）</option>
+          <option value="openrouter:mistralai/mistral-small-3.1-24b-instruct">Mistral Small 3.1 24B（OpenRouter）</option>
+        </optgroup>
+        <optgroup label="── OSS モデル / DeepInfra ──">
+          <option value="deepinfra:Qwen/Qwen3-235B-A22B">Qwen3 235B（DeepInfra）</option>
+          <option value="deepinfra:meta-llama/Llama-3.3-70B-Instruct">Llama 3.3 70B（DeepInfra）</option>
+        </optgroup>
+      </select>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeEditTask()">キャンセル</button>
       <button class="btn btn-primary" id="editTaskSaveBtn" onclick="saveEditTask()">保存する</button>
@@ -380,6 +402,22 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     <div class="modal-field" id="mgOnceField" style="display:none;">
       <label>実行日時</label>
       <input type="datetime-local" id="mgRunAt" style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;">
+    </div>
+    <div class="modal-field">
+      <label>AIモデル</label>
+      <select id="modalModel" style="width:100%;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;background:#fff;">
+        <option value="sonnet">Claude Sonnet 4.6（標準・高品質）</option>
+        <option value="haiku">Claude Haiku 4.5（高速・低コスト）</option>
+        <optgroup label="── OSS モデル / OpenRouter ──">
+          <option value="openrouter:qwen/qwen3-235b-a22b">Qwen3 235B（OpenRouter）</option>
+          <option value="openrouter:meta-llama/llama-4-maverick">Llama 4 Maverick（OpenRouter）</option>
+          <option value="openrouter:mistralai/mistral-small-3.1-24b-instruct">Mistral Small 3.1 24B（OpenRouter）</option>
+        </optgroup>
+        <optgroup label="── OSS モデル / DeepInfra ──">
+          <option value="deepinfra:Qwen/Qwen3-235B-A22B">Qwen3 235B（DeepInfra）</option>
+          <option value="deepinfra:meta-llama/Llama-3.3-70B-Instruct">Llama 3.3 70B（DeepInfra）</option>
+        </optgroup>
+      </select>
     </div>
     <div class="modal-btns">
       <button class="modal-btn-cancel" onclick="closeModal()">キャンセル</button>
@@ -1206,6 +1244,102 @@ async function changeUserRole(email, sel) {
   } catch(e) {
     alert(e.message);
     await loadUsers();
+  }
+}
+
+// ─ 利用状況 ─
+let _usageLoaded = false;
+async function loadUsage() {
+  if (_usageLoaded) return;
+  _usageLoaded = true;
+  const el = document.getElementById('usageContent');
+
+  const fmtN = n => Number(n).toLocaleString();
+  const fmtUsd = v => '$' + Number(v).toFixed(4);
+  const fmtJpy = v => '¥' + Math.ceil(v).toLocaleString();
+  const note = '<span style="font-size:11px;color:var(--text-light);">（¥150/$ 換算・参考値）</span>';
+
+  try {
+    const isAdmin = currentUser?.role === 'admin';
+
+    // 本人分：直近3ヶ月
+    const myRows = await fetch('/api/usage/me').then(r => r.json());
+
+    let html = '<h3 style="font-size:14px;font-weight:700;margin-bottom:12px;">自分の利用状況（直近3ヶ月）</h3>';
+    if (!myRows.length) {
+      html += '<div class="empty"><div class="empty-icon">📊</div><p>まだ利用データがありません</p></div>';
+    } else {
+      html += `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px;">
+        <thead><tr style="background:var(--bg);text-align:left;">
+          <th style="padding:8px 12px;border-bottom:2px solid var(--border);">月</th>
+          <th style="padding:8px 12px;border-bottom:2px solid var(--border);text-align:right;">リクエスト</th>
+          <th style="padding:8px 12px;border-bottom:2px solid var(--border);text-align:right;">入力トークン</th>
+          <th style="padding:8px 12px;border-bottom:2px solid var(--border);text-align:right;">出力トークン</th>
+          <th style="padding:8px 12px;border-bottom:2px solid var(--border);text-align:right;">コスト (USD)</th>
+          <th style="padding:8px 12px;border-bottom:2px solid var(--border);text-align:right;">コスト (JPY) ${note}</th>
+        </tr></thead><tbody>`;
+      for (const r of myRows) {
+        html += `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:9px 12px;font-weight:600;">${r.month}</td>
+          <td style="padding:9px 12px;text-align:right;">${fmtN(r.requests)}</td>
+          <td style="padding:9px 12px;text-align:right;">${fmtN(r.input_tokens)}</td>
+          <td style="padding:9px 12px;text-align:right;">${fmtN(r.output_tokens)}</td>
+          <td style="padding:9px 12px;text-align:right;font-weight:600;">${fmtUsd(r.usd)}</td>
+          <td style="padding:9px 12px;text-align:right;color:var(--text-light);">${fmtJpy(r.jpy)}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+    }
+
+    // admin: 全員当月分
+    if (isAdmin) {
+      const thisMonth = new Date().toISOString().slice(0, 7);
+      const allData = await fetch(`/api/usage/all?month=${thisMonth}`).then(r => r.json());
+
+      html += `<h3 style="font-size:14px;font-weight:700;margin-bottom:4px;">全ユーザー利用状況（${allData.month}）</h3>
+        <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">管理者のみ表示</p>`;
+
+      if (!allData.users.length) {
+        html += '<div class="empty"><div class="empty-icon">📊</div><p>今月のデータはまだありません</p></div>';
+      } else {
+        html += `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="background:var(--bg);text-align:left;">
+            <th style="padding:8px 12px;border-bottom:2px solid var(--border);">ユーザー</th>
+            <th style="padding:8px 12px;border-bottom:2px solid var(--border);text-align:right;">リクエスト</th>
+            <th style="padding:8px 12px;border-bottom:2px solid var(--border);text-align:right;">入力トークン</th>
+            <th style="padding:8px 12px;border-bottom:2px solid var(--border);text-align:right;">出力トークン</th>
+            <th style="padding:8px 12px;border-bottom:2px solid var(--border);text-align:right;">コスト (USD)</th>
+            <th style="padding:8px 12px;border-bottom:2px solid var(--border);text-align:right;">コスト (JPY) ${note}</th>
+          </tr></thead><tbody>`;
+        for (const r of allData.users) {
+          html += `<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:9px 12px;">
+              <div style="font-weight:600;">${r.name || ''}</div>
+              <div style="font-size:11px;color:var(--text-light);">${r.email}</div>
+            </td>
+            <td style="padding:9px 12px;text-align:right;">${fmtN(r.requests)}</td>
+            <td style="padding:9px 12px;text-align:right;">${fmtN(r.input_tokens)}</td>
+            <td style="padding:9px 12px;text-align:right;">${fmtN(r.output_tokens)}</td>
+            <td style="padding:9px 12px;text-align:right;font-weight:600;">${fmtUsd(r.usd)}</td>
+            <td style="padding:9px 12px;text-align:right;color:var(--text-light);">${fmtJpy(r.jpy)}</td>
+          </tr>`;
+        }
+        const t = allData.total;
+        html += `<tr style="background:var(--bg);font-weight:700;">
+          <td style="padding:9px 12px;">合計</td>
+          <td style="padding:9px 12px;text-align:right;">${fmtN(t.requests)}</td>
+          <td style="padding:9px 12px;text-align:right;">${fmtN(t.input_tokens)}</td>
+          <td style="padding:9px 12px;text-align:right;">${fmtN(t.output_tokens)}</td>
+          <td style="padding:9px 12px;text-align:right;">${fmtUsd(t.usd)}</td>
+          <td style="padding:9px 12px;text-align:right;color:var(--text-light);">${fmtJpy(t.jpy)}</td>
+        </tr>`;
+        html += '</tbody></table>';
+      }
+    }
+
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`;
   }
 }
 </script>
