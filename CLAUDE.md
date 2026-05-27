@@ -3,6 +3,37 @@
 社内向け AI エージェント Web アプリ（acrovision.co.jp 専用）。  
 Claude API + Claude Agent SDK を使い、チャットから業務を自動化する。
 
+## 開発ルール（必ず守ること）
+
+### Git 同期ルール
+**GitHub を唯一の正解とする。ローカル・サーバーどちらで編集しても必ず GitHub を経由して同期する。**
+
+```
+ローカル ←── push/pull ──→ GitHub ←── push/pull ──→ サーバー
+```
+
+| タイミング | やること |
+|-----------|---------|
+| 編集を**始める前** | `git pull` で最新を取得 |
+| 編集が**終わったら** | `git commit` + `git push` |
+| 別の場所に反映するとき | `git pull` + 必要なら `pm2 restart all` |
+
+### どこで編集しても同じ手順
+
+```bash
+# 編集前（必須）
+git pull
+
+# 編集・動作確認
+
+# 編集後（必須）
+git add <files>
+git commit -m "feat/fix/ops: 変更内容"
+git push origin main
+```
+
+> サーバーで直接編集して動作確認した場合も、サーバー上で `git commit && git push` してからローカルで `git pull` する。SCP での直接転送はこのルールが整うまでの暫定手段。
+
 ## 構成
 
 ```
