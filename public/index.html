@@ -74,6 +74,8 @@ header {
 header h1 { font-size: 15px; font-weight: 700; color: var(--text); }
 header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); display: inline; margin-left: 8px; }
 .header-right { display: flex; align-items: center; gap: 8px; }
+[data-theme="dark"] #githubBadge { color:#adbac7;background:#2d333b;border-color:#444c56; }
+[data-theme="dark"] #githubBadge:hover { background:#373e47; }
 .header-btn { background: none; border: 1px solid var(--border); border-radius: 7px; padding: 5px 12px; font-size: 12px; cursor: pointer; color: var(--text-light); transition: all .15s; display: flex; align-items: center; gap: 5px; }
 .header-btn:hover { border-color: var(--primary); color: var(--primary); }
 .header-btn.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
@@ -676,6 +678,11 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
       <button class="feature-btn" id="featureBtn" type="button" onclick="toggleFeatureMenu(event)" title="機能を選ぶ">🎯 機能を選ぶ</button>
       <div class="feature-menu-popup" id="featureMenuPopup"></div>
     </div>
+    <a id="githubBadge" href="/manage#connectors" title="GitHub 連携済み — コネクタ設定へ"
+      style="display:none;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#24292e;background:#f0f0f0;border:1px solid #d0d7de;border-radius:20px;padding:3px 10px 3px 8px;text-decoration:none;transition:all .15s;"
+      onmouseover="this.style.background='#e6e6e6'" onmouseout="this.style.background='#f0f0f0'">
+      <span>🐙</span><span id="githubBadgeLogin"></span>
+    </a>
     <span id="userBadge" style="font-size:12px;color:#718096;"></span>
     <span id="roleBadge" style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;display:none;"></span>
     <button class="header-btn" type="button" onclick="exportConversation()" title="現在の会話をMarkdownでダウンロード">⬇ エクスポート</button>
@@ -1102,6 +1109,14 @@ let currentUser = null;
   }
   await loadSidebar();
   loadRightSidebarStatuses();
+  fetch('/api/settings/github/status').then(r => r.json()).then(d => {
+    if (d.connected) {
+      const badge = document.getElementById('githubBadge');
+      const loginEl = document.getElementById('githubBadgeLogin');
+      if (badge) { badge.style.display = 'inline-flex'; }
+      if (loginEl) { loginEl.textContent = d.login ? '@' + d.login : 'GitHub'; }
+    }
+  }).catch(() => {});
 
   // OAuth コールバック後の通知 + manage画面からの会話直接リンク
   const urlParams = new URLSearchParams(window.location.search);
