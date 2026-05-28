@@ -19,12 +19,23 @@ AWS Console → IAM → ポリシー → 「ポリシーの作成」→ JSON タ
       "Effect": "Allow",
       "Action": ["s3:PutObject", "s3:PutObjectAcl"],
       "Resource": "arn:aws:s3:::mysql-backup-ap-northeast-1/ai-agent/*"
+    },
+    {
+      "Sid": "AiAgentBackupList",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::mysql-backup-ap-northeast-1",
+      "Condition": {
+        "StringLike": { "s3:prefix": ["ai-agent/*", "ai-agent"] }
+      }
     }
   ]
 }
 ```
 
 ポリシー名: `ai-agent-s3-backup-write`
+
+> `ListBucket` は `ai-agent/` プレフィックスのみに condition で絞り込み（他プレフィックスは見えない）。これで `aws s3 ls s3://mysql-backup-ap-northeast-1/ai-agent/` がエラーなく実行できる。
 
 ### 1-B. SES メール送信用
 
