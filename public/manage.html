@@ -144,6 +144,13 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 .modal-btn-save:disabled { opacity: .6; cursor: default; }
 .modal-actions { display: flex; gap: 8px; margin-top: 24px; }
 
+.admin-badge { display: inline-block; background: #e53e3e; color: #fff; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 4px; vertical-align: middle; margin-left: 5px; letter-spacing: .04em; line-height: 1.6; }
+.admin-only-banner { display: flex; align-items: flex-start; gap: 12px; background: #fff5f5; border: 1px solid #feb2b2; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
+.admin-only-banner .aob-icon { font-size: 22px; flex-shrink: 0; line-height: 1; }
+.admin-only-banner .aob-body { font-size: 13px; line-height: 1.65; }
+.admin-only-banner .aob-title { font-weight: 700; color: #c53030; margin-bottom: 2px; font-size: 14px; }
+.admin-only-banner .aob-desc { color: #742a2a; }
+
 @media (max-width: 600px) {
   .page { padding: 16px 12px; }
   .tab-btn { padding: 7px 14px; font-size: 12px; }
@@ -230,6 +237,13 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 
   <!-- ─ ユーザー管理（管理者専用） ─ -->
   <div class="tab-content" id="tab-users">
+    <div class="admin-only-banner">
+      <div class="aob-icon">🔐</div>
+      <div class="aob-body">
+        <div class="aob-title">管理者専用ページ</div>
+        <div class="aob-desc">このタブは <strong>admin ロール</strong> のユーザーのみに表示されます。他のロールのユーザーにはタブ自体が表示されません。</div>
+      </div>
+    </div>
     <div id="userMgmtContent"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
 
@@ -507,7 +521,7 @@ let _usdJpyUpdatedAt = null;
     const btn = document.createElement('button');
     btn.className = 'tab-btn';
     btn.dataset.tab = 'users';
-    btn.textContent = '👤 ユーザー';
+    btn.innerHTML = '👤 ユーザー<span class="admin-badge">管理者のみ</span>';
     btn.onclick = () => switchTab('users');
     nav.appendChild(btn);
   }
