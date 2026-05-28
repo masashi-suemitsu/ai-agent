@@ -1,0 +1,36 @@
+# Dependabot — 依存ライブラリの自動アップデート PR
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 5
+    # patch / minor は同 PR にまとめて、major はファイル単位で個別 PR
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    # メジャーアップデートは破壊的なので無視（手動レビュー対象）
+    # 必要に応じて個別に `npm update <pkg>` する運用
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+
+  # GitHub Actions の自動更新（CI に Actions を入れたら有効）
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "ci"
