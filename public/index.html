@@ -714,8 +714,9 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
     z-index: 200;
     transition: left .25s ease;
     box-shadow: 2px 0 20px rgba(0,0,0,.15);
+    pointer-events: none;
   }
-  .sidebar.sp-open { left: 0; }
+  .sidebar.sp-open { left: 0; pointer-events: auto; }
 
   /* Right sidebar: slide-in drawer */
   .sidebar-right {
@@ -727,8 +728,9 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
     z-index: 200;
     transition: right .25s ease;
     box-shadow: -2px 0 20px rgba(0,0,0,.15);
+    pointer-events: none;
   }
-  .sidebar-right.sp-open { right: 0; }
+  .sidebar-right.sp-open { right: 0; pointer-events: auto; }
 
   /* Chat area full width */
   .layout { position: relative; }
