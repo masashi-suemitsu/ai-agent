@@ -2481,8 +2481,11 @@ async function executeTool(name, input, user) {
       if (!r.ok) throw new Error(`Zoom error: ${d.message || r.status}`);
       return { ok: true, id: d.id, topic: d.topic, start_time: d.start_time, join_url: d.join_url, start_url: d.start_url };
     }
-    case 'call_freee_api':
-      return await callGenericApi(user, input, 'freee', 'https://api.freee.co.jp', process.env.FREEE_TOKEN, 'FREEE_TOKEN');
+    case 'call_freee_api': {
+      if (user.email !== 'claude@acrovision.co.jp') throw new Error('freee API は末光のみ利用可能です');
+      const freeeToken = await getFreeeToken();
+      return await callGenericApi(user, input, 'freee', 'https://api.freee.co.jp', freeeToken, 'FREEE_TOKEN');
+    }
     case 'call_mfcloud_api':
       return await callGenericApi(user, input, 'mfcloud', 'https://invoice.moneyforward.com', process.env.MFCLOUD_TOKEN, 'MFCLOUD_TOKEN');
     case 'call_salesforce_api':
@@ -4205,6 +4208,11 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
         ...(useBeta ? { betas: betaList, ...(useMcpBeta ? { mcp_servers: mcpServers } : {}) } : {})
       });
 
+      // ストリームエラーを早期に捕捉してクライアントに返す
+      stream.on('error', (err) => {
+        res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      });
+
       for await (const ev of stream) {
         if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') {
           fullAssistantText += ev.delta.text;
@@ -5905,6 +5913,27 @@ function extractGmailBody(payload) {
 }
 
 // ── Slack Bot Token ヘルパー ──
+// freee トークン自動リフレッシュ
+let _freeeAccessToken = process.env.FREEE_TOKEN || '';
+let _freeeTokenExpiry = 0;
+async function getFreeeToken() {
+  if (_freeeAccessToken && Date.now() < _freeeTokenExpiry - 60000) return _freeeAccessToken;
+  const clientId = process.env.FREEE_CLIENT_ID;
+  const clientSecret = process.env.FREEE_CLIENT_SECRET;
+  const refreshToken = process.env.FREEE_REFRESH_TOKEN;
+  if (!clientId || !clientSecret || !refreshToken) throw new Error('freee が未設定です（FREEE_CLIENT_ID / FREEE_CLIENT_SECRET / FREEE_REFRESH_TOKEN）');
+  const r = await fetch('https://accounts.secure.freee.co.jp/public_api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken })
+  });
+  const d = await r.json();
+  if (!r.ok || !d.access_token) throw new Error(`freee トークンリフレッシュ失敗: ${d.error_description || JSON.stringify(d)}`);
+  _freeeAccessToken = d.access_token;
+  _freeeTokenExpiry = Date.now() + (d.expires_in || 21600) * 1000;
+  return _freeeAccessToken;
+}
+
 function getSlackToken() {
   const row = db.prepare("SELECT value FROM system_settings WHERE key='slack_bot_token'").get();
   return row?.value || process.env.SLACK_BOT_TOKEN || '';
@@ -7294,6 +7323,16 @@ function runScheduler() {
           .run(e.message.slice(0, 500), task.id);
         // runSkillBackground 自体が予期せず throw した場合のフォールバック通知
         notifyTaskResult(task.owner_email, task.skill_title || task.skill_name, 'error', e.message).catch(() => {});
+      });
+    }
+
+    // ── ワークフロースケジューラー ──
+    const dueWf = db.prepare("SELECT * FROM workflows WHERE enabled=1 AND trigger_type='scheduled' AND next_run_at <= ?").all(now);
+    for (const wf of dueWf) {
+      const nextRun = calcNextRunAt(wf);
+      db.prepare("UPDATE workflows SET next_run_at=?, last_run_at=?, last_status='running' WHERE id=?").run(nextRun, now, wf.id);
+      runWorkflow(wf, wf.owner_email).catch(e => {
+        db.prepare("UPDATE workflows SET last_status='error', last_result=? WHERE id=?").run(e.message.slice(0, 500), wf.id);
       });
     }
   } catch(e) {
