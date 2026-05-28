@@ -2363,6 +2363,107 @@ async function clearAllMemories() {
   await loadMemories();
 }
 
+// ─ 会話検索 ─
+let _csTimer = null;
+let _csInitialized = false;
+
+function initChatSearch() {
+  if (_csInitialized) return;
+  _csInitialized = true;
+  // 初期表示: 直近30件の会話を表示
+  runChatSearch();
+}
+
+function debounceChatSearch() {
+  clearTimeout(_csTimer);
+  _csTimer = setTimeout(runChatSearch, 280);
+}
+
+function setCsPreset(preset, btn) {
+  document.querySelectorAll('#tab-chatsearch .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const today = new Date().toISOString().slice(0, 10);
+  const ago = n => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+  const fromEl = document.getElementById('csFrom');
+  const toEl   = document.getElementById('csTo');
+  if (preset === 'all')    { fromEl.value = ''; toEl.value = ''; }
+  if (preset === 'today')  { fromEl.value = today; toEl.value = today; }
+  if (preset === 'week')   { fromEl.value = ago(7);  toEl.value = today; }
+  if (preset === 'month')  { fromEl.value = ago(30); toEl.value = today; }
+  if (preset === '3month') { fromEl.value = ago(90); toEl.value = today; }
+  runChatSearch();
+}
+
+function clearChatSearch() {
+  document.getElementById('csQuery').value = '';
+  document.getElementById('csFrom').value = '';
+  document.getElementById('csTo').value = '';
+  document.querySelectorAll('#tab-chatsearch .filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('#tab-chatsearch .filter-btn').classList.add('active');
+  runChatSearch();
+}
+
+async function runChatSearch() {
+  const q    = document.getElementById('csQuery').value.trim();
+  const from = document.getElementById('csFrom').value;
+  const to   = document.getElementById('csTo').value;
+  const summary = document.getElementById('csSummary');
+  const results = document.getElementById('csResults');
+  results.innerHTML = '<div style="color:var(--text-light);font-size:13px;padding:16px 0;">検索中…</div>';
+  summary.textContent = '';
+
+  const qs = new URLSearchParams({ limit: 50 });
+  if (q)    qs.set('q', q);
+  if (from) qs.set('from', from);
+  if (to)   qs.set('to', to);
+
+  try {
+    const rows = await fetch('/api/conversations/search?' + qs).then(r => r.json());
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      results.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div><p>該当する会話がありません</p></div>';
+      summary.textContent = '0件';
+      return;
+    }
+
+    summary.textContent = `${rows.length}件の会話が見つかりました`;
+
+    const reEsc = q ? q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : null;
+    const hilight = s => {
+      const escaped = esc(String(s || ''));
+      if (!reEsc) return escaped;
+      return escaped.replace(new RegExp(reEsc, 'gi'), m => `<mark style="background:#fef3c7;color:#92400e;padding:0 2px;border-radius:2px;">${m}</mark>`);
+    };
+
+    results.innerHTML = rows.map(c => {
+      const snippetList = c.snippets
+        ? c.snippets.split('|||').filter(Boolean).map(s =>
+            `<div style="font-size:12px;color:var(--text-light);line-height:1.5;padding:4px 0 2px;border-top:1px dashed var(--border);margin-top:4px;">…${hilight(s.trim())}…</div>`
+          ).join('')
+        : '';
+      const hitsBadge = c.hits > 0
+        ? `<span style="background:var(--primary);color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:6px;">${c.hits}件ヒット</span>`
+        : '';
+      return `
+        <div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:var(--card-bg);transition:box-shadow .15s;"
+             onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow=''">
+          <div style="display:flex;align-items:flex-start;gap:8px;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:14px;font-weight:600;color:var(--text);">${hilight(c.title || '無題')}${hitsBadge}</div>
+              <div style="font-size:11px;color:var(--text-light);margin-top:2px;">${fmtDt(c.updated_at)}</div>
+              ${snippetList}
+            </div>
+            <a href="/?conv_id=${c.id}" target="_blank"
+               style="flex-shrink:0;padding:6px 12px;background:var(--primary);color:#fff;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;margin-top:2px;"
+               title="チャット画面でこの会話を開く">開く</a>
+          </div>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    results.innerHTML = `<div class="empty"><p>検索エラー: ${esc(e.message)}</p></div>`;
+  }
+}
+
 
 </script>
 </body>

@@ -1101,7 +1101,7 @@ let currentUser = null;
   await loadSidebar();
   loadRightSidebarStatuses();
 
-  // OAuth コールバック後の通知
+  // OAuth コールバック後の通知 + manage画面からの会話直接リンク
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('chatwork_connected')) {
     history.replaceState({}, '', '/');
@@ -1109,6 +1109,10 @@ let currentUser = null;
   } else if (urlParams.get('chatwork_error')) {
     history.replaceState({}, '', '/');
     alert('Chatwork連携に失敗しました。再度お試しください。');
+  } else if (urlParams.get('conv_id')) {
+    const convId = parseInt(urlParams.get('conv_id'), 10);
+    history.replaceState({}, '', '/');
+    if (convId) setTimeout(() => loadConversation(convId), 800);
   }
 })();
 
