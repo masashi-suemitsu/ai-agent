@@ -1536,7 +1536,7 @@ let _runConfirmId = null;
 let _runConfirmTitle = null;
 
 async function runSkill(id, title) {
-  _runConfirmId = id;
+  _runConfirmId = Number(id);
   _runConfirmTitle = title;
   document.getElementById('runConfirmTitle').textContent = title;
   document.getElementById('runConfirmBtn').disabled = true;
@@ -2392,7 +2392,7 @@ function onTaskTypeChange() {
 }
 
 function openScheduleModal(skillId, skillTitle) {
-  scheduleTargetSkillId = skillId;
+  scheduleTargetSkillId = Number(skillId);
   document.getElementById('modalSkillTitle').textContent = skillTitle;
   document.getElementById('modalInterval').value = '60';
   document.querySelector('input[name="taskType"][value="recurring"]').checked = true;
