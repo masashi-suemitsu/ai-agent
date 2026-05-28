@@ -169,11 +169,11 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 
 <div class="page">
   <div class="tab-nav" id="tabNav">
-    <button class="tab-btn active" onclick="switchTab('tasks')">⏰ タスク</button>
-    <button class="tab-btn" onclick="switchTab('history')">📊 実行履歴</button>
-    <button class="tab-btn" onclick="switchTab('skills')">⚙️ スキル</button>
-    <button class="tab-btn" onclick="switchTab('rules')">🔒 権限・ルール</button>
-    <button class="tab-btn" onclick="switchTab('usage'); loadUsage();">💰 利用状況</button>
+    <button class="tab-btn active" data-tab="tasks"   onclick="switchTab('tasks')">⏰ タスク</button>
+    <button class="tab-btn" data-tab="history" onclick="switchTab('history')">📊 実行履歴</button>
+    <button class="tab-btn" data-tab="skills"  onclick="switchTab('skills')">⚙️ スキル</button>
+    <button class="tab-btn" data-tab="rules"   onclick="switchTab('rules')">🔒 権限・ルール</button>
+    <button class="tab-btn" data-tab="usage"   onclick="switchTab('usage')">💰 利用状況</button>
   </div>
 
   <!-- ─ 定期タスク ─ -->
@@ -450,6 +450,7 @@ let _usdJpyUpdatedAt = null;
     const nav = document.getElementById('tabNav');
     const btn = document.createElement('button');
     btn.className = 'tab-btn';
+    btn.dataset.tab = 'users';
     btn.textContent = '👤 ユーザー';
     btn.onclick = () => switchTab('users');
     nav.appendChild(btn);
@@ -461,6 +462,9 @@ let _usdJpyUpdatedAt = null;
   renderRules(currentUser.role);
   loadCustomRules();
   buildModelSelects();
+  // URL ハッシュに対応するタブを復元
+  const initHash = location.hash.slice(1);
+  if (TAB_NAMES.includes(initHash)) switchTab(initHash);
 })();
 
 function renderUserBadge(me) {
@@ -482,15 +486,25 @@ function renderUserBadge(me) {
 }
 
 // ─ タブ切替 ─
+const TAB_NAMES = ['tasks','history','skills','rules','usage','users'];
+
 function switchTab(name) {
+  if (!TAB_NAMES.includes(name)) name = 'tasks';
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  event.currentTarget.classList.add('active');
+  document.getElementById('tab-' + name)?.classList.add('active');
+  document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   if (name === 'history') loadHistory();
   if (name === 'rules') loadCustomRules();
   if (name === 'users') loadUsers();
+  if (name === 'usage') loadUsage();
+  if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
 }
+
+window.addEventListener('hashchange', () => {
+  const tab = location.hash.slice(1);
+  if (TAB_NAMES.includes(tab)) switchTab(tab);
+});
 
 // ─ 定期タスク ─
 async function loadTasks() {
@@ -1129,22 +1143,12 @@ async function saveSchedule() {
     if (!resp.ok) throw new Error(data.error || '登録失敗');
     closeModal();
     await loadTasks();
-    switchTabByName('tasks');
+    switchTab('tasks');
   } catch(e) {
     alert(e.message);
   } finally {
     btn.disabled = false; btn.textContent = '登録する';
   }
-}
-function switchTabByName(name) {
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + name)?.classList.add('active');
-  const tabNames = ['tasks','history','skills','rules','users'];
-  const idx = tabNames.indexOf(name);
-  const btns = document.querySelectorAll('.tab-btn');
-  if (btns[idx >= 0 ? idx : 0]) btns[idx >= 0 ? idx : 0].classList.add('active');
-  if (name === 'history') loadHistory();
 }
 
 // ─ 実行履歴 ─

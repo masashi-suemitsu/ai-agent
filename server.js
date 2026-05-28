@@ -59,10 +59,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
 };
 
 app.set('trust proxy', 1);
@@ -630,7 +630,7 @@ function getSystemPrompt(role) {
 - \`send_chatwork_message\`（個人アカウント送信）は必ずユーザーに内容確認してから実行
 - \`send_system_notification\`（システム通知アカウント送信）はユーザー確認不要で送信可能。定期タスクや自動通知に使用する
 - WP公開は必ずユーザーに内容確認してから実行
-- \`update_sheet_range\` / \`append_sheet_rows\`（Sheets書き込み）, \`send_gmail\`（Gmail送信）, \`create_calendar_event\`（予定作成）, \`create_drive_file\`（Driveファイル作成）はすべて2段階フロー必須: ①confirmed なしで呼ぶ → プレビューが返る → ②ユーザーに「○○を○○します。よろしいですか？」と提示 → ③ユーザーが「OK」「実行して」「はい」等で承認 → ④confirmed:true を付けて再呼出 → 実際に実行。スケジュールタスクからの呼出時は confirmed:true で直接呼んでよい
+- \`update_sheet_range\` / \`append_sheet_rows\`（Sheets書き込み）, \`send_gmail\`（Gmail送信）, \`create_calendar_event\`（予定作成）, \`create_drive_file\`（Driveファイル作成）, \`create_pptx\`（PowerPoint作成）はすべて2段階フロー必須: ①confirmed なしで呼ぶ → プレビューが返る → ②ユーザーに「○○を○○します。よろしいですか？」と提示 → ③ユーザーが「OK」「実行して」「はい」等で承認 → ④confirmed:true を付けて再呼出 → 実際に実行。スケジュールタスクからの呼出時は confirmed:true で直接呼んでよい
 - 上記の確認を求めるとき、メッセージ末尾に必ず \`<confirm>実行する</confirm>\` を付けること。UIが自動でボタンを表示する（テキスト入力不要になる）
 - \`fetch_url\` は任意のWebページを取得可能。社内/ローカルIPは自動ブロック。HTMLはタグ除去テキストで返される（mode=html で生取得も可）
 - スプレッドシートをファイル名で探したいときは \`search_drive_files\` を使う（mime_type: "application/vnd.google-apps.spreadsheet" を指定すると絞り込める）
@@ -1533,6 +1533,67 @@ async function executeTool(name, input, user) {
       const media = { mimeType: m.source, body: input.content };
       const r = await drive.files.create({ requestBody: fileMetadata, media, fields: 'id,name,mimeType,webViewLink' });
       return { ok: true, id: r.data.id, name: r.data.name, mimeType: r.data.mimeType, webViewLink: r.data.webViewLink };
+    }
+    case 'create_pptx': {
+      const drive = getDriveClientForUser(user);
+      const slides = Array.isArray(input.slides) ? input.slides : [];
+      if (slides.length === 0) throw new Error('slides は1つ以上必要');
+      if (!input.confirmed) {
+        audit(user.email, user.name, 'tool.pptx_create.preview', { name: input.file_name, slides: slides.length });
+        return {
+          preview: true,
+          message: 'これはPowerPoint作成プレビューです。スライド構成をユーザーに提示し、承認を得てから confirmed:true で再度呼んでください。',
+          file_name: input.file_name + '.pptx',
+          title: input.title || input.file_name,
+          slide_count: slides.length,
+          outline: slides.map((s, i) => ({
+            index: i + 1,
+            layout: s.layout,
+            title: s.title,
+            preview: (s.body || (s.bullets || []).join(' / ') || s.subtitle || '').slice(0, 100)
+          }))
+        };
+      }
+      audit(user.email, user.name, 'tool.pptx_create.execute', { name: input.file_name, slides: slides.length });
+      // pptx生成
+      const pptx = new PptxGenJS();
+      pptx.layout = 'LAYOUT_16x9';
+      pptx.title = input.title || input.file_name;
+      if (input.author) pptx.author = input.author;
+      const FONT = 'Yu Gothic';
+      for (const s of slides) {
+        const slide = pptx.addSlide();
+        if (s.layout === 'title') {
+          slide.background = { color: '5B6EFF' };
+          if (s.title) slide.addText(s.title, { x: 0.5, y: 2.5, w: 9, h: 1.5, fontSize: 40, bold: true, color: 'FFFFFF', align: 'center', fontFace: FONT });
+          if (s.subtitle) slide.addText(s.subtitle, { x: 0.5, y: 4.2, w: 9, h: 0.8, fontSize: 20, color: 'FFFFFF', align: 'center', fontFace: FONT });
+        } else if (s.layout === 'section') {
+          slide.background = { color: 'F4F6FB' };
+          if (s.title) slide.addText(s.title, { x: 0.5, y: 2.5, w: 9, h: 1.5, fontSize: 36, bold: true, color: '5B6EFF', align: 'center', fontFace: FONT });
+        } else {
+          if (s.title) slide.addText(s.title, { x: 0.4, y: 0.3, w: 9.2, h: 0.7, fontSize: 24, bold: true, color: '2D3748', fontFace: FONT });
+          if (s.layout === 'bullets' && Array.isArray(s.bullets)) {
+            slide.addText(s.bullets.map(b => ({ text: String(b), options: { bullet: true } })), { x: 0.5, y: 1.2, w: 9, h: 4, fontSize: 18, color: '2D3748', fontFace: FONT, valign: 'top', paraSpaceAfter: 8 });
+          } else if (s.layout === 'two_column') {
+            slide.addText(String(s.left || ''), { x: 0.4, y: 1.2, w: 4.5, h: 4, fontSize: 14, color: '2D3748', fontFace: FONT, valign: 'top' });
+            slide.addText(String(s.right || ''), { x: 5.1, y: 1.2, w: 4.5, h: 4, fontSize: 14, color: '2D3748', fontFace: FONT, valign: 'top' });
+          } else { // content
+            slide.addText(String(s.body || ''), { x: 0.5, y: 1.2, w: 9, h: 4, fontSize: 16, color: '2D3748', fontFace: FONT, valign: 'top' });
+          }
+        }
+      }
+      const buf = await pptx.write({ outputType: 'nodebuffer' });
+      const fileMetadata = { name: input.file_name + '.pptx' };
+      if (input.folder_id) fileMetadata.parents = [input.folder_id];
+      const r = await drive.files.create({
+        requestBody: fileMetadata,
+        media: {
+          mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          body: Readable.from(buf)
+        },
+        fields: 'id,name,webViewLink'
+      });
+      return { ok: true, id: r.data.id, name: r.data.name, slide_count: slides.length, webViewLink: r.data.webViewLink };
     }
     default:
       throw new Error(`Unknown tool: ${name}`);
