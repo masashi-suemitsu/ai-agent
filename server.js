@@ -6216,4 +6216,24 @@ function runScheduler() {
 setInterval(runScheduler, 60 * 1000);
 console.log('[scheduler] started');
 
+// webhook_logs の古いエントリを掃除（外部公開エンドポイントなのでログが膨らみやすい）
+function purgeOldLogs() {
+  try {
+    const r1 = db.prepare("DELETE FROM webhook_logs WHERE received_at < datetime('now','localtime','-30 days')").run();
+    if (r1.changes) console.log(`[purge] webhook_logs=${r1.changes}`);
+  } catch(e) { console.error('[purge] error:', e.message); }
+}
+setInterval(purgeOldLogs, 6 * 60 * 60 * 1000); // 6時間ごと
+purgeOldLogs();
+
+// 無音クラッシュ防止: 未捕捉エラーはログに出して PM2 に再起動させる
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason instanceof Error ? reason.stack : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err.stack || err);
+  // 致命的状態の可能性があるので意図的に終了し、PM2 に再起動させる
+  process.exit(1);
+});
+
 app.listen(PORT, '0.0.0.0', () => console.log(`Claude Agent Web: http://0.0.0.0:${PORT}`));
