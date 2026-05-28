@@ -1,6 +1,8 @@
 const express = require('express');
 const http = require('http');
 const crypto = require('crypto');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const session = require('express-session');
 const SqliteStore = require('better-sqlite3-session-store')(session);
 const passport = require('passport');
@@ -15,6 +17,7 @@ const nodemailer = require('nodemailer');
 const xlsx = require('xlsx');
 const mammoth = require('mammoth');
 const PptxGenJS = require('pptxgenjs');
+const PDFDocument = require('pdfkit');
 const { Readable } = require('stream');
 
 // MCP（Model Context Protocol）サーバー設定を環境変数から取得
@@ -33,6 +36,11 @@ function getMcpServers() {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+function serverError(res, e, userMsg = 'サーバーエラーが発生しました') {
+  console.error('[error]', e?.message || e);
+  res.status(500).json({ error: userMsg });
+}
 const HOME = process.env.HOME || '/home/ec2-user';
 const DB_PATH = path.join(HOME, 'claude-agent-web', 'audit.db');
 const ALLOWED_DOMAIN = 'acrovision.co.jp';
@@ -73,13 +81,30 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
 };
 
 app.set('trust proxy', 1);
+app.use(helmet({ contentSecurityPolicy: false })); // CSPはCloudFront側で管理
+
+// ── レート制限 ──
+const chatRateLimit = rateLimit({
+  windowMs: 60 * 1000,         // 1分間
+  max: 30,                      // 最大30リクエスト
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }
+});
+const apiRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }
+});
 
 // ── DB 初期化 ──
 const db = new Database(DB_PATH);
@@ -387,7 +412,17 @@ app.get('/auth/google/callback',
     next();
   },
   passport.authenticate('google', { failureRedirect: '/login?error=1' }),
-  (req, res) => { audit(req.user.email, req.user.name, 'login'); res.redirect('/'); }
+  (req, res) => {
+    const user = req.user;
+    req.session.regenerate(err => {
+      if (err) return res.redirect('/login?error=1');
+      req.login(user, loginErr => {
+        if (loginErr) return res.redirect('/login?error=1');
+        audit(user.email, user.name, 'login');
+        res.redirect('/');
+      });
+    });
+  }
 );
 
 app.get('/logout', (req, res) => {
@@ -558,7 +593,8 @@ app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), { ma
 
 // ── 認証必須ルート ──
 app.use(requireAuth);
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '5mb' }));
+app.use(apiRateLimit);
 app.use(express.static(path.join(__dirname, 'public'), {
   extensions: ['html'],
   setHeaders: (res, filePath) => {
@@ -1155,6 +1191,74 @@ const TOOLS = [
         confirmed: { type: 'boolean' }
       },
       required: ['page_id', 'properties']
+    }
+  },
+  {
+    name: 'export_data_csv',
+    description: 'データ配列をCSVファイルとしてGoogle Driveに保存する。query_corp_dbの結果などを直接保存可能。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_name: { type: 'string', description: 'ファイル名（拡張子なし）' },
+        rows: { type: 'array', description: 'データ。各要素はオブジェクトまたは配列', items: {} },
+        headers: { type: 'array', description: '列ヘッダー（任意。省略時は1行目のキーから推測）', items: { type: 'string' } },
+        folder_id: { type: 'string' }
+      },
+      required: ['file_name', 'rows']
+    }
+  },
+  {
+    name: 'export_data_excel',
+    description: 'データをExcel(.xlsx)ファイルとしてGoogle Driveに保存する。複数シート対応。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_name: { type: 'string' },
+        sheets: { type: 'object', description: '{ "シート名": [{col1, col2}, ...] } 形式' },
+        folder_id: { type: 'string' }
+      },
+      required: ['file_name', 'sheets']
+    }
+  },
+  {
+    name: 'generate_chart',
+    description: 'Chart.js設定からグラフ画像(PNG)を生成してGoogle Driveに保存する。QuickChart.io経由。棒/折れ線/円/ドーナツ等対応。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_name: { type: 'string' },
+        chart: { type: 'object', description: 'Chart.js v3 形式の設定オブジェクト（type, data, options）' },
+        width: { type: 'number', description: '画像幅 px（既定800）' },
+        height: { type: 'number', description: '画像高さ px（既定400）' },
+        folder_id: { type: 'string' }
+      },
+      required: ['file_name', 'chart']
+    }
+  },
+  {
+    name: 'generate_pdf_report',
+    description: 'PDFレポートを生成してGoogle Driveに保存する。タイトル＋本文セクション＋表対応。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_name: { type: 'string' },
+        title: { type: 'string' },
+        author: { type: 'string', description: '作成者名（任意）' },
+        sections: {
+          type: 'array',
+          description: 'セクション配列。各要素 { heading?, text?, table? } table=2次元配列で表を埋め込み',
+          items: {
+            type: 'object',
+            properties: {
+              heading: { type: 'string' },
+              text: { type: 'string' },
+              table: { type: 'array', items: { type: 'array', items: {} } }
+            }
+          }
+        },
+        folder_id: { type: 'string' }
+      },
+      required: ['file_name', 'sections']
     }
   },
   {
@@ -1805,6 +1909,106 @@ async function executeTool(name, input, user) {
       if (!r.ok) throw new Error(`Notion error: ${d.message || r.status}`);
       return { ok: true, id: d.id, url: d.url };
     }
+    case 'export_data_csv': {
+      audit(user.email, user.name, 'tool.export_csv', { name: input.file_name, rows: input.rows?.length });
+      const rows = Array.isArray(input.rows) ? input.rows : [];
+      let headers = input.headers;
+      if (!headers && rows.length > 0 && typeof rows[0] === 'object' && !Array.isArray(rows[0])) {
+        headers = Object.keys(rows[0]);
+      }
+      const escCsv = v => {
+        const s = v == null ? '' : String(v);
+        return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const lines = [];
+      if (headers) lines.push(headers.map(escCsv).join(','));
+      for (const r of rows) {
+        if (Array.isArray(r)) lines.push(r.map(escCsv).join(','));
+        else if (headers) lines.push(headers.map(h => escCsv(r[h])).join(','));
+      }
+      const csv = '﻿' + lines.join('\n'); // BOM for Excel
+      const drive = getDriveClientForUser(user);
+      const meta = { name: input.file_name + '.csv' };
+      if (input.folder_id) meta.parents = [input.folder_id];
+      const dr = await drive.files.create({ requestBody: meta, media: { mimeType: 'text/csv', body: csv }, fields: 'id,name,webViewLink' });
+      return { ok: true, id: dr.data.id, name: dr.data.name, webViewLink: dr.data.webViewLink, rows: rows.length };
+    }
+    case 'export_data_excel': {
+      audit(user.email, user.name, 'tool.export_excel', { name: input.file_name });
+      const wb = xlsx.utils.book_new();
+      for (const [sheetName, rows] of Object.entries(input.sheets || {})) {
+        const ws = xlsx.utils.json_to_sheet(Array.isArray(rows) ? rows : []);
+        xlsx.utils.book_append_sheet(wb, ws, String(sheetName).slice(0, 31));
+      }
+      const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      const drive = getDriveClientForUser(user);
+      const meta = { name: input.file_name + '.xlsx' };
+      if (input.folder_id) meta.parents = [input.folder_id];
+      const dr = await drive.files.create({
+        requestBody: meta,
+        media: { mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body: Readable.from(buf) },
+        fields: 'id,name,webViewLink'
+      });
+      return { ok: true, id: dr.data.id, name: dr.data.name, webViewLink: dr.data.webViewLink, sheet_count: Object.keys(input.sheets || {}).length };
+    }
+    case 'generate_chart': {
+      audit(user.email, user.name, 'tool.generate_chart', { name: input.file_name });
+      const chartConfig = encodeURIComponent(JSON.stringify(input.chart));
+      const url = `https://quickchart.io/chart?c=${chartConfig}&w=${input.width || 800}&h=${input.height || 400}&backgroundColor=white&format=png`;
+      if (url.length > 8000) throw new Error('Chart設定が大きすぎます。データを集約してください');
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`Chart生成エラー: ${r.status} ${await r.text()}`);
+      const buf = Buffer.from(await r.arrayBuffer());
+      const drive = getDriveClientForUser(user);
+      const meta = { name: input.file_name + '.png' };
+      if (input.folder_id) meta.parents = [input.folder_id];
+      const dr = await drive.files.create({
+        requestBody: meta,
+        media: { mimeType: 'image/png', body: Readable.from(buf) },
+        fields: 'id,name,webViewLink'
+      });
+      return { ok: true, id: dr.data.id, name: dr.data.name, webViewLink: dr.data.webViewLink };
+    }
+    case 'generate_pdf_report': {
+      audit(user.email, user.name, 'tool.pdf_report', { name: input.file_name });
+      const doc = new PDFDocument({ size: 'A4', margin: 50, info: { Title: input.title || input.file_name, Author: input.author || user.name || '' } });
+      const chunks = [];
+      doc.on('data', c => chunks.push(c));
+      const done = new Promise(resolve => doc.on('end', resolve));
+      // 日本語フォント対応のため標準フォントだけだとNG。簡易対応で system フォントなしで試す
+      // 本格運用なら NotoSansJP.ttf を配置して doc.font() で指定
+      if (input.title) doc.fontSize(20).text(input.title, { align: 'center' }).moveDown();
+      for (const sec of (input.sections || [])) {
+        if (sec.heading) doc.fontSize(14).text(sec.heading).moveDown(0.3);
+        if (sec.text) doc.fontSize(11).text(sec.text).moveDown(0.5);
+        if (Array.isArray(sec.table) && sec.table.length > 0) {
+          const colWidth = 495 / sec.table[0].length;
+          let y = doc.y;
+          for (const row of sec.table) {
+            let x = 50;
+            for (const cell of row) {
+              doc.fontSize(9).text(String(cell ?? ''), x, y, { width: colWidth - 4, ellipsis: true });
+              x += colWidth;
+            }
+            y = doc.y + 4;
+            doc.y = y;
+          }
+          doc.moveDown();
+        }
+      }
+      doc.end();
+      await done;
+      const buf = Buffer.concat(chunks);
+      const drive = getDriveClientForUser(user);
+      const meta = { name: input.file_name + '.pdf' };
+      if (input.folder_id) meta.parents = [input.folder_id];
+      const dr = await drive.files.create({
+        requestBody: meta,
+        media: { mimeType: 'application/pdf', body: Readable.from(buf) },
+        fields: 'id,name,webViewLink'
+      });
+      return { ok: true, id: dr.data.id, name: dr.data.name, webViewLink: dr.data.webViewLink };
+    }
     case 'create_pptx': {
       const drive = getDriveClientForUser(user);
       const slides = Array.isArray(input.slides) ? input.slides : [];
@@ -1872,7 +2076,7 @@ async function executeTool(name, input, user) {
 }
 
 // POST /api/chat
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', chatRateLimit, async (req, res) => {
   const { message, conversationId, model: modelPref, attachments = [] } = req.body;
   const MODEL_MAP = { haiku: 'claude-haiku-4-5-20251001', sonnet: 'claude-sonnet-4-6' };
   const chatModel = MODEL_MAP[modelPref] || 'claude-sonnet-4-6';
