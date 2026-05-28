@@ -282,7 +282,13 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <div style="font-size:13px;font-weight:700;color:var(--text-light);margin-bottom:10px;letter-spacing:.03em;">📋 テンプレートから作成</div>
       <div id="skillTemplateGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;"></div>
     </div>
-    <div style="font-size:13px;font-weight:700;color:var(--text-light);margin-bottom:10px;letter-spacing:.03em;">マイスキル・共有スキル</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;">マイスキル・共有スキル</div>
+      <label class="btn btn-outline" style="cursor:pointer;font-size:12px;" title="JSONファイルからスキルをインポート">
+        📥 インポート
+        <input type="file" accept=".json" style="display:none;" onchange="importSkill(this)">
+      </label>
+    </div>
     <div id="skillList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
 
@@ -340,6 +346,33 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
           <div style="font-size:12px;font-weight:700;color:var(--text-light);margin-bottom:8px;">バッチ実行履歴</div>
           <div id="batchHistoryArea"><div style="color:var(--text-light);font-size:12px;">読み込み中...</div></div>
+        </div>
+      </div>
+      <!-- Webhook受信トリガー -->
+      <div class="card">
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px;">🔗 Webhook受信トリガー</div>
+        <div style="font-size:12px;color:var(--text-light);margin-bottom:14px;">外部サービスからのHTTPリクエストでスキルを自動実行します。発行したURLをChatwork・GitHub・Zapier等に登録してください。</div>
+        <div id="webhookListArea"><div style="color:var(--text-light);font-size:13px;">読み込み中...</div></div>
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px;">新しいWebhookを作成</div>
+          <div style="display:grid;gap:8px;">
+            <input type="text" id="whLabel" placeholder="ラベル（例：Chatwork受信・GitHub PR）" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);">
+            <select id="whSkillSel" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);">
+              <option value="">スキルを指定しない（プロンプトのみ）</option>
+            </select>
+            <textarea id="whPromptTpl" rows="3" placeholder="プロンプトテンプレート（省略可）。{{payload}} で受信データを参照できます。" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;resize:vertical;background:var(--input-bg);color:var(--text);"></textarea>
+            <button class="btn btn-primary" onclick="createWebhook()" style="width:fit-content;">＋ Webhookを作成</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ブラウザ通知 -->
+      <div class="card">
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px;">🔔 ブラウザ通知（Web Push）</div>
+        <div style="font-size:12px;color:var(--text-light);margin-bottom:12px;">タスク完了時にブラウザ通知を受け取ります。このデバイス・ブラウザに対して設定します。</div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <span id="pushStatusLabel" style="font-size:13px;color:var(--text-light);">確認中...</span>
+          <button id="pushToggleBtn" class="btn btn-primary" onclick="togglePushSubscription()" style="display:none;">🔔 通知を有効にする</button>
         </div>
       </div>
     </div>
@@ -860,7 +893,7 @@ function switchTab(name) {
   if (name === 'users')     loadUsers();
   if (name === 'usage')     loadUsage();
   if (name === 'dashboard') { loadDashStats(); loadDashAudit(); loadDashTrends(); }
-  if (name === 'automation') { loadHooks(); loadBatchHistory(); }
+  if (name === 'automation') { loadHooks(); loadBatchHistory(); loadWebhooks(); initPushStatus(); }
   if (name === 'memories') loadMemories();
   if (name === 'chatsearch') initChatSearch();
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
@@ -1115,6 +1148,7 @@ function renderSkills(skills) {
         <button class="btn btn-outline" onclick="runSkillNow(${s.id}, _skillCache[${s.id}].title, this)">▶ 今すぐ実行</button>
         <button class="btn btn-outline" onclick="openEditSkill(${s.id})">✏️ 編集</button>
         ${(s.version_count||0) > 0 ? `<button class="btn btn-outline" onclick="openVersionHistory(${s.id}, '${esc(s.title).replace(/'/g,"\\'")}')">🕓 履歴 ${s.version_count}</button>` : ''}
+        <button class="btn btn-outline" onclick="exportSkill(${s.id}, '${esc(s.name)}')">📤 エクスポート</button>
         <button class="btn btn-danger" onclick="deleteSkill(${s.id})">削除</button>
         ` : `
         <button class="btn btn-orange" onclick="openModal(${s.id}, _skillCache[${s.id}].title)">⏰ 定期実行を設定</button>
@@ -1480,6 +1514,133 @@ async function restoreVersion(skillId, vnum) {
     closeVersionModal();
     await loadSkills();
   } catch(e) { alert(e.message); }
+}
+
+// ── スキル エクスポート / インポート ──
+function exportSkill(id, name) {
+  const a = document.createElement('a');
+  a.href = `/api/skills/${id}/export`;
+  a.download = `skill_${name}.json`;
+  a.click();
+}
+async function importSkill(input) {
+  const file = input.files[0];
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    if (!data.title || !data.name) { alert('無効なスキルファイルです'); return; }
+    await apiFetch('/api/skills/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    await loadSkills();
+    alert(`スキル「${data.title}」をインポートしました`);
+  } catch(e) { alert('インポートに失敗しました: ' + e.message); }
+  input.value = '';
+}
+
+// ── Webhook ──
+async function loadWebhooks() {
+  const [whRes, skillsRes] = await Promise.allSettled([apiFetch('/api/webhooks'), apiFetch('/api/skills')]);
+  const webhooks = whRes.status === 'fulfilled' ? whRes.value : [];
+  const skills = skillsRes.status === 'fulfilled' ? skillsRes.value.filter(s => s.owner_email === currentUser?.email) : [];
+  const sel = document.getElementById('whSkillSel');
+  if (sel) sel.innerHTML = '<option value="">スキルを指定しない（プロンプトのみ）</option>' + skills.map(s => `<option value="${esc(s.name)}">${esc(s.title)}</option>`).join('');
+  const area = document.getElementById('webhookListArea');
+  if (!area) return;
+  if (!webhooks.length) { area.innerHTML = '<div style="color:var(--text-light);font-size:13px;">Webhookがありません</div>'; return; }
+  area.innerHTML = webhooks.map(wh => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${esc(wh.label||'無題')}</div>
+          <div style="font-size:11px;color:var(--text-light);word-break:break-all;background:var(--muted-bg);border-radius:4px;padding:4px 6px;margin-bottom:4px;font-family:monospace;">
+            https://d2jjp21sq86i80.cloudfront.net/webhooks/${wh.token}
+          </div>
+          ${wh.skill_name ? `<div style="font-size:11px;color:var(--text-light);">スキル: ${esc(wh.skill_name)}</div>` : ''}
+          ${wh.last_used_at ? `<div style="font-size:11px;color:var(--text-light);">最終受信: ${fmtDt(wh.last_used_at)}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;">
+          <button class="btn btn-outline" style="font-size:11px;" onclick="copyText('https://d2jjp21sq86i80.cloudfront.net/webhooks/${wh.token}')">📋 URLコピー</button>
+          <button class="btn btn-outline" style="font-size:11px;" onclick="showWebhookLogs('${wh.token}')">📋 ログ</button>
+          <button class="btn btn-danger" style="font-size:11px;" onclick="deleteWebhook('${wh.token}')">削除</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+function copyText(text) { navigator.clipboard.writeText(text).then(() => alert('コピーしました')).catch(() => alert(text)); }
+async function createWebhook() {
+  const label = document.getElementById('whLabel')?.value.trim();
+  if (!label) { alert('ラベルを入力してください'); return; }
+  const skill_name = document.getElementById('whSkillSel')?.value || null;
+  const prompt_template = document.getElementById('whPromptTpl')?.value.trim() || null;
+  try {
+    const d = await apiFetch('/api/webhooks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label, skill_name, prompt_template }) });
+    document.getElementById('whLabel').value = '';
+    document.getElementById('whPromptTpl').value = '';
+    await loadWebhooks();
+    copyText(`https://d2jjp21sq86i80.cloudfront.net/webhooks/${d.token}`);
+  } catch(e) { alert(e.message); }
+}
+async function deleteWebhook(token) {
+  if (!confirm('このWebhookを削除しますか？')) return;
+  const r = await fetch(`/api/webhooks/${token}`, { method: 'DELETE' });
+  if (!r.ok) { alert('削除に失敗しました'); return; }
+  await loadWebhooks();
+}
+async function showWebhookLogs(token) {
+  try {
+    const logs = await apiFetch(`/api/webhooks/${token}/logs`);
+    const msg = logs.length ? logs.map(l => `[${l.received_at}] ${l.status} - ${l.payload_preview?.slice(0,100)||''}`).join('\n') : '（ログなし）';
+    alert(msg);
+  } catch(e) { alert(e.message); }
+}
+
+// ── Web Push ──
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+let _swReg = null;
+async function initPushStatus() {
+  const btn = document.getElementById('pushToggleBtn');
+  const label = document.getElementById('pushStatusLabel');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    label.textContent = 'このブラウザはWeb Pushに対応していません';
+    return;
+  }
+  try {
+    _swReg = await navigator.serviceWorker.register('/sw.js');
+    const status = await apiFetch('/api/push/status');
+    const perm = Notification.permission;
+    if (perm === 'denied') { label.textContent = '通知がブロックされています（ブラウザ設定で許可してください）'; return; }
+    if (status.subscribed) {
+      label.textContent = '🔔 ブラウザ通知 有効';
+      btn.textContent = '🔕 通知を無効にする'; btn.style.display = '';
+    } else {
+      label.textContent = '通知は無効です';
+      btn.textContent = '🔔 通知を有効にする'; btn.style.display = '';
+    }
+  } catch(e) { label.textContent = '初期化エラー: ' + e.message; }
+}
+async function togglePushSubscription() {
+  const btn = document.getElementById('pushToggleBtn');
+  const label = document.getElementById('pushStatusLabel');
+  try {
+    const status = await apiFetch('/api/push/status');
+    if (status.subscribed) {
+      const sub = await _swReg.pushManager.getSubscription();
+      if (sub) { await sub.unsubscribe(); await apiFetch('/api/push/subscribe', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ endpoint: sub.endpoint }) }); }
+      label.textContent = '通知は無効です'; btn.textContent = '🔔 通知を有効にする';
+    } else {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { label.textContent = '通知が許可されませんでした'; return; }
+      const { publicKey } = await apiFetch('/api/push/vapid-key');
+      const sub = await _swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+      const subJson = sub.toJSON();
+      await apiFetch('/api/push/subscribe', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ endpoint: subJson.endpoint, keys: subJson.keys }) });
+      label.textContent = '🔔 ブラウザ通知 有効'; btn.textContent = '🔕 通知を無効にする';
+    }
+  } catch(e) { alert('エラー: ' + e.message); }
 }
 
 function shareBtn(type, id, shared, shared_with) {

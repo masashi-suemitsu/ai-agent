@@ -6059,6 +6059,9 @@ async function notifyTaskResult(ownerEmail, taskName, status, result) {
     }).catch(e => console.error('[notify] Chatwork送信失敗:', e.message));
   }
 
+  // ── プッシュ通知 ──
+  sendPushNotifications(ownerEmail, `${icon} タスク${statusLabel}: ${taskName}`, shortResult.slice(0, 100) || jst).catch(() => {});
+
   // ── メール通知 ──
   if (!process.env.SES_FROM) return;
   try {
@@ -6072,6 +6075,51 @@ async function notifyTaskResult(ownerEmail, taskName, status, result) {
     console.error('[notify] メール送信失敗:', e.message);
   }
 }
+
+// ── Push API ──
+app.get('/api/push/vapid-key', (req, res) => res.json({ publicKey: VAPID_PUBLIC_KEY }));
+
+app.post('/api/push/subscribe', (req, res) => {
+  const { endpoint, keys } = req.body;
+  if (!endpoint || !keys?.auth || !keys?.p256dh) return res.status(400).json({ error: 'invalid subscription' });
+  db.prepare('INSERT OR REPLACE INTO push_subscriptions (email, endpoint, keys_auth, keys_p256dh) VALUES (?,?,?,?)')
+    .run(req.user.email, endpoint, keys.auth, keys.p256dh);
+  res.json({ ok: true });
+});
+
+app.delete('/api/push/subscribe', (req, res) => {
+  const { endpoint } = req.body;
+  if (endpoint) db.prepare('DELETE FROM push_subscriptions WHERE email=? AND endpoint=?').run(req.user.email, endpoint);
+  else db.prepare('DELETE FROM push_subscriptions WHERE email=?').run(req.user.email);
+  res.json({ ok: true });
+});
+
+app.get('/api/push/status', (req, res) => {
+  const count = db.prepare('SELECT COUNT(*) as n FROM push_subscriptions WHERE email=?').get(req.user.email);
+  res.json({ subscribed: (count?.n || 0) > 0 });
+});
+
+// ── スキル エクスポート / インポート ──
+app.get('/api/skills/:id/export', (req, res) => {
+  const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
+  if (!skill) return res.status(403).json({ error: '見つかりません' });
+  res.setHeader('Content-Disposition', `attachment; filename="skill_${skill.name}.json"`);
+  res.json({ _v: 1, name: skill.name, title: skill.title, description: skill.description, steps: skill.steps });
+});
+
+app.post('/api/skills/import', (req, res) => {
+  const { title, name, description, steps } = req.body || {};
+  if (!title?.trim() || !name || !/^[a-z0-9-]+$/.test(name)) return res.status(400).json({ error: 'title/name が不正です' });
+  let finalName = name;
+  let suffix = 1;
+  while (db.prepare('SELECT id FROM user_skills WHERE owner_email=? AND name=?').get(req.user.email, finalName)) {
+    finalName = name + '-' + (++suffix);
+  }
+  const result = db.prepare('INSERT INTO user_skills (owner_email, name, title, description, steps) VALUES (?,?,?,?,?)')
+    .run(req.user.email, finalName, title.trim(), description || '', steps || '');
+  audit(req.user.email, req.user.name, 'skill.import', { name: finalName, title });
+  res.json({ ok: true, id: result.lastInsertRowid, name: finalName });
+});
 
 // ── Scheduler (1分ごとにポーリング・SQLite) ──
 function runScheduler() {
