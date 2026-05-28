@@ -60,8 +60,9 @@ EC2 上での実パス：`~/claude-agent-web/`（git clone 先）
 |------|-----|
 | EC2 IP | `52.68.18.9` |
 | CloudFront | `https://d2jjp21sq86i80.cloudfront.net` |
-| SSH エイリアス | `claude-agent`（`~/.ssh/config` に設定済み） |
-| SSH キー | `C:/Users/masas/OneDrive/AWS/claude-agent-key.pem` |
+| SSH エイリアス | `claude-agent`（`~/.ssh/config` に設定済み・2026-05-28〜） |
+| SSH 鍵原本 | `C:\Users\masashi suemitsu\OneDrive\AWS\claude-agent-key.pem` |
+| SSH 用コピー | `~/.ssh/claude-agent-key.pem`（icacls で所有者 R のみに絞り済み） |
 | プロセス管理 | PM2（アプリ名: `claude-agent-web`） |
 
 ## リリース手順
