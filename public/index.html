@@ -622,12 +622,12 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
 
 /* ─ Feature Mode Menu ─ */
 .feature-btn {
-  background: var(--primary-light); border: 1.5px solid var(--primary); border-radius: 8px;
-  padding: 4px 14px; height: 30px; cursor: pointer; font-size: 13px; font-weight: 700;
+  background: none; border: 1px solid var(--border); border-radius: 8px;
+  padding: 4px 14px; height: 30px; cursor: pointer; font-size: 13px; font-weight: 600;
   display: flex; align-items: center; gap: 5px; transition: all .15s; flex-shrink: 0;
-  color: var(--primary); white-space: nowrap;
+  color: var(--text-light); white-space: nowrap;
 }
-.feature-btn:hover, .feature-btn.menu-open { background: var(--primary); color: #fff; border-color: var(--primary); }
+.feature-btn:hover, .feature-btn.menu-open { border-color: var(--primary); color: var(--primary); }
 .feature-menu-popup {
   position: absolute; top: calc(100% + 8px); left: 0;
   background: var(--panel-bg); border: 1px solid var(--border);
