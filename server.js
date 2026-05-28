@@ -2219,9 +2219,9 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
       toolRound++;
     }
 
-    db.prepare('INSERT INTO messages (conversation_id, role, content) VALUES (?,?,?)').run(convId, 'assistant', fullAssistantText);
+    const insertedMsg = db.prepare('INSERT INTO messages (conversation_id, role, content) VALUES (?,?,?)').run(convId, 'assistant', fullAssistantText);
     recordUsage(user.email, user.name, totalInputTokens, totalOutputTokens, chatModel, 'chat');
-    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.write(`data: ${JSON.stringify({ done: true, messageId: insertedMsg.lastInsertRowid })}\n\n`);
   } catch(e) {
     res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
   }
@@ -2297,7 +2297,12 @@ app.post('/api/messages/:id/feedback', (req, res) => {
 app.get('/api/conversations/:id/messages', (req, res) => {
   const conv = db.prepare('SELECT id FROM conversations WHERE id=? AND user_email=?').get(req.params.id, req.user.email);
   if (!conv) return res.status(403).json({ error: '見つかりません' });
-  const msgs = db.prepare('SELECT role, content, created_at FROM messages WHERE conversation_id=? ORDER BY id').all(req.params.id);
+  const msgs = db.prepare(`
+    SELECT m.id, m.role, m.content, m.created_at, f.rating AS feedback_rating
+    FROM messages m
+    LEFT JOIN ai_response_feedback f ON f.message_id = m.id
+    WHERE m.conversation_id=? ORDER BY m.id
+  `).all(req.params.id);
   res.json(msgs);
 });
 
