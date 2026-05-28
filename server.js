@@ -714,16 +714,7 @@ app.get('/login', (req, res) => {
 app.get('/auth/google', (req, res, next) => {
   next();
 }, passport.authenticate('google', {
-  scope: [
-    'profile', 'email',
-    'https://www.googleapis.com/auth/drive.readonly',
-    'https://www.googleapis.com/auth/drive.file',
-    'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/calendar',
-    'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/gmail.send'
-  ],
-  accessType: 'offline',
+  scope: ['profile', 'email'],
   hd: ALLOWED_DOMAIN
 }));
 
