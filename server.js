@@ -124,8 +124,8 @@ const CORP_API_ALLOWED = {
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
   gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_server_health','check_job_posting','generate_weekly_report','generate_presentation','summarize_document','draft_email_reply','screen_candidate','bulk_register_kintone','github_api']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply','github_api']),
-  recruit: new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply','screen_candidate','github_api']),
+  eigyo:   new Set(['list_wp_posts','create_wp_post','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply','github_api']),
+  recruit: new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply','screen_candidate','github_api']),
   user:    new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','generate_presentation','summarize_document','draft_email_reply','github_api'])
 };
 
@@ -666,6 +666,12 @@ function requireAuth(req, res, next) {
   res.redirect('/login');
 }
 
+function requireAdmin(req, res, next) {
+  const role = req.user?.role || getUserRole(req.user?.email);
+  if (role !== 'admin') return res.status(403).json({ error: '管理者専用です' });
+  next();
+}
+
 // ── 認証不要ルート ──
 app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
@@ -1009,7 +1015,21 @@ app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), { ma
 
 // ── 認証必須ルート ──
 app.use(requireAuth);
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({
+  limit: '5mb',
+  verify: (_req, _res, buf) => {
+    // ネスト深さ 32 超でエラー（DoS対策: 生バッファで括弧を数える）
+    let depth = 0;
+    let inString = false;
+    for (let i = 0; i < buf.length; i++) {
+      const c = buf[i];
+      if (inString) { if (c === 0x22 && buf[i - 1] !== 0x5c) inString = false; continue; }
+      if (c === 0x22) { inString = true; continue; }
+      if (c === 0x7b || c === 0x5b) { if (++depth > 32) throw Object.assign(new SyntaxError('JSON too deeply nested'), { status: 400 }); }
+      else if (c === 0x7d || c === 0x5d) depth--;
+    }
+  }
+}));
 app.use(apiRateLimit);
 
 // ── ダッシュボードは管理者のみ ──
@@ -2173,6 +2193,27 @@ function isPrivateOrLoopbackHost(host) {
   return false;
 }
 
+// DNS Rebind対策: リダイレクトを手動追跡し、各ホップのホストを検証
+async function safeFetch(url, options = {}) {
+  let currentUrl = url;
+  const maxHops = 5;
+  for (let hop = 0; hop <= maxHops; hop++) {
+    const u = new URL(currentUrl);
+    if (isPrivateOrLoopbackHost(u.hostname)) {
+      throw new Error(`内部アドレス ${u.hostname} へのアクセスは禁止されています`);
+    }
+    const res = await fetch(currentUrl, { ...options, redirect: 'manual' });
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get('location');
+      if (!loc) return res;
+      currentUrl = new URL(loc, currentUrl).href;
+    } else {
+      return res;
+    }
+  }
+  throw new Error('リダイレクトが多すぎます（最大5回）');
+}
+
 async function executeTool(name, input, user) {
   const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim());
   const isAdmin = adminEmails.includes(user.email);
@@ -2758,7 +2799,7 @@ async function executeTool(name, input, user) {
       audit(user.email, user.name, 'tool.fetch_url', { url: input.url, mode: input.mode });
       const ctrl = new AbortController();
       const to = setTimeout(() => ctrl.abort(), 15000);
-      const r = await fetch(input.url, { signal: ctrl.signal, headers: { 'User-Agent': 'Acrovision-AI-Agent/1.0' }, redirect: 'follow' });
+      const r = await safeFetch(input.url, { signal: ctrl.signal, headers: { 'User-Agent': 'Acrovision-AI-Agent/1.0' } });
       clearTimeout(to);
       if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
       const raw = await r.text();
@@ -3249,7 +3290,7 @@ async function executeTool(name, input, user) {
           const ctrl = new AbortController();
           const to = setTimeout(() => ctrl.abort(), timeout);
           const t0 = Date.now();
-          const r = await fetch(url, { signal: ctrl.signal, method: 'HEAD', redirect: 'follow', headers: { 'User-Agent': 'Acrovision-HealthCheck/1.0' } });
+          const r = await safeFetch(url, { signal: ctrl.signal, method: 'HEAD', headers: { 'User-Agent': 'Acrovision-HealthCheck/1.0' } });
           clearTimeout(to);
           return {
             url, ok: r.status < 500,
@@ -4157,6 +4198,10 @@ app.put('/api/skills/:id', (req, res) => {
   // 共有設定のみ更新（shared / shared_with）
   if ((shared !== undefined || shared_with !== undefined) && title === undefined && description === undefined && steps === undefined) {
     const newShared = shared !== undefined ? (shared ? 1 : 0) : skill.shared;
+    // shared_with のドメイン検証（acrovision.co.jp のみ許可）
+    if (Array.isArray(shared_with) && shared_with.some(e => !String(e).endsWith('@acrovision.co.jp'))) {
+      return res.status(400).json({ error: '共有先は @acrovision.co.jp のメールアドレスのみ指定できます' });
+    }
     // shared=false なら shared_with もリセット
     const newSharedWith = newShared === 0 ? null
       : (shared_with === null ? null : (Array.isArray(shared_with) ? JSON.stringify(shared_with) : skill.shared_with));
@@ -4435,8 +4480,12 @@ app.post('/api/skills/:id/run', async (req, res) => {
       }
     };
 
+    const SKILL_TIMEOUT_MS = 10 * 60 * 1000; // 10分
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('スキル実行がタイムアウトしました（最大10分）')), SKILL_TIMEOUT_MS)
+    );
     try {
-      await retryWithBackoff(claudeSkillRun);
+      await Promise.race([retryWithBackoff(claudeSkillRun), timeoutPromise]);
     } catch(claudeErr) {
       if (isOverloadError(claudeErr) && process.env.OPENROUTER_API_KEY) {
         res.write(`data: ${JSON.stringify({ text: '\n\n⚠️ Claude API が混雑しています。OSS AI（Qwen3-235B）で継続します...\n\n' })}\n\n`);
@@ -4981,9 +5030,15 @@ const DB_ALLOWED_TABLES = new Set([
 ]);
 // SQLからFROM/JOIN後のテーブル参照を抽出し、すべてアロウリストに含まれるか検査
 function checkSqlAllowed(sql) {
+  // コメント・改行を正規化してバイパスを防止
+  const normalized = sql
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')  // /* */ コメント除去
+    .replace(/--[^\r\n]*/g, ' ')         // -- コメント除去
+    .replace(/[\r\n\t]+/g, ' ')          // 改行・タブを空白に
+    .replace(/\s+/g, ' ');               // 連続空白を統一
   const tableRe = /\b(?:FROM|JOIN)\s+`?(?:\w+\.)?(\w+)`?/gi;
   let m;
-  while ((m = tableRe.exec(sql)) !== null) {
+  while ((m = tableRe.exec(normalized)) !== null) {
     const t = m[1].toLowerCase();
     if (!DB_ALLOWED_TABLES.has(t)) {
       return { ok: false, table: t };
@@ -5083,6 +5138,36 @@ app.post('/api/wp/posts', async (req, res) => {
     res.json(await wpFetch('/posts', { method: 'POST', body: JSON.stringify({ title, content, status }) }));
   } catch(e) { serverError(res, e); }
 });
+
+// ── Microsoft 365 Graph API ──
+let _msGraphToken = null;
+let _msGraphTokenExpiry = 0;
+
+async function getMsGraphToken() {
+  if (_msGraphToken && Date.now() < _msGraphTokenExpiry - 60000) return _msGraphToken;
+  const { MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET } = process.env;
+  if (!MS_TENANT_ID || !MS_CLIENT_ID || !MS_CLIENT_SECRET) {
+    throw new Error('Microsoft 365 未設定。MS_TENANT_ID / MS_CLIENT_ID / MS_CLIENT_SECRET を .env に設定してください');
+  }
+  const r = await fetch(`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: MS_CLIENT_ID,
+      client_secret: MS_CLIENT_SECRET,
+      scope: 'https://graph.microsoft.com/.default'
+    }).toString()
+  });
+  if (!r.ok) {
+    const err = await r.text();
+    throw new Error(`MS Graph トークン取得失敗 (${r.status}): ${err}`);
+  }
+  const d = await r.json();
+  _msGraphToken = d.access_token;
+  _msGraphTokenExpiry = Date.now() + d.expires_in * 1000;
+  return _msGraphToken;
+}
 
 // ── AWS SES (SDK + EC2 IAM Role) ──
 // 認証は AWS SDK default credential chain（EC2 IAM Role → ~/.aws/credentials → env）
@@ -5551,6 +5636,9 @@ app.put('/api/scheduled-tasks/:id', (req, res) => {
     // 共有設定のみの更新（shared / shared_with）
     if ((shared !== undefined || shared_with !== undefined) && interval_min === undefined && enabled === undefined && skill_title === undefined && description === undefined && steps === undefined && model === undefined) {
       const newShared = shared !== undefined ? (shared ? 1 : 0) : row.shared;
+      if (Array.isArray(shared_with) && shared_with.some(e => !String(e).endsWith('@acrovision.co.jp'))) {
+        return res.status(400).json({ error: '共有先は @acrovision.co.jp のメールアドレスのみ指定できます' });
+      }
       const newSharedWith = newShared === 0 ? null
         : (shared_with === null ? null : (Array.isArray(shared_with) ? JSON.stringify(shared_with) : row.shared_with));
       db.prepare('UPDATE scheduled_tasks SET shared=?, shared_with=? WHERE id=?').run(newShared, newSharedWith, req.params.id);
