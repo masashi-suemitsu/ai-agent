@@ -282,9 +282,14 @@ const SESSION_DB_PATH = path.join(HOME, 'claude-agent-web', 'sessions.db');
 const sessionDb = new Database(SESSION_DB_PATH);
 const THIRTY_DAYS = 30 * 24 * 3600 * 1000;
 
+if (!process.env.SESSION_SECRET) {
+  console.error('[FATAL] SESSION_SECRET が未設定です。.env に設定してから起動してください。');
+  process.exit(1);
+}
+
 app.use(session({
   store: new SqliteStore({ client: sessionDb, expired: { clear: true, intervalMs: 3600000 } }),
-  secret: process.env.SESSION_SECRET || 'claude-agent-dev-secret',
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: { secure: process.env.NODE_ENV === 'production', httpOnly: true, maxAge: THIRTY_DAYS }
@@ -1085,6 +1090,7 @@ async function executeTool(name, input, user) {
       return await cwFetch(`/rooms/${input.room_id}/messages`, { method: 'POST', body: params.toString() }, user.email);
     }
     case 'list_drive_files': {
+      if (!/^[a-zA-Z0-9_-]+$/.test(input.folder_id || '')) throw new Error('無効なフォルダIDです');
       audit(user.email, user.name, 'tool.drive_list', { folderId: input.folder_id });
       const drive = getDriveClientForUser(user);
       const r = await drive.files.list({ q: `'${input.folder_id}' in parents and trashed=false`, fields: 'files(id,name,mimeType,modifiedTime,size)', orderBy: 'folder,name', pageSize: 100 });

@@ -89,6 +89,20 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 }
 .new-task-btn:hover { background: var(--primary-dark); }
 
+.sidebar-search { padding: 0 12px 8px; }
+.sidebar-search input {
+  width: 100%; border: 1px solid var(--sidebar-border, var(--border));
+  background: rgba(255,255,255,.7); color: var(--sidebar-title, var(--text));
+  border-radius: 8px; padding: 7px 12px; font-size: 12px;
+  outline: none; font-family: inherit;
+}
+.sidebar-search input::placeholder { color: var(--sidebar-text); }
+.sidebar-search input:focus { border-color: var(--primary); background: #fff; }
+
+.search-snippet { color: var(--sidebar-text); font-size: 10px; margin-top: 3px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-snippet mark { background: #fef3c7; color: #92400e; padding: 0 2px; border-radius: 2px; }
+.search-empty { text-align: center; color: var(--sidebar-text); font-size: 11px; padding: 16px 12px; opacity: .7; }
+
 .sidebar-section { flex: 1; overflow-y: auto; min-height: 0; }
 .sidebar-section-header {
   padding: 10px 14px 6px;
@@ -557,6 +571,10 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
   <aside class="sidebar">
     <button class="new-task-btn" onclick="newTask()">＋ 新しい依頼</button>
 
+    <div class="sidebar-search">
+      <input type="search" id="sidebarSearch" placeholder="🔍 履歴を検索" oninput="onSidebarSearchInput(event)">
+    </div>
+
     <div class="sidebar-section" id="sidebarContent">
       <!-- 会話履歴とスキルが動的に入る -->
     </div>
@@ -796,6 +814,43 @@ let currentUser = null;
     alert('Chatwork連携に失敗しました。再度お試しください。');
   }
 })();
+
+// ─ Sidebar 履歴検索 ─
+let sidebarSearchTimer = null;
+function onSidebarSearchInput(e) {
+  clearTimeout(sidebarSearchTimer);
+  const q = e.target.value.trim();
+  sidebarSearchTimer = setTimeout(() => {
+    if (q === '') loadSidebar();
+    else renderSidebarSearch(q);
+  }, 250);
+}
+
+async function renderSidebarSearch(q) {
+  const container = document.getElementById('sidebarContent');
+  container.innerHTML = `<div class="search-empty">検索中…</div>`;
+  try {
+    const rows = await fetch('/api/conversations/search?q=' + encodeURIComponent(q)).then(r => r.json());
+    if (!Array.isArray(rows) || rows.length === 0) {
+      container.innerHTML = `<div class="search-empty">「${esc(q)}」に一致する会話なし</div>`;
+      return;
+    }
+    const reEsc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const hilight = s => esc(String(s || '')).replace(new RegExp(reEsc, 'gi'), m => `<mark>${m}</mark>`);
+    container.innerHTML =
+      `<div class="sidebar-section-header">検索結果（${rows.length}件）</div>` +
+      rows.map(c => `
+        <div class="conv-item ${c.id === currentConvId ? 'active' : ''}" onclick="loadConversation(${c.id})">
+          <div style="flex:1;min-width:0;">
+            <div class="conv-title">${hilight(c.title || '無題')}</div>
+            ${c.snippet ? `<div class="search-snippet">${hilight(c.snippet)}</div>` : ''}
+          </div>
+          <div class="conv-date">${formatDate(c.updated_at)}</div>
+        </div>`).join('');
+  } catch (e) {
+    container.innerHTML = `<div class="search-empty">検索エラー: ${esc(e.message)}</div>`;
+  }
+}
 
 // ─ Sidebar: 会話履歴 + スキル ─
 async function loadSidebar() {
