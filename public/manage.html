@@ -230,6 +230,8 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <div style="font-size:13px;font-weight:700;color:var(--text-light);margin-bottom:10px;letter-spacing:.03em;">マイタスク</div>
       <div class="filter-bar" style="margin-bottom:12px;">
         <button class="filter-btn active" onclick="filterTasks('all', this)">すべて</button>
+        <button class="filter-btn" onclick="filterTasks('recurring', this)">定期のみ</button>
+        <button class="filter-btn" onclick="filterTasks('once', this)">単発のみ</button>
         <button class="filter-btn" onclick="filterTasks('enabled', this)">有効のみ</button>
         <button class="filter-btn" onclick="filterTasks('disabled', this)">停止中のみ</button>
       </div>
@@ -781,8 +783,10 @@ function filterTasks(mode, btn) {
   btn.classList.add('active');
   // フィルターはマイタスクのみに適用（チームタスクは全件表示）
   const myTasks = allTasks.filter(t => t.owner_email === currentUser?.email);
-  const filtered = mode === 'enabled'  ? myTasks.filter(t => t.enabled) :
-                   mode === 'disabled' ? myTasks.filter(t => !t.enabled) : myTasks;
+  const filtered = mode === 'enabled'   ? myTasks.filter(t => t.enabled) :
+                   mode === 'disabled'  ? myTasks.filter(t => !t.enabled) :
+                   mode === 'once'      ? myTasks.filter(t => t.task_type === 'once') :
+                   mode === 'recurring' ? myTasks.filter(t => t.task_type !== 'once') : myTasks;
   // マイタスク部分だけ再描画
   const myEl = document.getElementById('myTaskList');
   if (!filtered.length) {
