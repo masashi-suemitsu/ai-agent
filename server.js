@@ -742,6 +742,7 @@ app.get('/logout', (req, res) => {
 
 // ── マジックリンク認証（@acrovision.jp 向け） ──
 app.post('/auth/magic-link/request', express.json(), async (req, res) => {
+  console.log('[magic-link/request] body:', JSON.stringify(req.body), 'ip:', req.ip);
   const { email } = req.body || {};
   if (!email || typeof email !== 'string' || !email.toLowerCase().endsWith('@' + MAGIC_LINK_DOMAIN)) {
     return res.status(400).json({ error: `@${MAGIC_LINK_DOMAIN} のアドレスのみ対応しています` });

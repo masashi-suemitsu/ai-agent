@@ -130,7 +130,7 @@ async function sendMagicLink() {
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'メールでログインリンクを送る';
-    alert('通信エラーが発生しました');
+    alert('通信エラーが発生しました: ' + e.message);
   }
 }
 document.getElementById('magicEmail').addEventListener('keydown', e => {
