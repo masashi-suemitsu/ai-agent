@@ -121,7 +121,7 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_server_health','check_job_posting','generate_weekly_report','generate_presentation','summarize_document','draft_email_reply','screen_candidate']),
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_server_health','check_job_posting','generate_weekly_report','generate_presentation','summarize_document','draft_email_reply','screen_candidate','bulk_register_kintone']),
   eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply']),
   recruit: new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply','screen_candidate']),
   user:    new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','generate_presentation','summarize_document','draft_email_reply'])
@@ -1899,6 +1899,20 @@ const TOOLS = [
       },
       required: ['candidate_info', 'job_requirements']
     }
+  },
+  {
+    name: 'bulk_register_kintone',
+    description: 'Google Drive上のExcel/CSVファイルを読み込み、Kintoneアプリへ一括登録する。confirmed:falseでプレビュー、confirmed:trueで実行。KINTONE_DOMAIN・KINTONE_API_TOKEN環境変数が必要。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_id: { type: 'string', description: 'Google DriveのExcel(.xlsx)またはCSV(.csv)ファイルID' },
+        app_id:  { type: 'string', description: 'Kintoneアプリのアプリ番号（URLの /k/{app_id}/ の部分）' },
+        field_mapping: { type: 'object', description: 'Excelの列名とKintoneフィールドコードのマッピング（省略時はヘッダー行をそのままフィールドコードとして使用）例: {"会社名": "company", "担当者": "person"}' },
+        confirmed: { type: 'boolean', description: 'trueにすると実際に登録を実行。falseまたは省略時はプレビューのみ（必ずプレビューを先に見せること）' }
+      },
+      required: ['file_id', 'app_id']
+    }
   }
 ];
 
@@ -3248,6 +3262,90 @@ ${(input.candidate_info || '').slice(0, 3000)}
       catch (e) { return { error: 'JSONパース失敗: ' + e.message, raw: jsonMatch[0].slice(0, 500) }; }
     }
 
+    case 'bulk_register_kintone': {
+      const domain = process.env.KINTONE_DOMAIN;
+      const token  = process.env.KINTONE_API_TOKEN;
+      if (!domain || !token) throw new Error('KINTONE_DOMAIN または KINTONE_API_TOKEN が未設定です。管理者に環境変数の設定を依頼してください。');
+      audit(user.email, user.name, 'tool.kintone_bulk', { app_id: input.app_id, confirmed: !!input.confirmed });
+
+      const drive = getDriveClientForUser(user);
+      const meta  = await drive.files.get({ fileId: input.file_id, fields: 'name,mimeType' });
+      const mt    = meta.data.mimeType;
+      const isCSV = mt === 'text/csv' || meta.data.name.endsWith('.csv');
+      const isXLS = mt === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || meta.data.name.endsWith('.xlsx');
+      if (!isCSV && !isXLS) throw new Error(`${meta.data.name} は非対応形式です（.xlsx または .csv のみ）`);
+
+      const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'arraybuffer' });
+      const buf = Buffer.from(r.data);
+
+      let rows = [];
+      if (isXLS) {
+        const wb = xlsx.read(buf, { type: 'buffer' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = xlsx.utils.sheet_to_json(ws, { defval: '' });
+      } else {
+        const text = buf.toString('utf8');
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        rows = lines.slice(1).map(line => {
+          const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+          return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+        });
+      }
+      if (rows.length === 0) throw new Error('データが空です。ファイルの内容を確認してください。');
+
+      const mapping = input.field_mapping || {};
+      const toRecord = row => {
+        const rec = {};
+        for (const [col, val] of Object.entries(row)) {
+          const fieldCode = mapping[col] || col;
+          rec[fieldCode] = { value: String(val) };
+        }
+        return rec;
+      };
+
+      if (!input.confirmed) {
+        const preview = rows.slice(0, 5).map(toRecord);
+        return {
+          preview: true,
+          message: `${meta.data.name} から ${rows.length} 件のデータを検出しました。プレビュー（先頭5件）を確認してから confirmed:true で実行してください。`,
+          file_name: meta.data.name,
+          total_rows: rows.length,
+          columns: Object.keys(rows[0] || {}),
+          preview_records: preview
+        };
+      }
+
+      // 一括登録（Kintone APIは最大100件/リクエスト）
+      const BATCH = 100;
+      let total_registered = 0;
+      const errors = [];
+      for (let i = 0; i < rows.length; i += BATCH) {
+        const batch = rows.slice(i, i + BATCH).map(toRecord);
+        const resp = await fetch(`https://${domain}.cybozu.com/k/v1/records.json`, {
+          method: 'POST',
+          headers: { 'X-Cybozu-API-Token': token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ app: input.app_id, records: batch })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          errors.push(`バッチ ${Math.floor(i/BATCH)+1}: ${data.message || resp.status}`);
+        } else {
+          total_registered += batch.length;
+        }
+      }
+      return {
+        ok: errors.length === 0,
+        app_id: input.app_id,
+        total_rows: rows.length,
+        total_registered,
+        errors: errors.length > 0 ? errors : undefined,
+        message: errors.length === 0
+          ? `${total_registered}件をKintoneアプリ(ID:${input.app_id})に登録しました。`
+          : `${total_registered}件登録、${errors.length}件のバッチでエラーが発生しました。`
+      };
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -3535,6 +3633,40 @@ app.get('/api/dashboard', (req, res) => {
     chatwork: !!db.prepare('SELECT 1 FROM user_chatwork_tokens WHERE email=?').get(myEmail)
   };
   res.json({ scope, today_chats: todayChats, month_chats: monthChats, top_tools: topTools, recent_tasks: recentTasks, active_users: activeUsers, integrations: integ });
+});
+
+// GET /api/dashboard/trends — 日別チャット数・ユーザー別統計
+app.get('/api/dashboard/trends', (req, res) => {
+  const role = req.user.role || getUserRole(req.user.email);
+  const isAdmin = role === 'admin';
+  const myEmail = req.user.email;
+  const scope = isAdmin && req.query.scope === 'all' ? 'all' : 'me';
+  const emailClause = scope === 'me' ? "AND email = ?" : '';
+  const emailParam = scope === 'me' ? [myEmail] : [];
+
+  // 過去30日の日別チャット数
+  const daily = db.prepare(`
+    SELECT substr(ts, 1, 10) as day, COUNT(*) as chats
+    FROM audit_logs
+    WHERE action = 'chat' AND ts >= datetime('now', '-30 days') ${emailClause}
+    GROUP BY day ORDER BY day
+  `).all(...emailParam);
+
+  // ユーザー別今月統計（管理者のみ）
+  let userStats = [];
+  if (isAdmin && scope === 'all') {
+    const monthStart = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Tokyo' }).slice(0, 7) + '-01 00:00:00';
+    userStats = db.prepare(`
+      SELECT email, name,
+        SUM(CASE WHEN action='chat' THEN 1 ELSE 0 END) as chats,
+        SUM(CASE WHEN action LIKE 'tool.%' THEN 1 ELSE 0 END) as tools,
+        MAX(ts) as last_action
+      FROM audit_logs WHERE ts >= ?
+      GROUP BY email ORDER BY chats DESC LIMIT 20
+    `).all(monthStart);
+  }
+
+  res.json({ scope, daily, user_stats: userStats });
 });
 
 // ── Webhook管理API（認証済みユーザー） ──

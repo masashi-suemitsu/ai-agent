@@ -819,6 +819,7 @@ function toggleTheme() {
     if (d.usd_jpy && d.usd_jpy > 50) { _usdJpy = d.usd_jpy; _usdJpyUpdatedAt = d.updated_at; }
   }).catch(() => {});
   await Promise.all([loadTasks(), loadSkills()]);
+  renderSkillTemplates();
   renderRules(currentUser.role);
   loadCustomRules();
   buildModelSelects();
@@ -858,7 +859,7 @@ function switchTab(name) {
   if (name === 'rules')     loadCustomRules();
   if (name === 'users')     loadUsers();
   if (name === 'usage')     loadUsage();
-  if (name === 'dashboard') { loadDashStats(); loadDashAudit(); }
+  if (name === 'dashboard') { loadDashStats(); loadDashAudit(); loadDashTrends(); }
   if (name === 'automation') { loadHooks(); loadBatchHistory(); }
   if (name === 'memories') loadMemories();
   if (name === 'chatsearch') initChatSearch();
@@ -1412,11 +1413,23 @@ async function saveEditSkill() {
   const btn = document.getElementById('editSkillSaveBtn');
   btn.disabled = true; btn.textContent = '保存中...';
   try {
-    const resp = await fetch(`/api/skills/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, description, steps })
-    });
+    let resp;
+    if (!id) {
+      // 新規作成（テンプレートから）
+      const name = title.toLowerCase().replace(/[^\w-]/g, '-').replace(/-+/g, '-').slice(0, 40) + '-' + Date.now().toString(36);
+      resp = await fetch('/api/skills', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, title, description, steps })
+      });
+    } else {
+      resp = await fetch(`/api/skills/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description, steps })
+      });
+    }
     if (!resp.ok) throw new Error((await resp.json()).error || '保存失敗');
+    // モーダルタイトルをデフォルトに戻す
+    document.querySelector('#editSkillModal .modal-title').textContent = '✏️ スキルを編集';
     closeEditSkill();
     await loadSkills();
   } catch(e) {
@@ -2334,6 +2347,54 @@ function switchDashScope(s) {
   document.querySelectorAll('#dashScopeToggle button').forEach(b => b.classList.toggle('active', b.dataset.scope === s));
   loadDashStats();
   loadDashAudit();
+  loadDashTrends();
+}
+
+async function loadDashTrends() {
+  const el = document.getElementById('dashTrendChart');
+  const usEl = document.getElementById('dashUserStats');
+  const usPanel = document.getElementById('dashUserStatsPanel');
+  try {
+    const d = await apiFetch('/api/dashboard/trends?scope=' + _dashScope);
+    const daily = d.daily || [];
+    if (daily.length === 0) {
+      el.innerHTML = '<div style="color:var(--text-light);font-size:12px;padding:8px;">データなし</div>';
+    } else {
+      const maxC = Math.max(...daily.map(r => r.chats), 1);
+      const barW = Math.max(8, Math.min(24, Math.floor(700 / daily.length) - 2));
+      el.innerHTML = `<div style="display:flex;align-items:flex-end;gap:2px;height:80px;padding-bottom:18px;position:relative;overflow-x:auto;">
+        ${daily.map(r => {
+          const h = Math.max(3, Math.round((r.chats / maxC) * 60));
+          return `<div title="${r.day}: ${r.chats}件" style="flex:0 0 ${barW}px;height:${h}px;background:var(--primary);border-radius:3px 3px 0 0;opacity:.85;cursor:default;transition:opacity .1s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.85"></div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-light);margin-top:2px;">
+        <span>${daily[0]?.day || ''}</span><span>${daily[daily.length-1]?.day || ''}</span>
+      </div>`;
+    }
+    if (d.user_stats && d.user_stats.length > 0) {
+      usPanel.style.display = '';
+      const maxChat = Math.max(...d.user_stats.map(u => u.chats), 1);
+      usEl.innerHTML = `<table class="dash-ptable">
+        <tr><th>ユーザー</th><th>チャット数</th><th>ツール利用</th><th>最終アクション</th></tr>
+        ${d.user_stats.map(u => `<tr>
+          <td>${esc(u.name || u.email)}</td>
+          <td><div style="display:flex;align-items:center;gap:6px;">
+            <div style="flex:1;background:var(--muted-bg);border-radius:4px;height:8px;max-width:120px;">
+              <div style="width:${(u.chats/maxChat)*100}%;background:var(--primary);height:8px;border-radius:4px;"></div>
+            </div>
+            <span style="font-weight:600;min-width:24px;">${u.chats}</span>
+          </div></td>
+          <td>${u.tools}</td>
+          <td style="font-size:11px;color:var(--text-light);">${fmtDt(u.last_action)}</td>
+        </tr>`).join('')}
+      </table>`;
+    } else {
+      usPanel.style.display = 'none';
+    }
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--text-light);font-size:12px;">エラー: ${esc(e.message)}</div>`;
+  }
 }
 
 // ── Hooks ──
@@ -2435,6 +2496,72 @@ async function loadBatchHistory() {
 }
 
 // ── Memories ──
+// ─ スキルテンプレート ─
+const SKILL_TEMPLATES = [
+  { icon:'🗒️', title:'議事録自動作成', description:'会議メモ・文字起こしから整形された議事録を生成', name:'meeting-minutes-auto',
+    steps:`会議の文字起こしやメモを受け取り、create_meeting_minutes ツールを使って議事録を作成してください。
+- 参加者・日時・議題を自動整理
+- 決定事項・TODO・次回会議をまとめる
+- 完成後は Google Docs への保存も提案してください` },
+  { icon:'📈', title:'週次ビジネスレポート', description:'案件・請求・社員データを集計してChatwork報告', name:'weekly-biz-report',
+    steps:`generate_weekly_report ツールを使って今月の経営指標を集計し、読みやすい形でまとめてください。
+集計項目：案件数 / 請求件数 / 新規顧客 / 社員数
+集計後はChatworkの担当ルームへ通知することも提案してください。` },
+  { icon:'📝', title:'求人原稿チェック', description:'法令遵守・品質・訴求力を一括チェック', name:'job-posting-check',
+    steps:`渡された求人原稿を check_job_posting ツールでチェックしてください。
+確認観点：法令遵守 / 訴求力 / 給与記載 / 差別表現
+問題点と改善提案を具体的に示し、改善版サンプルも添えてください。` },
+  { icon:'✉️', title:'メール返信下書き', description:'受信メールのテキストを貼ると返信文を生成', name:'email-reply-draft',
+    steps:`受け取ったメール本文から draft_email_reply ツールを使って返信下書きを作成してください。
+トーン: standard（一般的なビジネスメール）
+件名・本文・署名を含む形で生成し、ユーザーに確認を促してください。` },
+  { icon:'🖥️', title:'サーバー定期監視', description:'指定URLの稼働を定期チェック・異常時Chatwork通知', name:'server-health-monitor',
+    steps:`check_server_health ツールを使って以下のURLの稼働状況を確認してください：
+（チェック対象URLをここに列挙してください）
+異常（ステータス200以外、応答3秒超、SSL30日以内切れ）が見つかった場合はChatworkで通知してください。` },
+  { icon:'📊', title:'日次売上サマリー', description:'当日の案件・請求状況をDBから集計して報告', name:'daily-sales-summary',
+    steps:`query_corp_db ツールを使って本日の営業データを集計し、日次サマリーを作成してください。
+- 今日更新された案件（kintone_anken_eigyo）
+- 今月の請求合計（kintone_seikyu）
+- 新規顧客登録数（kintone_customers）
+見やすい表形式でまとめ、前日比や特記事項があれば添えてください。` },
+  { icon:'🔍', title:'採用一次スクリーニング', description:'候補者情報と求人要件を照合してスコアリング', name:'candidate-screening',
+    steps:`screen_candidate ツールを使って候補者のスクリーニングを行ってください。
+候補者の職務経歴・スキルと求人要件を比較し：
+- 適合度スコア（0〜100）
+- 強み・懸念点
+- 面接で確認すべき質問
+を提示してください。` },
+  { icon:'📁', title:'Drive文書要約', description:'指定したDriveファイルの内容を要約', name:'drive-doc-summary',
+    steps:`summarize_document ツールを使ってGoogle Drive上のファイルを要約してください。
+対応形式：Word / PDF / Googleドキュメント / テキスト
+要点を箇条書きでまとめ、数値・日程・決定事項を優先して抽出してください。` }
+];
+
+function renderSkillTemplates() {
+  const el = document.getElementById('skillTemplateGallery');
+  if (!el) return;
+  el.innerHTML = SKILL_TEMPLATES.map((t, i) => `
+    <div onclick="openSkillFromTemplate(${i})" style="border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;cursor:pointer;background:var(--card-bg);transition:all .15s;"
+         onmouseover="this.style.borderColor='var(--primary)';this.style.boxShadow='0 2px 8px rgba(91,110,255,.15)'"
+         onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow=''">
+      <div style="font-size:20px;margin-bottom:4px;">${t.icon}</div>
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px;">${esc(t.title)}</div>
+      <div style="font-size:11px;color:var(--text-light);line-height:1.5;">${esc(t.description)}</div>
+    </div>`).join('');
+}
+
+function openSkillFromTemplate(idx) {
+  const t = SKILL_TEMPLATES[idx];
+  if (!t) return;
+  document.getElementById('editSkillId').value = '';
+  document.getElementById('editSkillTitle').value = t.title;
+  document.getElementById('editSkillDesc').value = t.description;
+  document.getElementById('editSkillSteps').value = t.steps;
+  document.querySelector('#editSkillModal .modal-title').textContent = '✨ テンプレートからスキルを作成';
+  document.getElementById('editSkillModal').classList.add('open');
+}
+
 async function loadMemories() {
   const r = await fetch('/api/memories');
   const memories = await r.json();
