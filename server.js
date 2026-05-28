@@ -1813,7 +1813,7 @@ const TOOLS = [
   },
   {
     name: 'call_ms_graph',
-    description: 'Microsoft 365のGraph APIを呼び出す。Outlook/Teams/OneDrive/SharePointのデータを取得・操作。GET以外（POST/PATCH/DELETE等）は2段階承認必須: ①confirmed なしでプレビュー → ②ユーザー承認 → ③confirmed:true で実行。',
+    description: 'Microsoft 365のGraph APIを呼び出す。Outlook（メール・カレンダー）/Teams/OneDrive/SharePointのデータを取得・操作。/me/ パスは自動的にログインユーザーのアドレスに変換される。GET以外（POST/PATCH/DELETE等）は2段階承認必須: ①confirmed なしでプレビュー → ②ユーザー承認 → ③confirmed:true で実行。',
     input_schema: {
       type: 'object',
       properties: {
@@ -5492,7 +5492,7 @@ app.get('/api/connectors/status', (req, res) => {
     salesforce:   !!(e.SALESFORCE_TOKEN && e.SALESFORCE_INSTANCE_URL),
     hubspot:      !!e.HUBSPOT_TOKEN,
     lineworks:    !!e.LINEWORKS_TOKEN,
-    ms365:        !!e.MS_GRAPH_TOKEN,
+    ms365:        !!(e.MS_TENANT_ID && e.MS_CLIENT_ID && e.MS_CLIENT_SECRET),
     ses:          !!e.SES_FROM,
     chatwork_sys: !!e.CHATWORK_SYSTEM_TOKEN,
   };
