@@ -939,7 +939,11 @@ app.get('/auth/drive', requireAuth, (req, res) => {
     prompt: 'consent',
     scope: [
       'https://www.googleapis.com/auth/drive.readonly',
-      'https://www.googleapis.com/auth/spreadsheets'
+      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/documents',
+      'https://www.googleapis.com/auth/forms.body.readonly',
+      'https://www.googleapis.com/auth/forms.responses.readonly'
     ],
     state
   });
@@ -1834,6 +1838,29 @@ const TOOLS = [
         confirmed: { type: 'boolean', description: 'true の場合のみ実際に作成' }
       },
       required: ['name', 'type', 'content']
+    }
+  },
+  {
+    name: 'get_form',
+    description: 'Google Formsのフォーム構造（タイトル・質問一覧）を取得する。Drive連携が必要。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        form_id: { type: 'string', description: 'フォームID（Drive上のファイルIDと同じ）' }
+      },
+      required: ['form_id']
+    }
+  },
+  {
+    name: 'get_form_responses',
+    description: 'Google Formsの回答一覧を取得する。Drive連携が必要。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        form_id: { type: 'string', description: 'フォームID' },
+        limit: { type: 'number', description: '取得件数（最大100、既定50）' }
+      },
+      required: ['form_id']
     }
   },
   {
@@ -2928,6 +2955,43 @@ async function executeTool(name, input, user) {
       const media = { mimeType: m.source, body: input.content };
       const r = await drive.files.create({ requestBody: fileMetadata, media, fields: 'id,name,mimeType,webViewLink' });
       return { ok: true, id: r.data.id, name: r.data.name, mimeType: r.data.mimeType, webViewLink: r.data.webViewLink };
+    }
+    case 'get_form': {
+      const forms = getFormsClientForUser(user);
+      audit(user.email, user.name, 'tool.get_form', { form_id: input.form_id });
+      const r = await forms.forms.get({ formId: input.form_id });
+      const f = r.data;
+      const questions = (f.items || []).map(item => ({
+        id: item.itemId,
+        title: item.title,
+        type: item.questionItem?.question?.questionId ? 'question' : 'section',
+        required: item.questionItem?.question?.required || false,
+        kind: item.questionItem?.question?.choiceQuestion ? 'choice'
+          : item.questionItem?.question?.textQuestion ? 'text'
+          : item.questionItem?.question?.scaleQuestion ? 'scale'
+          : item.questionItem?.question?.dateQuestion ? 'date'
+          : 'other',
+        options: item.questionItem?.question?.choiceQuestion?.options?.map(o => o.value) || []
+      }));
+      return { title: f.info?.title, description: f.info?.description, responderUri: f.responderUri, questions, item_count: questions.length };
+    }
+    case 'get_form_responses': {
+      const forms = getFormsClientForUser(user);
+      audit(user.email, user.name, 'tool.get_form_responses', { form_id: input.form_id });
+      const limit = Math.min(input.limit || 50, 100);
+      const r = await forms.forms.responses.list({ formId: input.form_id, pageSize: limit });
+      const responses = (r.data.responses || []).map(resp => ({
+        responseId: resp.responseId,
+        createTime: resp.createTime,
+        lastSubmittedTime: resp.lastSubmittedTime,
+        answers: Object.fromEntries(
+          Object.entries(resp.answers || {}).map(([qid, ans]) => [
+            qid,
+            ans.textAnswers?.answers?.map(a => a.value) || []
+          ])
+        )
+      }));
+      return { total: r.data.responses?.length || 0, responses };
     }
     case 'call_ms_graph': {
       const msToken = await getMsGraphToken();
@@ -5383,6 +5447,9 @@ function getDriveClientForUser(user) {
 }
 function getSheetsClientForUser(user) {
   return google.sheets({ version: 'v4', auth: getDriveAuthForUser(user) });
+}
+function getFormsClientForUser(user) {
+  return google.forms({ version: 'v1', auth: getDriveAuthForUser(user) });
 }
 
 const DRIVE_MIME_LABELS = {
