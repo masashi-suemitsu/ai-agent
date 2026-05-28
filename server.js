@@ -3,7 +3,7 @@ const http = require('http');
 const crypto = require('crypto');
 const helmet = require('helmet');
 const webpush = require('web-push');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const session = require('express-session');
 const SqliteStore = require('better-sqlite3-session-store')(session);
 const passport = require('passport');
@@ -150,7 +150,7 @@ const apiRateLimit = rateLimit({
 const webhookRateLimit = rateLimit({
   windowMs: 60 * 1000,
   max: 30,                              // 1分あたり30req（同一IP+token）
-  keyGenerator: (req) => `${req.ip}_${req.params.token || ''}`,
+  keyGenerator: (req) => `${ipKeyGenerator(req)}_${req.params.token || ''}`,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'webhook rate limit exceeded' }
