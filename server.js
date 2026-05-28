@@ -512,7 +512,7 @@ app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), { ma
 
 // ── 認証必須ルート ──
 app.use(requireAuth);
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public'), {
   extensions: ['html'],
   setHeaders: (res, filePath) => {
@@ -1478,20 +1478,23 @@ async function executeTool(name, input, user) {
 
 // POST /api/chat
 app.post('/api/chat', async (req, res) => {
-  const { message, conversationId, model: modelPref } = req.body;
+  const { message, conversationId, model: modelPref, attachments = [] } = req.body;
   const MODEL_MAP = { haiku: 'claude-haiku-4-5-20251001', sonnet: 'claude-sonnet-4-6' };
   const chatModel = MODEL_MAP[modelPref] || 'claude-sonnet-4-6';
   const user = req.user;
 
-  if (!message || !message.trim()) return res.status(400).json({ error: '空メッセージ' });
+  if ((!message || !message.trim()) && (!Array.isArray(attachments) || attachments.length === 0)) return res.status(400).json({ error: '空メッセージ' });
 
-  audit(user.email, user.name, 'chat', { preview: message.slice(0, 100), conversationId });
+  const attachLabel = Array.isArray(attachments) && attachments.length > 0
+    ? `[添付${attachments.length}件: ${attachments.map(a => a?.name).filter(Boolean).join(', ').slice(0, 80)}]` : '';
+  const effectiveMessage = (message && message.trim()) ? message : (attachLabel || '（添付ファイルを確認してください）');
+  audit(user.email, user.name, 'chat', { preview: effectiveMessage.slice(0, 100), conversationId, attachments: attachments?.length || 0 });
 
   // 会話取得 or 作成
   let convId = conversationId;
   if (!convId) {
     // 新規会話作成（タイトルは最初のメッセージ先頭30文字）
-    const title = message.slice(0, 30) + (message.length > 30 ? '…' : '');
+    const title = effectiveMessage.slice(0, 30) + (effectiveMessage.length > 30 ? '…' : '');
     const r = db.prepare('INSERT INTO conversations (user_email, title) VALUES (?,?)').run(user.email, title);
     convId = r.lastInsertRowid;
   } else {
@@ -1501,8 +1504,8 @@ app.post('/api/chat', async (req, res) => {
     db.prepare("UPDATE conversations SET updated_at=datetime('now','localtime') WHERE id=?").run(convId);
   }
 
-  // ユーザーメッセージ保存
-  db.prepare('INSERT INTO messages (conversation_id, role, content) VALUES (?,?,?)').run(convId, 'user', message);
+  // ユーザーメッセージ保存（添付ファイルバイナリは保存しない、テキストのみ）
+  db.prepare('INSERT INTO messages (conversation_id, role, content) VALUES (?,?,?)').run(convId, 'user', effectiveMessage);
 
   // 履歴取得（直近50メッセージ）
   const history = db.prepare('SELECT role, content FROM messages WHERE conversation_id=? ORDER BY id DESC LIMIT 50').all(convId).reverse();
@@ -1524,6 +1527,23 @@ app.post('/api/chat', async (req, res) => {
     const systemPrompt = getSystemPromptForUser(role, user.email);
 
     const messages = history.map(m => ({ role: m.role, content: m.content }));
+    // 添付ファイル（画像/PDF）を最新ユーザーメッセージにブロックとして注入
+    if (Array.isArray(attachments) && attachments.length > 0 && messages.length > 0) {
+      const lastIdx = messages.length - 1;
+      const blocks = [];
+      for (const a of attachments) {
+        if (!a?.base64 || !a?.mediaType) continue;
+        if (a.kind === 'image') {
+          blocks.push({ type: 'image', source: { type: 'base64', media_type: a.mediaType, data: a.base64 } });
+        } else if (a.kind === 'document') {
+          blocks.push({ type: 'document', source: { type: 'base64', media_type: a.mediaType, data: a.base64 } });
+        }
+      }
+      if (blocks.length > 0) {
+        blocks.push({ type: 'text', text: messages[lastIdx].content });
+        messages[lastIdx] = { role: 'user', content: blocks };
+      }
+    }
     let fullAssistantText = '';
     let toolRound = 0;
     let totalInputTokens = 0;
@@ -1734,14 +1754,15 @@ app.get('/api/skills/:id/estimate', (req, res) => {
 
   // claude-sonnet-4-6 料金: 入力 $3/1M、出力 $15/1M
   const costUsd = (inputTokens / 1e6 * 3) + (outputTokens / 1e6 * 15);
-  const costJpy = Math.ceil(costUsd * 150);
+  const costJpy = Math.ceil(costUsd * _usdJpy);
 
   res.json({
     input_tokens: inputTokens,
     output_tokens: outputTokens,
     estimated_rounds: estimatedRounds,
     cost_usd: Number(costUsd.toFixed(5)),
-    cost_jpy: costJpy
+    cost_jpy: costJpy,
+    usd_jpy: _usdJpy
   });
 });
 
@@ -1852,15 +1873,46 @@ app.post('/api/skills/:id/run', async (req, res) => {
   res.end();
 });
 
+// ── 為替レート（USD/JPY）──
+let _usdJpy = 150;
+let _usdJpyUpdatedAt = null;
+let _usdJpyFetching = false;
+
+async function fetchUsdJpy() {
+  if (_usdJpyFetching) return;
+  _usdJpyFetching = true;
+  try {
+    const r = await fetch('https://api.frankfurter.app/latest?from=USD&to=JPY', { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    const rate = data?.rates?.JPY;
+    if (rate && rate > 50 && rate < 300) {
+      _usdJpy = Math.round(rate * 10) / 10;
+      _usdJpyUpdatedAt = new Date().toISOString();
+      console.log(`[fx] USD/JPY updated: ${_usdJpy}`);
+    }
+  } catch (e) {
+    console.warn('[fx] fetch failed:', e.message);
+  } finally {
+    _usdJpyFetching = false;
+  }
+}
+fetchUsdJpy();
+setInterval(fetchUsdJpy, 60 * 60 * 1000); // 1時間ごと更新
+
+// GET /api/exchange-rate
+app.get('/api/exchange-rate', (req, res) => {
+  res.json({ usd_jpy: _usdJpy, updated_at: _usdJpyUpdatedAt, source: 'frankfurter.app' });
+});
+
 // ── Usage API ──
 // Sonnet 4.6: $3/1M input, $15/1M output
 const PRICE_INPUT_PER_M  = 3.0;
 const PRICE_OUTPUT_PER_M = 15.0;
-const JPY_RATE = 150;
 
 function calcCost(inputTokens, outputTokens) {
   const usd = (inputTokens / 1e6 * PRICE_INPUT_PER_M) + (outputTokens / 1e6 * PRICE_OUTPUT_PER_M);
-  return { usd: Number(usd.toFixed(4)), jpy: Math.ceil(usd * JPY_RATE) };
+  return { usd: Number(usd.toFixed(4)), jpy: Math.ceil(usd * _usdJpy) };
 }
 
 // GET /api/usage/me  — 本人の月次サマリー（直近3ヶ月）

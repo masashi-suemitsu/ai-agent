@@ -389,9 +389,25 @@ textarea:focus { border-color: var(--primary); background: #fff; }
 
 /* ─ Drive attachment badge ─ */
 .attach-bar { background: #f0f4ff; border-top: 1px solid #c3d0ff; padding: 6px 20px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.attach-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--primary-light); border: 1px solid #c3d0ff; border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--primary-dark); }
+.attach-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--primary-light); border: 1px solid #c3d0ff; border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--primary-dark); max-width: 220px; }
+.attach-badge .attach-thumb { width: 24px; height: 24px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
+.attach-badge .attach-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .attach-badge .remove-attach { background: none; border: none; cursor: pointer; color: #a0aec0; font-size: 13px; line-height: 1; padding: 0 2px; }
 .attach-badge .remove-attach:hover { color: var(--danger); }
+
+/* ─ File attach button ─ */
+.attach-btn { background: #fff; border: 1.5px solid var(--border); border-radius: 10px; width: 40px; height: 40px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0; }
+.attach-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ─ Drag-over overlay ─ */
+.chat-area.drag-over::after {
+  content: '📎 ファイルをドロップして添付'; position: absolute; inset: 0;
+  background: rgba(91,110,255,.12); border: 3px dashed var(--primary);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; color: var(--primary);
+  z-index: 50; pointer-events: none;
+}
+.chat-area { position: relative; }
 
 /* ─ Drive Panel ─ */
 .drive-panel {
@@ -571,8 +587,10 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
         <button class="model-btn active" id="modelBtnSonnet" onclick="setModel('sonnet')">✦ Sonnet　じっくり</button>
       </div>
       <div class="input-row">
+        <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" style="display:none;" onchange="onFilesPicked(event)">
+        <button class="attach-btn" type="button" onclick="document.getElementById('fileInput').click()" title="画像・PDFを添付">📎</button>
         <div class="input-wrapper">
-          <textarea id="input" placeholder="どんな仕事を任せますか？" rows="1"
+          <textarea id="input" placeholder="どんな仕事を任せますか？（画像・PDFはドラッグ&amp;ドロップ or 📎で添付）" rows="1"
             onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
         </div>
         <button class="send-btn" id="sendBtn" onclick="send()">送信</button>
@@ -938,7 +956,7 @@ async function send() {
   if (sending) return;
   const input = document.getElementById('input');
   const msg = input.value.trim();
-  if (!msg && driveAttachments.length === 0) return;
+  if (!msg && driveAttachments.length === 0 && mediaAttachments.length === 0) return;
 
   sending = true;
   document.getElementById('sendBtn').disabled = true;
@@ -949,11 +967,16 @@ async function send() {
     const ctx = driveAttachments.map(a => `【ファイル: ${a.name}】\n${a.content}`).join('\n\n---\n\n');
     fullMsg = ctx + (msg ? '\n\n---\n\n' + msg : '');
     driveAttachments = [];
-    renderAttachBar();
   }
 
+  // 画像/PDFは attachments としてサーバーに送り Claude にネイティブ添付
+  const media = mediaAttachments.slice();
+  mediaAttachments = [];
+  renderAttachBar();
+
   input.value = ''; input.style.height = 'auto';
-  appendMessage('user', msg || '（添付ファイルを確認してください）');
+  const mediaLabel = media.length > 0 ? `\n📎 ${media.map(m => m.name).join(', ')}` : '';
+  appendMessage('user', (msg || '（添付ファイルを確認してください）') + mediaLabel);
 
   // 思考インジケーター（最初のテキストが届くまで表示し続ける）
   removeEmptyState();
@@ -971,7 +994,7 @@ async function send() {
   const resp = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: fullMsg, conversationId: currentConvId, model: currentModel })
+    body: JSON.stringify({ message: fullMsg, conversationId: currentConvId, model: currentModel, attachments: media })
   });
 
   // ストリーミング受信（typing indicator はここでは消さない）
@@ -1738,20 +1761,98 @@ async function attachDriveFile(fileId, fileName) {
 
 function renderAttachBar() {
   const bar = document.getElementById('attachBar');
-  if (driveAttachments.length === 0) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  const total = driveAttachments.length + mediaAttachments.length;
+  if (total === 0) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
   bar.style.display = 'flex';
-  bar.innerHTML = '<span style="font-size:12px;color:#718096;flex-shrink:0;">添付:</span>' +
-    driveAttachments.map((a, i) => `
+  let html = '<span style="font-size:12px;color:#718096;flex-shrink:0;">添付:</span>';
+  html += driveAttachments.map((a, i) => `
       <span class="attach-badge">
-        📄 ${esc(a.name)}
+        <span class="attach-name">📄 ${esc(a.name)}</span>
         <button class="remove-attach" onclick="removeAttach(${i})">✕</button>
       </span>`).join('');
+  html += mediaAttachments.map((a, i) => {
+    const thumb = a.kind === 'image'
+      ? `<img class="attach-thumb" src="data:${a.mediaType};base64,${a.base64}" alt="">`
+      : `<span style="font-size:18px;">📕</span>`;
+    return `<span class="attach-badge">${thumb}<span class="attach-name">${esc(a.name)}</span><button class="remove-attach" onclick="removeMediaAttach(${i})">✕</button></span>`;
+  }).join('');
+  bar.innerHTML = html;
 }
 
 function removeAttach(i) {
   driveAttachments.splice(i, 1);
   renderAttachBar();
 }
+
+function removeMediaAttach(i) {
+  mediaAttachments.splice(i, 1);
+  renderAttachBar();
+}
+
+// ─ ファイル添付（画像/PDF）─
+let mediaAttachments = []; // [{ name, kind: 'image'|'document', mediaType, base64 }]
+const MAX_FILE_BYTES = 30 * 1024 * 1024;  // 30MB（PDF想定）
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;  // 5MB（Claude制限）
+
+function fileKind(mt) {
+  if (!mt) return null;
+  if (mt.startsWith('image/')) return 'image';
+  if (mt === 'application/pdf') return 'document';
+  return null;
+}
+
+async function addFile(file) {
+  const kind = fileKind(file.type);
+  if (!kind) { alert(`未対応ファイル形式: ${file.type || file.name}`); return; }
+  const limit = kind === 'image' ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
+  if (file.size > limit) {
+    alert(`${file.name}: サイズ超過 (${(file.size/1024/1024).toFixed(1)}MB > ${(limit/1024/1024)}MB)`);
+    return;
+  }
+  const base64 = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result.split(',')[1]);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+  mediaAttachments.push({ name: file.name, kind, mediaType: file.type, base64 });
+  renderAttachBar();
+}
+
+async function onFilesPicked(e) {
+  const files = Array.from(e.target.files || []);
+  for (const f of files) await addFile(f);
+  e.target.value = '';
+}
+
+// ドラッグ&ドロップ
+window.addEventListener('DOMContentLoaded', () => {
+  const chat = document.querySelector('.chat-area');
+  if (!chat) return;
+  let dragDepth = 0;
+  chat.addEventListener('dragenter', (e) => {
+    if (e.dataTransfer?.types?.includes('Files')) { dragDepth++; chat.classList.add('drag-over'); e.preventDefault(); }
+  });
+  chat.addEventListener('dragleave', () => { dragDepth--; if (dragDepth <= 0) { dragDepth = 0; chat.classList.remove('drag-over'); } });
+  chat.addEventListener('dragover', (e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); });
+  chat.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    chat.classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer?.files || []);
+    for (const f of files) await addFile(f);
+  });
+  // クリップボード貼り付け対応
+  document.addEventListener('paste', async (e) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    for (const it of items) {
+      if (it.kind === 'file') {
+        const f = it.getAsFile();
+        if (f) await addFile(f);
+      }
+    }
+  });
+});
 
 // ─ Scheduled Tasks ─
 let scheduleTargetSkillId = null;
