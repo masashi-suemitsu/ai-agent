@@ -45,10 +45,31 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 
 .page { max-width: 1372px; margin: 0 auto; padding: 24px 20px; }
 
-.tab-nav { display: flex; gap: 4px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 24px; width: fit-content; }
-.tab-btn { padding: 8px 22px; border: none; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; background: none; color: var(--text-light); transition: all .15s; }
-.tab-btn.active { background: var(--primary); color: #fff; }
+/* ── サイドバーレイアウト ── */
+.layout { display: flex; gap: 20px; align-items: flex-start; }
+.tab-nav {
+  width: 192px; flex-shrink: 0;
+  background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px;
+  padding: 8px 6px;
+  position: sticky; top: 68px;
+  max-height: calc(100vh - 90px); overflow-y: auto;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.sidebar-sep { height: 1px; background: var(--border); margin: 6px 4px; }
+.sidebar-label { font-size: 10px; font-weight: 700; color: var(--text-light); letter-spacing: .06em; text-transform: uppercase; padding: 6px 10px 2px; }
+.content { flex: 1; min-width: 0; }
+.tab-btn {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 10px; border: none; border-radius: 8px;
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  background: none; color: var(--text-light);
+  transition: all .15s; text-align: left; width: 100%;
+}
+.tab-btn .nav-icon { font-size: 15px; flex-shrink: 0; }
+.tab-btn .nav-label { flex: 1; }
+.tab-btn.active { background: var(--primary-light); color: var(--primary); font-weight: 700; }
 .tab-btn:hover:not(.active) { background: var(--bg); color: var(--text); }
+.admin-tab-btn .admin-badge { font-size: 9px; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
@@ -193,9 +214,23 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 .admin-only-banner .aob-title { font-weight: 700; color: #c53030; margin-bottom: 2px; font-size: 14px; }
 .admin-only-banner .aob-desc { color: #742a2a; }
 
+@media (max-width: 768px) {
+  .layout { flex-direction: column; }
+  .tab-nav {
+    width: 100%; flex-direction: row; overflow-x: auto; overflow-y: hidden;
+    position: static; max-height: none;
+    padding: 4px; gap: 2px;
+    scrollbar-width: none;
+  }
+  .tab-nav::-webkit-scrollbar { display: none; }
+  .tab-btn { white-space: nowrap; width: auto; padding: 7px 12px; gap: 6px; }
+  .tab-btn .nav-label { flex: none; }
+  .sidebar-sep, .sidebar-label { display: none; }
+  .content { width: 100%; }
+}
 @media (max-width: 600px) {
   .page { padding: 16px 12px; }
-  .tab-btn { padding: 7px 14px; font-size: 12px; }
+  .tab-btn { font-size: 12px; }
 }
 .model-desc-card { margin-top: 8px; background: var(--primary-light); border: 1px solid #c3d0ff; border-radius: 10px; padding: 11px 14px; }
 .model-desc-header { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
@@ -235,16 +270,21 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 </header>
 
 <div class="page">
-  <div class="tab-nav" id="tabNav">
-    <button class="tab-btn active" data-tab="tasks"   onclick="switchTab('tasks')">⏰ タスク</button>
-    <button class="tab-btn" data-tab="history" onclick="switchTab('history')">📊 実行履歴</button>
-    <button class="tab-btn" data-tab="skills"  onclick="switchTab('skills')">⚙️ スキル</button>
-    <button class="tab-btn" data-tab="automation" onclick="switchTab('automation')">🔗 自動化</button>
-    <button class="tab-btn" data-tab="memories" onclick="switchTab('memories')">🧠 メモリ</button>
-    <button class="tab-btn" data-tab="rules"   onclick="switchTab('rules')">🔒 権限・ルール</button>
-    <button class="tab-btn" data-tab="usage"      onclick="switchTab('usage')">💰 利用状況</button>
-    <button class="tab-btn" data-tab="chatsearch" onclick="switchTab('chatsearch')">💬 会話検索</button>
-  </div>
+<div class="layout">
+  <nav class="tab-nav" id="tabNav">
+    <button class="tab-btn active" data-tab="tasks"      onclick="switchTab('tasks')"><span class="nav-icon">⏰</span><span class="nav-label">タスク</span></button>
+    <button class="tab-btn" data-tab="history"           onclick="switchTab('history')"><span class="nav-icon">📊</span><span class="nav-label">実行履歴</span></button>
+    <button class="tab-btn" data-tab="skills"            onclick="switchTab('skills')"><span class="nav-icon">⚙️</span><span class="nav-label">スキル</span></button>
+    <button class="tab-btn" data-tab="automation"        onclick="switchTab('automation')"><span class="nav-icon">🔗</span><span class="nav-label">自動化</span></button>
+    <button class="tab-btn" data-tab="memories"          onclick="switchTab('memories')"><span class="nav-icon">🧠</span><span class="nav-label">メモリ</span></button>
+    <div class="sidebar-sep"></div>
+    <div class="sidebar-label">設定</div>
+    <button class="tab-btn" data-tab="connectors"        onclick="switchTab('connectors')"><span class="nav-icon">🔌</span><span class="nav-label">コネクタ</span></button>
+    <button class="tab-btn" data-tab="rules"             onclick="switchTab('rules')"><span class="nav-icon">🔒</span><span class="nav-label">権限・ルール</span></button>
+    <button class="tab-btn" data-tab="usage"             onclick="switchTab('usage')"><span class="nav-icon">💰</span><span class="nav-label">利用状況</span></button>
+    <button class="tab-btn" data-tab="chatsearch"        onclick="switchTab('chatsearch')"><span class="nav-icon">💬</span><span class="nav-label">会話検索</span></button>
+  </nav>
+  <div class="content">
 
   <!-- ─ 定期タスク ─ -->
   <div class="tab-content active" id="tab-tasks">
@@ -466,6 +506,44 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     <div id="usageContent"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
 
+  <!-- ─ コネクタ ─ -->
+  <div class="tab-content" id="tab-connectors">
+    <div style="max-width:680px;display:grid;gap:16px;">
+
+      <!-- GitHub -->
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <div style="width:36px;height:36px;background:#24292e;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">🐙</div>
+          <div>
+            <div style="font-size:15px;font-weight:700;">GitHub</div>
+            <div style="font-size:12px;color:var(--text-light);">Personal Access Token で接続。Issue・PR・リポジトリ操作が可能になります。</div>
+          </div>
+        </div>
+        <div style="background:var(--primary-light);border-left:3px solid var(--primary);border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:var(--text);line-height:1.6;">
+          PAT は <a href="https://github.com/settings/tokens?type=beta" target="_blank" style="color:var(--primary);">github.com/settings/tokens</a> から発行してください。<br>
+          必要なスコープ: <code>repo</code>（プライベートも含む）または <code>public_repo</code>（公開リポジトリのみ）
+        </div>
+        <div id="githubStatus" style="margin-bottom:12px;"></div>
+        <div id="githubInputArea">
+          <input id="githubTokenInput" type="password" placeholder="ghp_xxxx または github_pat_xxxx"
+            style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;font-family:monospace;transition:border-color .15s;box-sizing:border-box;"
+            onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+            <button class="btn btn-primary" onclick="saveGithubToken()" id="saveGithubBtn">接続する</button>
+            <span id="saveGithubMsg" style="font-size:12px;color:var(--success);display:none;"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 将来追加予定 -->
+      <div style="border:2px dashed var(--border);border-radius:12px;padding:24px;text-align:center;color:var(--text-light);">
+        <div style="font-size:22px;margin-bottom:8px;">＋</div>
+        <div style="font-size:13px;font-weight:600;">今後追加予定</div>
+        <div style="font-size:12px;margin-top:4px;">Slack・Notion・Jira などの連携をここに追加できます</div>
+      </div>
+    </div>
+  </div>
+
   <!-- ─ ダッシュボード（管理者専用） ─ -->
   <div class="tab-content" id="tab-dashboard">
     <div class="dash-scope-toggle" id="dashScopeToggle">
@@ -510,6 +588,9 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     </div>
   </div>
 </div>
+
+  </div><!-- /.content -->
+</div><!-- /.layout -->
 
 <!-- ─ Skill Edit Modal ─ -->
 <div class="modal-overlay" id="editSkillModal" onclick="if(event.target===this)closeEditSkill()">
@@ -874,14 +955,16 @@ function toggleTheme() {
   renderUserBadge(currentUser);
   if (currentUser.role === 'admin') {
     const nav = document.getElementById('tabNav');
+    const sep = document.createElement('div'); sep.className = 'sidebar-sep'; nav.appendChild(sep);
+    const lbl = document.createElement('div'); lbl.className = 'sidebar-label'; lbl.textContent = '管理者'; nav.appendChild(lbl);
     [
-      { tab: 'dashboard', label: '📊 ダッシュボード' },
-      { tab: 'users',     label: '👤 ユーザー' },
-    ].forEach(({ tab, label }) => {
+      { tab: 'dashboard', icon: '📊', label: 'ダッシュボード' },
+      { tab: 'users',     icon: '👤', label: 'ユーザー' },
+    ].forEach(({ tab, icon, label }) => {
       const btn = document.createElement('button');
-      btn.className = 'tab-btn';
+      btn.className = 'tab-btn admin-tab-btn';
       btn.dataset.tab = tab;
-      btn.innerHTML = `<span class="admin-badge">管理者のみ</span>${label}`;
+      btn.innerHTML = `<span class="nav-icon">${icon}</span><span class="nav-label">${label}</span>`;
       btn.onclick = () => switchTab(tab);
       nav.appendChild(btn);
     });
@@ -893,7 +976,6 @@ function toggleTheme() {
   renderSkillTemplates();
   renderRules(currentUser.role);
   loadCustomRules();
-  loadGithubStatus();
   buildModelSelects();
   // URL ハッシュに対応するタブを復元
   const initHash = location.hash.slice(1);
@@ -919,7 +1001,7 @@ function renderUserBadge(me) {
 }
 
 // ─ タブ切替 ─
-const TAB_NAMES = ['tasks','history','skills','automation','memories','rules','usage','chatsearch','dashboard','users'];
+const TAB_NAMES = ['tasks','history','skills','automation','memories','connectors','rules','usage','chatsearch','dashboard','users'];
 
 function switchTab(name) {
   if (!TAB_NAMES.includes(name)) name = 'tasks';
@@ -927,9 +1009,10 @@ function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + name)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
-  if (name === 'history')   loadHistory();
-  if (name === 'rules')     { loadCustomRules(); loadGithubStatus(); }
-  if (name === 'users')     { loadUsers(); loadWebhookToggle(); loadPushToggle(); }
+  if (name === 'history')    loadHistory();
+  if (name === 'connectors') loadGithubStatus();
+  if (name === 'rules')      loadCustomRules();
+  if (name === 'users')      { loadUsers(); loadWebhookToggle(); loadPushToggle(); }
   if (name === 'usage')     loadUsage();
   if (name === 'dashboard') { loadDashStats(); loadDashAudit(); loadDashTrends(); }
   if (name === 'automation') { loadHooks(); loadBatchHistory(); loadWebhooks(); initPushStatus(); }
@@ -1840,26 +1923,6 @@ function renderRules(role) {
       <div class="role-info">
         <h2>${ri.name}</h2>
         <p>${ri.desc}</p>
-      </div>
-    </div>
-
-    <div class="rules-block" id="githubConnectBlock">
-      <div class="rules-block-title">🐙 GitHub 連携</div>
-      <div style="padding:14px 18px 16px;">
-        <div style="background:var(--primary-light);border-left:3px solid var(--primary);border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:var(--text);line-height:1.6;">
-          Personal Access Token（PAT）を登録すると、AIが GitHub のリポジトリ・Issue・PR を操作できるようになります。<br>
-          PAT は <a href="https://github.com/settings/tokens?type=beta" target="_blank" style="color:var(--primary);">github.com/settings/tokens</a> から発行（必要なスコープ: <code>repo</code> または <code>public_repo</code>）。
-        </div>
-        <div id="githubStatus" style="margin-bottom:12px;"></div>
-        <div id="githubInputArea">
-          <input id="githubTokenInput" type="password" placeholder="ghp_xxxx または github_pat_xxxx"
-            style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;font-family:monospace;transition:border-color .15s;box-sizing:border-box;"
-            onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
-          <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
-            <button class="btn btn-primary" onclick="saveGithubToken()" id="saveGithubBtn">接続する</button>
-            <span id="saveGithubMsg" style="font-size:12px;color:var(--success);display:none;"></span>
-          </div>
-        </div>
       </div>
     </div>
 
