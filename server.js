@@ -622,6 +622,45 @@ async function sendPushNotifications(email, title, body) {
  'ALTER TABLE webhook_tokens ADD COLUMN secret TEXT',
 ].forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
+// ── ワークフローテーブル ──
+db.exec(`
+  CREATE TABLE IF NOT EXISTS workflows (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_email     TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    description     TEXT DEFAULT '',
+    steps           TEXT NOT NULL DEFAULT '[]',
+    trigger_type    TEXT DEFAULT 'manual',
+    schedule_type   TEXT DEFAULT 'interval',
+    interval_min    INTEGER DEFAULT 60,
+    schedule_hour   INTEGER,
+    schedule_minute INTEGER DEFAULT 0,
+    schedule_weekday INTEGER,
+    next_run_at     TEXT,
+    last_run_at     TEXT,
+    last_status     TEXT,
+    last_result     TEXT,
+    enabled         INTEGER DEFAULT 1,
+    created_at      TEXT DEFAULT (datetime('now','localtime')),
+    updated_at      TEXT DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_wf_owner ON workflows(owner_email, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_wf_sched ON workflows(enabled, trigger_type, next_run_at);
+
+  CREATE TABLE IF NOT EXISTS workflow_runs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_id INTEGER NOT NULL,
+    owner_email TEXT NOT NULL,
+    status      TEXT DEFAULT 'running',
+    steps_log   TEXT DEFAULT '[]',
+    result      TEXT,
+    started_at  TEXT DEFAULT (datetime('now','localtime')),
+    finished_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_wfrun_wf    ON workflow_runs(workflow_id, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_wfrun_owner ON workflow_runs(owner_email, id DESC);
+`);
+
 function audit(email, name, action, details = {}) {
   try {
     db.prepare('INSERT INTO audit_logs (email,name,action,details) VALUES (?,?,?,?)')
@@ -4088,8 +4127,9 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
     const role = user.role || getUserRole(user.email);
     const allowedToolNames = TOOLS_FOR_ROLE[role];
     const baseTools = allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS;
-    // admin のみ computer_use を追加
-    const activeTools = role === 'admin' ? [...baseTools, COMPUTER_TOOL] : baseTools;
+    // computer_20241022 は claude-3-5 系のみ対応（claude-4.x/haiku-4.x は非対応）
+    const COMPUTER_COMPATIBLE = new Set(['claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022']);
+    const activeTools = (role === 'admin' && COMPUTER_COMPATIBLE.has(chatModel)) ? [...baseTools, COMPUTER_TOOL] : baseTools;
     const systemPrompt = getSystemPromptForUser(role, user.email);
 
     // Context Compression: 30件超なら古い部分をサマリ化
@@ -4147,7 +4187,7 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
       { ...activeTools[activeTools.length - 1], cache_control: { type: 'ephemeral' } }
     ] : activeTools;
     const useMcpBeta = mcpServers.length > 0;
-    const useComputerBeta = role === 'admin';
+    const useComputerBeta = role === 'admin' && COMPUTER_COMPATIBLE.has(chatModel);
     const useBeta = useMcpBeta || useComputerBeta;
     const betaList = [
       ...(useMcpBeta ? ['mcp-client-2025-04-04'] : []),
@@ -7029,6 +7069,193 @@ app.post('/api/skills/import', (req, res) => {
     .run(req.user.email, finalName, title.trim(), description || '', steps || '');
   audit(req.user.email, req.user.name, 'skill.import', { name: finalName, title });
   res.json({ ok: true, id: result.lastInsertRowid, name: finalName });
+});
+
+// ── ワークフロー実行エンジン ──
+async function runWorkflow(wf, ownerEmail) {
+  const steps = JSON.parse(wf.steps || '[]');
+  if (!steps.length) return { ok: false, error: 'ステップがありません' };
+
+  const runRow = db.prepare('INSERT INTO workflow_runs (workflow_id, owner_email, status, steps_log) VALUES (?,?,?,?)').run(wf.id, ownerEmail, 'running', '[]');
+  const runId = runRow.lastInsertRowid;
+  db.prepare("UPDATE workflows SET last_run_at=datetime('now','localtime'), last_status='running' WHERE id=?").run(wf.id);
+
+  const stepsLog = [];
+  const ctx = {};
+
+  for (const step of steps) {
+    const entry = { id: step.id, label: step.label, status: 'running', result: null };
+    stepsLog.push(entry);
+    db.prepare('UPDATE workflow_runs SET steps_log=? WHERE id=?').run(JSON.stringify(stepsLog), runId);
+
+    let prompt = step.prompt || '';
+    for (const [k, v] of Object.entries(ctx)) {
+      prompt = prompt.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), String(v));
+    }
+    if (Object.keys(ctx).length > 0) {
+      prompt += '\n\n## 前のステップの結果\n' + Object.entries(ctx).map(([k, v]) => `**${k}**: ${String(v).slice(0, 2000)}`).join('\n\n');
+    }
+
+    const result = await runSkillBackground({
+      skill_name: `wf${wf.id}_${step.id}`,
+      skill_title: `[${wf.name}] ${step.label}`,
+      description: '',
+      steps: prompt,
+      model: wf.model || 'sonnet'
+    }, ownerEmail);
+
+    const stepResult = result.ok ? (result.resultBuffer || '').slice(0, 3000) : (result.error || 'エラー');
+    entry.status = result.ok ? 'done' : 'error';
+    entry.result = stepResult;
+    stepsLog[stepsLog.length - 1] = entry;
+    db.prepare('UPDATE workflow_runs SET steps_log=? WHERE id=?').run(JSON.stringify(stepsLog), runId);
+
+    if (!result.ok) {
+      db.prepare("UPDATE workflow_runs SET status='error', result=?, finished_at=datetime('now','localtime') WHERE id=?").run(result.error, runId);
+      db.prepare("UPDATE workflows SET last_status='error', last_result=? WHERE id=?").run((result.error || '').slice(0, 500), wf.id);
+      return { ok: false, error: result.error, runId };
+    }
+    if (step.output_var) ctx[step.output_var] = result.resultBuffer || '';
+  }
+
+  const finalResult = (stepsLog.at(-1)?.result || '').slice(0, 2000);
+  db.prepare("UPDATE workflow_runs SET status='done', result=?, steps_log=?, finished_at=datetime('now','localtime') WHERE id=?").run(finalResult, JSON.stringify(stepsLog), runId);
+  db.prepare("UPDATE workflows SET last_status='done', last_result=? WHERE id=?").run(finalResult.slice(0, 500), wf.id);
+  return { ok: true, runId, result: finalResult };
+}
+
+// ── ワークフロー API ──
+app.get('/api/workflows', (req, res) => {
+  try {
+    const rows = db.prepare('SELECT id,name,description,steps,trigger_type,schedule_type,interval_min,schedule_hour,schedule_minute,schedule_weekday,enabled,last_run_at,last_status,last_result,next_run_at,created_at,updated_at FROM workflows WHERE owner_email=? ORDER BY updated_at DESC').all(req.user.email);
+    res.json(rows.map(r => ({ ...r, steps: JSON.parse(r.steps || '[]') })));
+  } catch(e) { serverError(res, e); }
+});
+
+app.post('/api/workflows', apiRateLimit, (req, res) => {
+  try {
+    const { name, description, steps, trigger_type, schedule_type, interval_min, schedule_hour, schedule_minute, schedule_weekday } = req.body || {};
+    if (!name?.trim()) return res.status(400).json({ error: 'name は必須です' });
+    if (name.length > 200) return res.status(400).json({ error: 'name が長すぎます' });
+    const stepsJson = JSON.stringify(Array.isArray(steps) ? steps : []);
+    const ttype = trigger_type || 'manual';
+    const stype = schedule_type || 'interval';
+    const next_run_at = ttype === 'scheduled' ? calcNextRunAt({ schedule_type: stype, interval_min: interval_min || 60, schedule_hour: schedule_hour ?? null, schedule_minute: schedule_minute ?? 0, schedule_weekday: schedule_weekday ?? null }) : null;
+    const result = db.prepare('INSERT INTO workflows (owner_email,name,description,steps,trigger_type,schedule_type,interval_min,schedule_hour,schedule_minute,schedule_weekday,next_run_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(req.user.email, name.trim(), description || '', stepsJson, ttype, stype, interval_min || 60, schedule_hour ?? null, schedule_minute ?? 0, schedule_weekday ?? null, next_run_at);
+    audit(req.user.email, req.user.name, 'workflow.create', { name: name.trim() });
+    res.json({ ok: true, id: result.lastInsertRowid });
+  } catch(e) { serverError(res, e); }
+});
+
+app.put('/api/workflows/:id', apiRateLimit, (req, res) => {
+  try {
+    const wf = db.prepare('SELECT id FROM workflows WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
+    if (!wf) return res.status(404).json({ error: 'Not found' });
+    const { name, description, steps, trigger_type, schedule_type, interval_min, schedule_hour, schedule_minute, schedule_weekday, enabled } = req.body || {};
+    const updates = ["updated_at=datetime('now','localtime')"];
+    const params = [];
+    if (name !== undefined) { updates.push('name=?'); params.push(name.trim()); }
+    if (description !== undefined) { updates.push('description=?'); params.push(description); }
+    if (steps !== undefined) { updates.push('steps=?'); params.push(JSON.stringify(Array.isArray(steps) ? steps : [])); }
+    if (trigger_type !== undefined) { updates.push('trigger_type=?'); params.push(trigger_type); }
+    if (schedule_type !== undefined) { updates.push('schedule_type=?'); params.push(schedule_type); }
+    if (interval_min !== undefined) { updates.push('interval_min=?'); params.push(interval_min); }
+    if (schedule_hour !== undefined) { updates.push('schedule_hour=?'); params.push(schedule_hour); }
+    if (schedule_minute !== undefined) { updates.push('schedule_minute=?'); params.push(schedule_minute); }
+    if (schedule_weekday !== undefined) { updates.push('schedule_weekday=?'); params.push(schedule_weekday); }
+    if (enabled !== undefined) {
+      updates.push('enabled=?'); params.push(enabled ? 1 : 0);
+      if (enabled) {
+        const row = db.prepare('SELECT * FROM workflows WHERE id=?').get(req.params.id);
+        if (row && row.trigger_type === 'scheduled') {
+          updates.push('next_run_at=?');
+          params.push(calcNextRunAt({ ...row, schedule_type: schedule_type || row.schedule_type, interval_min: interval_min ?? row.interval_min, schedule_hour: schedule_hour ?? row.schedule_hour, schedule_minute: schedule_minute ?? row.schedule_minute }));
+        }
+      }
+    }
+    params.push(req.params.id);
+    db.prepare(`UPDATE workflows SET ${updates.join(',')} WHERE id=?`).run(...params);
+    audit(req.user.email, req.user.name, 'workflow.update', { id: req.params.id });
+    res.json({ ok: true });
+  } catch(e) { serverError(res, e); }
+});
+
+app.delete('/api/workflows/:id', (req, res) => {
+  try {
+    const wf = db.prepare('SELECT id FROM workflows WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
+    if (!wf) return res.status(404).json({ error: 'Not found' });
+    db.prepare('DELETE FROM workflow_runs WHERE workflow_id=?').run(req.params.id);
+    db.prepare('DELETE FROM workflows WHERE id=?').run(req.params.id);
+    audit(req.user.email, req.user.name, 'workflow.delete', { id: req.params.id });
+    res.json({ ok: true });
+  } catch(e) { serverError(res, e); }
+});
+
+app.post('/api/workflows/:id/run', apiRateLimit, async (req, res) => {
+  try {
+    const wf = db.prepare('SELECT * FROM workflows WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
+    if (!wf) return res.status(404).json({ error: 'Not found' });
+    res.json({ ok: true, message: '実行を開始しました' });
+    runWorkflow(wf, req.user.email).catch(e => console.error('[workflow] run error:', e.message));
+  } catch(e) { serverError(res, e); }
+});
+
+app.get('/api/workflows/:id/runs', (req, res) => {
+  try {
+    const rows = db.prepare('SELECT id,status,result,steps_log,started_at,finished_at FROM workflow_runs WHERE workflow_id=? AND owner_email=? ORDER BY id DESC LIMIT 20').all(req.params.id, req.user.email);
+    res.json(rows.map(r => ({ ...r, steps_log: JSON.parse(r.steps_log || '[]') })));
+  } catch(e) { serverError(res, e); }
+});
+
+app.post('/api/workflows/chat', apiRateLimit, async (req, res) => {
+  try {
+    const { messages, current_workflow } = req.body || {};
+    if (!Array.isArray(messages) || !messages.length) return res.status(400).json({ error: 'messages が必要です' });
+
+    const sysPrompt = `あなたは業務ワークフロービルダーです。ユーザーの説明から、AIが自動実行するワークフロー定義をJSONで生成・更新します。
+
+## ワークフローJSONフォーマット
+{
+  "name": "ワークフロー名",
+  "description": "説明",
+  "steps": [
+    {
+      "id": "s1",
+      "label": "ステップ名",
+      "prompt": "AIへの具体的な指示（使用するツールも明記）",
+      "output_var": "変数名（省略可・次ステップで{{変数名}}参照可）"
+    }
+  ]
+}
+
+利用可能なツール例: query_corp_db（DB照会）, send_system_notification（Chatwork通知）, list_drive_files（Drive）, list_calendar_events（カレンダー）, send_gmail（メール）, fetch_url（URL取得）など。
+※ send_chatwork_message ではなく send_system_notification を使うよう prompt に記述してください。
+
+ワークフローを生成・更新した場合は、返答の末尾に必ずこのブロックを含めてください：
+\`\`\`workflow
+{ ...JSON... }
+\`\`\`
+
+現在の定義: ${current_workflow ? JSON.stringify(current_workflow, null, 2) : 'なし（新規）'}`;
+
+    const resp = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      system: sysPrompt,
+      messages: messages.map(m => ({ role: m.role, content: m.content }))
+    });
+
+    const text = resp.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    recordUsage(req.user.email, req.user.name, resp.usage?.input_tokens || 0, resp.usage?.output_tokens || 0, 'claude-sonnet-4-6', 'workflow_builder');
+
+    const wfMatch = text.match(/```workflow\s*([\s\S]*?)```/);
+    let workflow = null;
+    if (wfMatch) {
+      try { workflow = JSON.parse(wfMatch[1].trim()); } catch(e) {}
+    }
+
+    res.json({ message: text.replace(/```workflow[\s\S]*?```/g, '').trim(), workflow });
+  } catch(e) { serverError(res, e); }
 });
 
 // ── Scheduler (1分ごとにポーリング・SQLite) ──
