@@ -888,7 +888,7 @@ app.get('/auth/calendar', requireAuth, (req, res) => {
   const authUrl = oauth2.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
-    scope: ['https://www.googleapis.com/auth/calendar.readonly'],
+    scope: ['https://www.googleapis.com/auth/calendar'],
     state
   });
   res.redirect(authUrl);
@@ -993,7 +993,10 @@ app.get('/auth/gmail', requireAuth, (req, res) => {
   const authUrl = oauth2.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
-    scope: ['https://www.googleapis.com/auth/gmail.readonly'],
+    scope: [
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.send'
+    ],
     state
   });
   res.redirect(authUrl);
@@ -4662,6 +4665,68 @@ async function fetchUsdJpy() {
 }
 fetchUsdJpy();
 setInterval(fetchUsdJpy, 24 * 60 * 60 * 1000); // 1日1回更新
+
+// ── Anthropic 公式スキルカタログ（GitHub から1日1回取得） ──
+const ANTHROPIC_SKILLS_CACHE_KEY = 'anthropic_skills_cache';
+const ANTHROPIC_SKILLS_REPO = 'anthropics/skills';
+
+async function fetchAnthropicSkills() {
+  try {
+    const headers = { 'User-Agent': 'claude-agent-web', Accept: 'application/vnd.github+json' };
+    const res = await fetch(`https://api.github.com/repos/${ANTHROPIC_SKILLS_REPO}/contents/skills`, { headers });
+    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+    const dirs = await res.json();
+    const skillDirs = dirs.filter(d => d.type === 'dir');
+
+    const skills = await Promise.all(skillDirs.map(async dir => {
+      try {
+        const mdRes = await fetch(`https://api.github.com/repos/${ANTHROPIC_SKILLS_REPO}/contents/skills/${dir.name}/SKILL.md`, { headers });
+        if (!mdRes.ok) return { name: dir.name, description: '', content: '' };
+        const mdJson = await mdRes.json();
+        const content = Buffer.from(mdJson.content, 'base64').toString('utf8');
+        // description を SKILL.md 先頭段落から抽出
+        const descMatch = content.match(/^#[^\n]*\n+([^#\n][^\n]*)/m);
+        const description = descMatch ? descMatch[1].trim() : '';
+        return { name: dir.name, description, content, sha: mdJson.sha };
+      } catch { return { name: dir.name, description: '', content: '' }; }
+    }));
+
+    const cache = { skills, fetched_at: new Date().toISOString() };
+    db.prepare(`INSERT INTO system_settings(key,value,updated_at) VALUES(?,?,datetime('now','localtime'))
+      ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`)
+      .run(ANTHROPIC_SKILLS_CACHE_KEY, JSON.stringify(cache));
+    console.log(`[anthropic-skills] ${skills.length}件取得・キャッシュ更新`);
+  } catch(e) {
+    console.error('[anthropic-skills] 取得失敗:', e.message);
+  }
+}
+
+function getAnthropicSkillsCache() {
+  const row = db.prepare(`SELECT value FROM system_settings WHERE key=?`).get(ANTHROPIC_SKILLS_CACHE_KEY);
+  return row ? JSON.parse(row.value) : null;
+}
+
+// 起動時 + 1日1回
+fetchAnthropicSkills();
+setInterval(fetchAnthropicSkills, 24 * 60 * 60 * 1000);
+
+// GET /api/anthropic-skills
+app.get('/api/anthropic-skills', (req, res) => {
+  const cache = getAnthropicSkillsCache();
+  if (!cache) return res.json({ skills: [], fetched_at: null });
+  // content は重いので一覧では省略
+  const list = cache.skills.map(s => ({ name: s.name, description: s.description, sha: s.sha }));
+  res.json({ skills: list, fetched_at: cache.fetched_at });
+});
+
+// GET /api/anthropic-skills/:name  — SKILL.md 全文
+app.get('/api/anthropic-skills/:name', (req, res) => {
+  const cache = getAnthropicSkillsCache();
+  if (!cache) return res.status(503).json({ error: 'キャッシュ未取得' });
+  const skill = cache.skills.find(s => s.name === req.params.name);
+  if (!skill) return res.status(404).json({ error: '見つかりません' });
+  res.json(skill);
+});
 
 // GET /api/exchange-rate
 app.get('/api/exchange-rate', (req, res) => {
