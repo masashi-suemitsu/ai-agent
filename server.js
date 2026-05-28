@@ -666,18 +666,6 @@ if (process.env.GOOGLE_CLIENT_ID) {
     if (!email.endsWith('@' + ALLOWED_DOMAIN)) {
       return done(null, false, { message: 'アクロビジョンのメールアドレスのみ利用できます' });
     }
-    if (at) {
-      try {
-        db.prepare(`
-          INSERT INTO user_drive_tokens (email, access_token, refresh_token, updated_at)
-          VALUES (?, ?, ?, datetime('now','localtime'))
-          ON CONFLICT(email) DO UPDATE SET
-            access_token = excluded.access_token,
-            refresh_token = COALESCE(excluded.refresh_token, refresh_token),
-            updated_at = excluded.updated_at
-        `).run(email, at, rt || null);
-      } catch(e) { console.error('drive token save err:', e.message); }
-    }
     const role = getUserRole(email);
     return done(null, { email, name: profile.displayName, picture: profile.photos?.[0]?.value, role });
   }));
@@ -5492,7 +5480,7 @@ app.get('/api/calendar/events', async (req, res) => {
 function getDriveAuthForUser(user) {
   const tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
   if (!tokenRow?.refresh_token) {
-    throw new Error('Googleドライブが未連携です。一度ログアウトして再ログインしてください（Drive権限の許可が必要です）');
+    throw new Error('Googleドライブが未連携です。右サイドバー「Google Drive」から連携してください');
   }
   const oauth2 = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
