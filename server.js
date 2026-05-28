@@ -121,10 +121,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  recruit: new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  user:    new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_server_health','check_job_posting','generate_weekly_report']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting']),
+  recruit: new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting']),
+  user:    new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes'])
 };
 
 app.set('trust proxy', 1);
@@ -1734,6 +1734,58 @@ const TOOLS = [
       },
       required: ['tasks']
     }
+  },
+  {
+    name: 'create_meeting_minutes',
+    description: '会議の文字起こし・メモ・テキストから議事録を自動生成する。決定事項・TODO（担当者・期限）・議題を構造化出力。Google Docsへの保存も可能。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        transcript: { type: 'string', description: '会議の文字起こしテキスト・メモ・要約（10万文字まで）' },
+        title: { type: 'string', description: '会議タイトル（任意）' },
+        date: { type: 'string', description: '会議日 YYYY-MM-DD（任意、省略時は今日）' },
+        attendees: { type: 'string', description: '参加者（任意、例: 田中、山田、佐藤）' },
+        save_to_drive: { type: 'boolean', description: 'true にするとGoogle Docsに議事録を保存してリンクを返す' }
+      },
+      required: ['transcript']
+    }
+  },
+  {
+    name: 'check_server_health',
+    description: '指定URLのサーバーヘルスチェックを実行。HTTP応答ステータス・応答時間・SSLを一括チェックして結果を返す。定期監視スキルにも利用可能。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        urls: { type: 'array', description: 'チェックするURLの配列（最大20件）', items: { type: 'string' } },
+        timeout_ms: { type: 'number', description: 'タイムアウト（ミリ秒、デフォルト10000）' }
+      },
+      required: ['urls']
+    }
+  },
+  {
+    name: 'check_job_posting',
+    description: '求人原稿をAIがチェックし、品質・法令遵守・訴求力を評価する。問題箇所・改善提案・改善例文を返す。掲載前の品質管理に使用。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: '求人原稿のテキスト（職種・仕事内容・応募資格・待遇等）' },
+        job_type: { type: 'string', description: '求人種別（正社員/派遣/パート/アルバイト/業務委託など）' },
+        focus: { type: 'array', description: '重点チェック観点（compliance=法令遵守, appeal=訴求力, clarity=明確さ, salary=給与記載, discrimination=差別表現）省略時は全観点', items: { type: 'string' } }
+      },
+      required: ['text']
+    }
+  },
+  {
+    name: 'generate_weekly_report',
+    description: '管理者向け週次レポートを社内DBから自動生成。案件数・月報提出状況・請求サマリー・顧客数を集計。管理者・業務管理部のみ実行可能。Chatwork通知も可能。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        month_start: { type: 'string', description: '集計月の開始日（YYYY-MM-DD、省略時は今月1日）' },
+        include: { type: 'array', description: '含める項目（anken/geppo/seikyu/customer）省略時は全て', items: { type: 'string' } },
+        notify_room_id: { type: 'string', description: '完成後にChatwork通知するルームID（任意）' }
+      }
+    }
   }
 ];
 
@@ -2722,6 +2774,139 @@ async function executeTool(name, input, user) {
         const runRow = val.runId ? db.prepare('SELECT result FROM task_runs WHERE id=?').get(val.runId) : null;
         return { task: tasks[i].title, status: val.ok ? 'done' : 'error', result: val.ok ? (runRow?.result || '完了') : val.error };
       });
+    }
+    case 'create_meeting_minutes': {
+      audit(user.email, user.name, 'tool.meeting_minutes', { title: input.title, len: input.transcript?.length });
+      const today = new Date().toISOString().slice(0, 10);
+      const meetDate = input.date || today;
+      const prompt = [
+        `以下の会議テキストから議事録を作成してください。`,
+        `会議名: ${input.title || '会議'}`,
+        `日時: ${meetDate}`,
+        `参加者: ${input.attendees || '（テキストから推定）'}`,
+        `\n【文字起こし・メモ】\n${(input.transcript || '').slice(0, 80000)}`,
+        `\n以下のJSON形式のみで回答してください（前後テキスト不要）:`,
+        `{"title":"会議タイトル","date":"YYYY-MM-DD","attendees":["参加者"],"agenda":["議題"],"discussions":[{"topic":"議題","summary":"議論要約"}],"decisions":["決定事項"],"todos":[{"task":"タスク","owner":"担当者","due":"期限またはnull"}],"next_meeting":"次回予定またはnull"}`
+      ].join('\n');
+      const resp = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6', max_tokens: 4096,
+        system: 'あなたは優秀な秘書です。会議の文字起こしから正確な議事録を作成してください。',
+        messages: [{ role: 'user', content: prompt }]
+      });
+      const text = (resp.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { error: 'JSON抽出失敗', raw: text };
+      let minutes;
+      try { minutes = JSON.parse(jsonMatch[0]); }
+      catch (e) { return { error: 'JSONパース失敗: ' + e.message, raw: jsonMatch[0] }; }
+      if (input.save_to_drive) {
+        const drive = getDriveClientForUser(user);
+        const lines = [
+          `# ${minutes.title || input.title || '議事録'} - ${minutes.date || meetDate}`,
+          `\n## 参加者\n${(minutes.attendees || []).join('、')}`,
+          `\n## 議題\n${(minutes.agenda || []).map(a => `- ${a}`).join('\n')}`,
+          `\n## 議事内容\n${(minutes.discussions || []).map(d => `### ${d.topic}\n${d.summary}`).join('\n\n')}`,
+          `\n## 決定事項\n${(minutes.decisions || []).map(d => `- ${d}`).join('\n')}`,
+          `\n## TODO\n${(minutes.todos || []).map(t => `- [ ] ${t.task}（担当: ${t.owner || '未定'}、期限: ${t.due || '未定'}）`).join('\n')}`,
+          minutes.next_meeting ? `\n## 次回会議\n${minutes.next_meeting}` : ''
+        ].join('\n');
+        const docName = `議事録_${minutes.title || input.title || '会議'}_${minutes.date || meetDate}`;
+        const r = await drive.files.create({
+          requestBody: { name: docName, mimeType: 'application/vnd.google-apps.document' },
+          media: { mimeType: 'text/plain', body: lines },
+          fields: 'id,webViewLink'
+        });
+        return { ok: true, minutes, drive_link: r.data.webViewLink, message: `Google Docsに保存しました: ${r.data.webViewLink}` };
+      }
+      return { ok: true, minutes };
+    }
+    case 'check_server_health': {
+      audit(user.email, user.name, 'tool.server_health', { count: input.urls?.length });
+      const timeout = Math.min(input.timeout_ms || 10000, 30000);
+      const urls = (input.urls || []).slice(0, 20);
+      const results = await Promise.all(urls.map(async (url) => {
+        try {
+          const u = new URL(url);
+          const host = u.hostname.toLowerCase();
+          if (host === 'localhost' || host === '0.0.0.0' || host.startsWith('127.') || host.startsWith('10.') || host.startsWith('192.168.') || host.startsWith('169.254.') || /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host) || host.endsWith('.internal') || host.endsWith('.local')) {
+            return { url, ok: false, error: '内部アドレスへのアクセスは禁止' };
+          }
+          const ctrl = new AbortController();
+          const to = setTimeout(() => ctrl.abort(), timeout);
+          const t0 = Date.now();
+          const r = await fetch(url, { signal: ctrl.signal, method: 'HEAD', redirect: 'follow', headers: { 'User-Agent': 'Acrovision-HealthCheck/1.0' } });
+          clearTimeout(to);
+          return {
+            url, ok: r.status < 500,
+            status: r.status, status_text: r.statusText,
+            response_ms: Date.now() - t0,
+            ssl: u.protocol === 'https:' ? 'HTTPS' : 'HTTP（SSL未使用）',
+            redirected: r.redirected || false
+          };
+        } catch (e) {
+          return { url, ok: false, error: e.name === 'AbortError' ? `タイムアウト（${timeout}ms超過）` : e.message };
+        }
+      }));
+      const healthy = results.filter(r => r.ok).length;
+      return { checked: results.length, healthy, unhealthy: results.length - healthy, results };
+    }
+    case 'check_job_posting': {
+      audit(user.email, user.name, 'tool.job_posting_check', { len: input.text?.length, job_type: input.job_type });
+      const focus = (input.focus || ['compliance', 'appeal', 'clarity', 'salary', 'discrimination']).join(', ');
+      const prompt = [
+        `以下の求人原稿をチェックしてください。`,
+        `種別: ${input.job_type || '未指定'}`,
+        `重点観点: ${focus}`,
+        `\n【原稿】\n${(input.text || '').slice(0, 10000)}`,
+        `\n以下のJSON形式のみで回答してください（前後テキスト不要）:`,
+        `{"overall_score":"A/B/C/D（A=問題なし,B=軽微な問題あり,C=要修正,D=掲載不可）","issues":[{"category":"compliance|appeal|clarity|salary|discrimination|other","severity":"high|medium|low","location":"問題箇所の引用","issue":"問題の説明","suggestion":"改善案","example":"改善例文"}],"strengths":["良い点"],"missing_items":["記載が必要な項目"],"summary":"総評（2〜3文）"}`
+      ].join('\n');
+      const resp = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6', max_tokens: 3000,
+        system: 'あなたは求人広告の品質管理の専門家です。求人原稿を厳格にチェックし、問題点と改善案を具体的に示してください。',
+        messages: [{ role: 'user', content: prompt }]
+      });
+      const text = (resp.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { error: 'JSON抽出失敗', raw: text };
+      try { return { ok: true, result: JSON.parse(jsonMatch[0]) }; }
+      catch (e) { return { error: 'JSONパース失敗: ' + e.message, raw: jsonMatch[0] }; }
+    }
+    case 'generate_weekly_report': {
+      const role = user.role || getUserRole(user.email);
+      if (!['admin', 'gyoumu'].includes(role)) throw new Error('管理者・業務管理部のみ実行可能');
+      audit(user.email, user.name, 'tool.weekly_report');
+      const pool = getCorpDb();
+      if (!pool) throw new Error('Corp DB未設定');
+      const now = new Date();
+      const firstDay = input.month_start || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+      const include = new Set(input.include || ['anken', 'geppo', 'seikyu', 'customer']);
+      const report = { month_start: firstDay, generated_at: now.toISOString(), sections: {} };
+      const safeQuery = async (sql, params) => {
+        try { const [rows] = await pool.execute(sql, params || []); return rows[0] || {}; }
+        catch (e) { return { error: e.message }; }
+      };
+      if (include.has('anken'))    report.sections.anken    = await safeQuery('SELECT COUNT(*) as total FROM kintone_anken_eigyo');
+      if (include.has('geppo'))    report.sections.geppo    = await safeQuery('SELECT COUNT(*) as submitted FROM geppo_data WHERE created_at >= ?', [firstDay]);
+      if (include.has('seikyu'))   report.sections.seikyu   = await safeQuery('SELECT COUNT(*) as count FROM kintone_seikyu WHERE created_at >= ?', [firstDay]);
+      if (include.has('customer')) report.sections.customer = await safeQuery('SELECT COUNT(*) as new_customers FROM kintone_customers WHERE created_at >= ?', [firstDay]);
+      report.sections.employees = await safeQuery('SELECT COUNT(*) as total FROM kintone_employees');
+      if (input.notify_room_id && process.env.SYSTEM_CHATWORK_TOKEN) {
+        const s = report.sections;
+        const body = '[info][title]📊 週次レポート（' + firstDay + '月）[/title]' +
+          (s.anken && !s.anken.error    ? '\n■ 案件総数: '           + s.anken.total         + '件' : '') +
+          (s.geppo && !s.geppo.error    ? '\n■ 月報提出（今月）: '   + s.geppo.submitted      + '件' : '') +
+          (s.seikyu && !s.seikyu.error  ? '\n■ 請求件数（今月）: '   + s.seikyu.count         + '件' : '') +
+          (s.customer && !s.customer.error ? '\n■ 顧客総数: '         + s.customer.new_customers + '件' : '') +
+          (s.employees && !s.employees.error ? '\n■ 社員数: '         + s.employees.total      + '名' : '') +
+          '\n[/info]';
+        await fetch(`https://api.chatwork.com/v2/rooms/${input.notify_room_id}/messages`, {
+          method: 'POST',
+          headers: { 'X-ChatWorkToken': process.env.SYSTEM_CHATWORK_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'body=' + encodeURIComponent(body)
+        });
+      }
+      return { ok: true, report };
     }
     default:
       throw new Error(`Unknown tool: ${name}`);
