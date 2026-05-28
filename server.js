@@ -4796,6 +4796,11 @@ app.get('/api/wp/posts/:id', async (req, res) => {
 
 // POST /api/wp/posts  body: { title, content, status }
 app.post('/api/wp/posts', async (req, res) => {
+  const role = req.user.role || getUserRole(req.user.email);
+  if (!['admin','eigyo'].includes(role)) {
+    audit(req.user.email, req.user.name, 'wp.create_post.denied', { reason: 'role', role });
+    return res.status(403).json({ error: 'WordPress 投稿は管理者・営業ロールのみ許可されています' });
+  }
   if (!process.env.WP_URL) return res.status(503).json({ error: 'WordPress未設定' });
   const { title, content, status = 'draft' } = req.body;
   if (!title || !content) return res.status(400).json({ error: 'title と content は必須' });
@@ -6122,6 +6127,12 @@ app.get('/api/push/vapid-key', (req, res) => res.json({ publicKey: VAPID_PUBLIC_
 app.post('/api/push/subscribe', (req, res) => {
   const { endpoint, keys } = req.body;
   if (!endpoint || !keys?.auth || !keys?.p256dh) return res.status(400).json({ error: 'invalid subscription' });
+  // 別ユーザーの endpoint を奪取できないよう owner 検証
+  const existing = db.prepare('SELECT email FROM push_subscriptions WHERE endpoint=?').get(endpoint);
+  if (existing && existing.email !== req.user.email) {
+    audit(req.user.email, req.user.name, 'push.subscribe.denied', { reason: 'endpoint_owned_by_other' });
+    return res.status(409).json({ error: 'endpoint already registered to another user' });
+  }
   db.prepare('INSERT OR REPLACE INTO push_subscriptions (email, endpoint, keys_auth, keys_p256dh) VALUES (?,?,?,?)')
     .run(req.user.email, endpoint, keys.auth, keys.p256dh);
   res.json({ ok: true });
