@@ -237,7 +237,8 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     <button class="tab-btn" data-tab="automation" onclick="switchTab('automation')">🔗 自動化</button>
     <button class="tab-btn" data-tab="memories" onclick="switchTab('memories')">🧠 メモリ</button>
     <button class="tab-btn" data-tab="rules"   onclick="switchTab('rules')">🔒 権限・ルール</button>
-    <button class="tab-btn" data-tab="usage"   onclick="switchTab('usage')">💰 利用状況</button>
+    <button class="tab-btn" data-tab="usage"      onclick="switchTab('usage')">💰 利用状況</button>
+    <button class="tab-btn" data-tab="chatsearch" onclick="switchTab('chatsearch')">💬 会話検索</button>
   </div>
 
   <!-- ─ 定期タスク ─ -->
@@ -361,6 +362,29 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       </div>
     </div>
     <div id="userMgmtContent"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+  </div>
+
+  <!-- ─ 会話検索 ─ -->
+  <div class="tab-content" id="tab-chatsearch">
+    <div style="max-width:860px;">
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+        <input id="csQuery" type="search" placeholder="🔍 キーワードで検索（会話タイトル・本文）"
+          style="flex:1;min-width:200px;padding:9px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;background:var(--input-bg);color:var(--text);outline:none;"
+          oninput="debounceChatSearch()" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+        <input id="csFrom" type="date" title="開始日" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;background:var(--input-bg);color:var(--text);" onchange="runChatSearch()">
+        <input id="csTo"   type="date" title="終了日" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;background:var(--input-bg);color:var(--text);" onchange="runChatSearch()">
+        <button onclick="clearChatSearch()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;background:var(--card-bg);color:var(--text-light);cursor:pointer;">クリア</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
+        <button class="filter-btn active" onclick="setCsPreset('all',this)">すべて</button>
+        <button class="filter-btn" onclick="setCsPreset('today',this)">今日</button>
+        <button class="filter-btn" onclick="setCsPreset('week',this)">1週間</button>
+        <button class="filter-btn" onclick="setCsPreset('month',this)">1か月</button>
+        <button class="filter-btn" onclick="setCsPreset('3month',this)">3か月</button>
+      </div>
+      <div id="csSummary" style="font-size:12px;color:var(--text-light);margin-bottom:10px;"></div>
+      <div id="csResults"><div class="empty"><div class="empty-icon">💬</div><p>キーワードを入力するか、期間を絞り込んでください</p></div></div>
+    </div>
   </div>
 
   <!-- ─ 利用状況 ─ -->
@@ -804,7 +828,7 @@ function renderUserBadge(me) {
 }
 
 // ─ タブ切替 ─
-const TAB_NAMES = ['tasks','history','skills','automation','memories','rules','usage','dashboard','users'];
+const TAB_NAMES = ['tasks','history','skills','automation','memories','rules','usage','chatsearch','dashboard','users'];
 
 function switchTab(name) {
   if (!TAB_NAMES.includes(name)) name = 'tasks';
@@ -819,6 +843,7 @@ function switchTab(name) {
   if (name === 'dashboard') { loadDashStats(); loadDashAudit(); }
   if (name === 'automation') { loadHooks(); loadBatchHistory(); }
   if (name === 'memories') loadMemories();
+  if (name === 'chatsearch') initChatSearch();
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
 }
 
