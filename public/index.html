@@ -1099,8 +1099,8 @@ async function loadSidebar() {
         </div>
         <div class="skill-actions" id="skill-actions-${s.id}">
           <button class="skill-share-btn ${s.shared ? 'shared' : ''}" onclick="openShareModal(${s.id})" title="共有設定">${skillShareIcon(s)}</button>
-          <button class="skill-run-btn" style="background:#ed8936;" onclick="openScheduleModal(${s.id}, ${JSON.stringify(s.title)})" title="定期実行を設定">⏰</button>
-          <button class="skill-run-btn" onclick="runSkill(${s.id}, ${JSON.stringify(s.title)})">実行</button>
+          <button class="skill-run-btn" style="background:#ed8936;" data-id="${s.id}" data-title="${esc(s.title)}" onclick="openScheduleModal(this.dataset.id, this.dataset.title)" title="定期実行を設定">⏰</button>
+          <button class="skill-run-btn" data-id="${s.id}" data-title="${esc(s.title)}" onclick="runSkill(this.dataset.id, this.dataset.title)">実行</button>
           <button class="skill-del-btn" onclick="deleteSkill(${s.id})" title="削除">✕</button>
         </div>
       </div>`).join('');
@@ -1118,8 +1118,8 @@ async function loadSidebar() {
           <div class="skill-desc">${esc(s.description || '')}</div>
         </div>
         <div class="skill-actions">
-          <button class="skill-run-btn" style="background:#ed8936;" onclick="openScheduleModal(${s.id}, ${JSON.stringify(s.title)})" title="定期実行を設定">⏰</button>
-          <button class="skill-run-btn" onclick="runSkill(${s.id}, ${JSON.stringify(s.title)})">実行</button>
+          <button class="skill-run-btn" style="background:#ed8936;" data-id="${s.id}" data-title="${esc(s.title)}" onclick="openScheduleModal(this.dataset.id, this.dataset.title)" title="定期実行を設定">⏰</button>
+          <button class="skill-run-btn" data-id="${s.id}" data-title="${esc(s.title)}" onclick="runSkill(this.dataset.id, this.dataset.title)">実行</button>
         </div>
       </div>`;
     }).join('');
