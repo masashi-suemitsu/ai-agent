@@ -349,8 +349,29 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     <div id="historyList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
 
+  <!-- ─ スキル（Anthropic公式） ─ -->
+  <div class="tab-content" id="tab-anthropic-skills">
+    <div style="margin-bottom:24px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;">🏛️ Anthropic 公式スキル</div>
+          <span id="anthropicSkillsFetchedAt" style="font-size:10px;color:var(--text-light);"></span>
+        </div>
+        <button id="anthropicSkillsRefreshBtn" class="btn btn-outline" style="font-size:11px;padding:3px 10px;display:none;" onclick="loadAnthropicSkills(true)">🔄 更新</button>
+      </div>
+      <div id="anthropicSkillsGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">
+        <div class="empty" style="grid-column:1/-1;padding:16px;"><p>読み込み中...</p></div>
+      </div>
+    </div>
+  </div>
+
   <!-- ─ ジョブ ─ -->
   <div class="tab-content" id="tab-skills">
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text-light);margin-bottom:10px;letter-spacing:.03em;">📋 テンプレートから作成</div>
+      <div id="skillTemplateGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;"></div>
+    </div>
+
     <!-- マイジョブ -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;">💼 マイジョブ</div>
@@ -364,28 +385,6 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     <!-- 共有ジョブ -->
     <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;margin-top:24px;margin-bottom:10px;">🤝 共有ジョブ</div>
     <div id="sharedJobList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
-  </div>
-
-  <!-- ─ スキル（Anthropic公式） ─ -->
-  <div class="tab-content" id="tab-anthropic-skills">
-    <!-- Anthropic 公式スキルカタログ -->
-    <div style="margin-bottom:24px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;">🏛️ Anthropic 公式スキル</div>
-          <span id="anthropicSkillsFetchedAt" style="font-size:10px;color:var(--text-light);"></span>
-        </div>
-        <button id="anthropicSkillsRefreshBtn" class="btn btn-outline" style="font-size:11px;padding:3px 10px;display:none;" onclick="loadAnthropicSkills(true)">🔄 更新</button>
-      </div>
-      <div id="anthropicSkillsGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">
-        <div class="empty" style="grid-column:1/-1;padding:16px;"><p>読み込み中...</p></div>
-      </div>
-    </div>
-
-    <div style="margin-bottom:20px;">
-      <div style="font-size:13px;font-weight:700;color:var(--text-light);margin-bottom:10px;letter-spacing:.03em;">📋 テンプレートから作成</div>
-      <div id="skillTemplateGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;"></div>
-    </div>
   </div>
 
   <!-- ─ 自動化（Hooks・Batch・サブエージェント） ─ -->
@@ -1109,7 +1108,8 @@ function switchTab(name) {
   document.getElementById('tab-' + name)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   if (name === 'history')    loadHistory();
-  if (name === 'anthropic-skills') { loadAnthropicSkills(); renderSkillTemplates(); }
+  if (name === 'anthropic-skills') loadAnthropicSkills();
+  if (name === 'skills')           renderSkillTemplates();
   if (name === 'connectors') loadGithubStatus();
   if (name === 'rules')      loadCustomRules();
   if (name === 'users')      { loadUsers(); loadWebhookToggle(); loadPushToggle(); }
@@ -3482,7 +3482,9 @@ let wfEditingId = null;
 async function loadWorkflows() {
   const listEl = document.getElementById('wfList');
   try {
-    const rows = await fetch('/api/workflows').then(r => r.json());
+    const r = await fetch('/api/workflows');
+    if (!r.ok) throw new Error((await r.json()).error || 'ワークフロー取得に失敗しました');
+    const rows = await r.json();
     if (!rows.length) {
       listEl.innerHTML = '<div class="empty"><div class="empty-icon">🔀</div><p>ワークフローがありません<br><small style="color:var(--text-light);">「＋ 新規作成」から始めましょう</small></p></div>';
       return;
@@ -3530,10 +3532,17 @@ async function startWfBuilder(wfId) {
   document.getElementById('wfNameInput').value = '';
   document.getElementById('wfTriggerType').value = 'manual';
   document.getElementById('wfScheduleOptions').style.display = 'none';
+  // スケジュールフィールドを毎回リセット（前のワークフローの値が残らないよう）
+  document.getElementById('wfScheduleType').value = 'interval';
+  document.getElementById('wfIntervalMin').value = '60';
+  document.getElementById('wfHour').value = '';
+  document.getElementById('wfMinute').value = '0';
 
   if (wfId) {
     try {
-      const rows = await fetch('/api/workflows').then(r => r.json());
+      const r = await fetch('/api/workflows');
+      if (!r.ok) throw new Error((await r.json()).error || 'ワークフロー取得に失敗しました');
+      const rows = await r.json();
       const wf = rows.find(w => w.id === wfId);
       if (wf) {
         wfCurrentWorkflow = { name: wf.name, description: wf.description, steps: wf.steps };
@@ -3543,8 +3552,8 @@ async function startWfBuilder(wfId) {
           document.getElementById('wfScheduleOptions').style.display = 'flex';
           document.getElementById('wfScheduleType').value = wf.schedule_type || 'interval';
           document.getElementById('wfIntervalMin').value = wf.interval_min || 60;
-          if (wf.schedule_hour != null) document.getElementById('wfHour').value = wf.schedule_hour;
-          document.getElementById('wfMinute').value = wf.schedule_minute || 0;
+          document.getElementById('wfHour').value = wf.schedule_hour != null ? wf.schedule_hour : '';
+          document.getElementById('wfMinute').value = wf.schedule_minute ?? 0;
           updateWfScheduleTypeUI();
         }
         renderWfFlow(wf.steps);
@@ -3554,7 +3563,13 @@ async function startWfBuilder(wfId) {
         msgEl.textContent = `現在のワークフロー「${wf.name}」を編集します。変更したい点を教えてください。`;
         document.getElementById('wfChatHistory').appendChild(msgEl);
       }
-    } catch(e) {}
+    } catch(e) {
+      const errEl = document.createElement('div');
+      errEl.className = 'wf-ai-msg';
+      errEl.style.color = 'var(--danger)';
+      errEl.textContent = '読み込みエラー: ' + e.message;
+      document.getElementById('wfChatHistory').appendChild(errEl);
+    }
   }
 }
 
@@ -3654,7 +3669,7 @@ async function saveWorkflow() {
     trigger_type: triggerType,
     schedule_type: document.getElementById('wfScheduleType').value,
     interval_min: parseInt(document.getElementById('wfIntervalMin').value) || 60,
-    schedule_hour: parseInt(document.getElementById('wfHour').value) || null,
+    schedule_hour: document.getElementById('wfHour').value !== '' ? parseInt(document.getElementById('wfHour').value) : null,
     schedule_minute: parseInt(document.getElementById('wfMinute').value) || 0,
   };
 
