@@ -122,10 +122,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_server_health','check_job_posting','generate_weekly_report','generate_presentation','summarize_document','draft_email_reply','screen_candidate','bulk_register_kintone']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply']),
-  recruit: new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply','screen_candidate']),
-  user:    new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','generate_presentation','summarize_document','draft_email_reply'])
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_server_health','check_job_posting','generate_weekly_report','generate_presentation','summarize_document','draft_email_reply','screen_candidate','bulk_register_kintone','github_api']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply','github_api']),
+  recruit: new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply','screen_candidate','github_api']),
+  user:    new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','generate_presentation','summarize_document','draft_email_reply','github_api'])
 };
 
 app.set('trust proxy', 1);
@@ -305,6 +305,7 @@ db.exec(`
     updated_at TEXT DEFAULT (datetime('now','localtime'))
   );
 `);
+try { db.exec(`ALTER TABLE user_settings ADD COLUMN github_token TEXT DEFAULT ''`); } catch(e) {}
 
 // ユーザーロールテーブル（DBベース管理）
 db.exec(`
@@ -424,6 +425,7 @@ function recordUsage(email, name, inputTokens, outputTokens, model, context) {
  'ALTER TABLE scheduled_tasks ADD COLUMN shared INTEGER DEFAULT 0',
  'ALTER TABLE scheduled_tasks ADD COLUMN shared_with TEXT',
  'ALTER TABLE user_skills ADD COLUMN shared_with TEXT',
+ 'ALTER TABLE user_skills ADD COLUMN chain_skill_id INTEGER',
  'ALTER TABLE token_usage ADD COLUMN cost_usd REAL DEFAULT 0',
 ].forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
@@ -2059,6 +2061,20 @@ const TOOLS = [
       },
       required: ['file_id', 'app_id']
     }
+  },
+  {
+    name: 'github_api',
+    description: 'GitHub API を呼び出す。リポジトリ一覧・Issue 作成・PR 作成・ファイル取得などが可能。事前にユーザーが管理画面の「個人設定」から GitHub PAT を登録している必要がある。書き込み系（POST/PUT/PATCH/DELETE）は confirmed:false でプレビューを先に見せること。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        method:    { type: 'string', enum: ['GET','POST','PUT','PATCH','DELETE'], description: 'HTTPメソッド' },
+        path:      { type: 'string', description: 'GitHub API パス（例: /user/repos, /repos/owner/repo/issues）' },
+        body:      { type: 'object', description: 'POST/PUT/PATCH 時のリクエストボディ（任意）' },
+        confirmed: { type: 'boolean', description: '書き込み系操作の実行確認。false/省略でプレビュー、true で実行' }
+      },
+      required: ['method', 'path']
+    }
   }
 ];
 
@@ -3560,6 +3576,34 @@ ${(input.candidate_info || '').slice(0, 3000)}
       };
     }
 
+    case 'github_api': {
+      const ghRow = db.prepare('SELECT github_token FROM user_settings WHERE email=?').get(user.email);
+      if (!ghRow?.github_token) throw new Error('GitHub が未連携です。管理画面の「個人設定」タブから GitHub PAT を登録してください');
+      const { method: ghMethod = 'GET', path: ghPath, body: ghBody, confirmed: ghConfirmed } = input;
+      const isGhWrite = ghMethod !== 'GET';
+      if (isGhWrite && !ghConfirmed) {
+        audit(user.email, user.name, 'tool.github.preview', { method: ghMethod, path: ghPath });
+        return { preview: true, message: `GitHub ${ghMethod} のプレビューです。実行するには confirmed:true で再呼出してください。`, method: ghMethod, path: ghPath, body: ghBody };
+      }
+      const ghUrl = `https://api.github.com${ghPath}`;
+      audit(user.email, user.name, isGhWrite ? 'tool.github.write' : 'tool.github.read', { method: ghMethod, path: ghPath });
+      const ghResp = await fetch(ghUrl, {
+        method: ghMethod,
+        headers: {
+          Authorization: `Bearer ${ghRow.github_token}`,
+          'User-Agent': 'acrovision-ai-agent',
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          ...(ghBody ? { 'Content-Type': 'application/json' } : {})
+        },
+        ...(ghBody ? { body: JSON.stringify(ghBody) } : {})
+      });
+      if (ghResp.status === 204) return { ok: true };
+      const ghData = await ghResp.json();
+      if (!ghResp.ok) throw new Error(`GitHub API エラー: ${ghData.message || ghResp.status}`);
+      return ghData;
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -4056,9 +4100,13 @@ app.put('/api/skills/:id', (req, res) => {
   db.prepare('INSERT OR IGNORE INTO skill_versions (skill_id, version_num, title, description, steps) VALUES (?,?,?,?,?)')
     .run(req.params.id, nextVer, skill.title, skill.description, skill.steps);
   db.prepare('DELETE FROM skill_versions WHERE skill_id=? AND version_num <= ?').run(req.params.id, nextVer - 10);
-  db.prepare(`UPDATE user_skills SET title=?, description=?, steps=?, shared=?, updated_at=datetime('now','localtime') WHERE id=?`)
+  // chain_skill_id は null (なし) または数値
+  const chainId = req.body.chain_skill_id !== undefined
+    ? (req.body.chain_skill_id ? Number(req.body.chain_skill_id) : null)
+    : skill.chain_skill_id;
+  db.prepare(`UPDATE user_skills SET title=?, description=?, steps=?, shared=?, chain_skill_id=?, updated_at=datetime('now','localtime') WHERE id=?`)
     .run(title.trim(), description ?? skill.description, steps ?? skill.steps,
-      shared !== undefined ? (shared ? 1 : 0) : skill.shared, req.params.id);
+      shared !== undefined ? (shared ? 1 : 0) : skill.shared, chainId, req.params.id);
   audit(req.user.email, req.user.name, 'skill.update', { id: req.params.id });
   res.json({ ok: true });
 });
@@ -4202,6 +4250,11 @@ app.post('/api/skills/:id/run', async (req, res) => {
       prompt = prompt.split(`{{${k}}}`).join(String(v));
     }
   }
+  // チェーン連鎖からの前スキル結果を付加
+  const chainContext = req.body?.chain_context;
+  if (chainContext) {
+    prompt += `\n\n## 前のスキルの実行結果（この内容を参考に実行してください）\n\n${chainContext}`;
+  }
 
   // 拡張思考モード（Sonnet のみ対応）
   const useSkillThinking = !!(req.body?.thinking);
@@ -4318,6 +4371,13 @@ app.post('/api/skills/:id/run', async (req, res) => {
     recordUsage(req.user.email, req.user.name, totalInputTokens, totalOutputTokens, 'claude-sonnet-4-6', 'skill_run');
     // Hooks: post_run
     executeHooks('post_run', skill, req.user.email, resultBuffer).catch(() => {});
+    // スキルチェーン: 連鎖先があればクライアントに通知
+    if (skill.chain_skill_id) {
+      const chainSkill = db.prepare('SELECT id, title FROM user_skills WHERE id=?').get(skill.chain_skill_id);
+      if (chainSkill) {
+        res.write(`data: ${JSON.stringify({ chain_next_id: chainSkill.id, chain_next_title: chainSkill.title })}\n\n`);
+      }
+    }
     res.write(`data: ${JSON.stringify({ done: true, code: 0, runId })}\n\n`);
   } catch(e) {
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
@@ -4464,6 +4524,43 @@ app.put('/api/user-settings', (req, res) => {
     ON CONFLICT(email) DO UPDATE SET custom_rules=excluded.custom_rules, updated_at=excluded.updated_at
   `).run(req.user.email, custom_rules.slice(0, 2000));
   audit(req.user.email, req.user.name, 'user_settings.update');
+  res.json({ ok: true });
+});
+
+// ── GitHub PAT 連携 API ──
+app.get('/api/settings/github/status', (req, res) => {
+  const row = db.prepare('SELECT github_token FROM user_settings WHERE email=?').get(req.user.email);
+  res.json({ connected: !!(row?.github_token) });
+});
+
+app.post('/api/settings/github', async (req, res) => {
+  const { token } = req.body;
+  if (!token || typeof token !== 'string') return res.status(400).json({ error: 'token は必須です' });
+  if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+    return res.status(400).json({ error: 'GitHub PAT の形式が正しくありません（ghp_ または github_pat_ で始まる文字列）' });
+  }
+  let me;
+  try {
+    const r = await fetch('https://api.github.com/user', {
+      headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'acrovision-ai-agent', Accept: 'application/vnd.github+json' }
+    });
+    if (!r.ok) return res.status(401).json({ error: '認証失敗。PAT が正しくないか期限切れです' });
+    me = await r.json();
+  } catch(e) {
+    return res.status(502).json({ error: 'GitHub への接続に失敗しました' });
+  }
+  db.prepare(`
+    INSERT INTO user_settings (email, github_token, updated_at)
+    VALUES (?, ?, datetime('now','localtime'))
+    ON CONFLICT(email) DO UPDATE SET github_token=excluded.github_token, updated_at=excluded.updated_at
+  `).run(req.user.email, token);
+  audit(req.user.email, req.user.name, 'github.connect', { login: me.login });
+  res.json({ ok: true, login: me.login, avatar_url: me.avatar_url });
+});
+
+app.delete('/api/settings/github', (req, res) => {
+  db.prepare(`UPDATE user_settings SET github_token='' WHERE email=?`).run(req.user.email);
+  audit(req.user.email, req.user.name, 'github.disconnect');
   res.json({ ok: true });
 });
 

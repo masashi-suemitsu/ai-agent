@@ -528,6 +528,13 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <label>実行手順（AIへの指示）</label>
       <textarea id="editSkillSteps" rows="14" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.8;resize:vertical;outline:none;font-family:inherit;min-height:260px;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
     </div>
+    <div class="modal-field">
+      <label>🔗 完了後に連鎖実行するスキル（任意）</label>
+      <select id="editSkillChain" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;outline:none;background:#fff;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+        <option value="">なし（チェーンしない）</option>
+      </select>
+      <div style="font-size:11px;color:var(--text-light);margin-top:4px;">このスキルが完了すると、選択したスキルが自動的に続けて実行されます。前のスキルの結果が引き継がれます。</div>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeEditSkill()">キャンセル</button>
       <button class="btn btn-primary" id="editSkillSaveBtn" onclick="saveEditSkill()">保存する</button>
@@ -886,6 +893,7 @@ function toggleTheme() {
   renderSkillTemplates();
   renderRules(currentUser.role);
   loadCustomRules();
+  loadGithubStatus();
   buildModelSelects();
   // URL ハッシュに対応するタブを復元
   const initHash = location.hash.slice(1);
@@ -920,7 +928,7 @@ function switchTab(name) {
   document.getElementById('tab-' + name)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   if (name === 'history')   loadHistory();
-  if (name === 'rules')     loadCustomRules();
+  if (name === 'rules')     { loadCustomRules(); loadGithubStatus(); }
   if (name === 'users')     { loadUsers(); loadWebhookToggle(); loadPushToggle(); }
   if (name === 'usage')     loadUsage();
   if (name === 'dashboard') { loadDashStats(); loadDashAudit(); loadDashTrends(); }
@@ -1464,6 +1472,11 @@ function openEditSkill(id) {
   document.getElementById('editSkillTitle').value = s.title || '';
   document.getElementById('editSkillDesc').value = s.description || '';
   document.getElementById('editSkillSteps').value = s.steps || '';
+  // チェーンセレクトの選択肢を生成（自分のスキル一覧）
+  const chainSel = document.getElementById('editSkillChain');
+  const mySkills = Object.values(_skillCache).filter(sk => sk.id !== id);
+  chainSel.innerHTML = '<option value="">なし（チェーンしない）</option>' +
+    mySkills.map(sk => `<option value="${sk.id}" ${sk.id === s.chain_skill_id ? 'selected' : ''}>${esc(sk.title)}</option>`).join('');
   document.getElementById('editSkillModal').classList.add('open');
 }
 function closeEditSkill() {
@@ -1487,9 +1500,10 @@ async function saveEditSkill() {
         body: JSON.stringify({ name, title, description, steps })
       });
     } else {
+      const chainSkillId = document.getElementById('editSkillChain')?.value || '';
       resp = await fetch(`/api/skills/${id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description, steps })
+        body: JSON.stringify({ title, description, steps, chain_skill_id: chainSkillId ? Number(chainSkillId) : null })
       });
     }
     if (!resp.ok) throw new Error((await resp.json()).error || '保存失敗');
@@ -1811,6 +1825,7 @@ function renderRules(role) {
     { name: 'read_drive_file',       label: 'Driveファイル読取',        roles: ['admin','gyoumu','eigyo','recruit','user'] },
     { name: 'list_calendar_events',  label: 'Googleカレンダー取得',    roles: ['admin','gyoumu','eigyo','recruit','user'] },
     { name: 'list_gmail_messages',   label: 'Gmail受信トレイ取得',     roles: ['admin','gyoumu','eigyo','recruit','user'] },
+    { name: 'github_api',            label: 'GitHub API（Issue/PR/リポジトリ操作）', roles: ['admin','gyoumu','eigyo','recruit','user'] },
   ];
 
   // corp 側 /api/agent.php が閉鎖中（503）のため fetch_corp_api アクションは一時停止
@@ -1825,6 +1840,26 @@ function renderRules(role) {
       <div class="role-info">
         <h2>${ri.name}</h2>
         <p>${ri.desc}</p>
+      </div>
+    </div>
+
+    <div class="rules-block" id="githubConnectBlock">
+      <div class="rules-block-title">🐙 GitHub 連携</div>
+      <div style="padding:14px 18px 16px;">
+        <div style="background:var(--primary-light);border-left:3px solid var(--primary);border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:var(--text);line-height:1.6;">
+          Personal Access Token（PAT）を登録すると、AIが GitHub のリポジトリ・Issue・PR を操作できるようになります。<br>
+          PAT は <a href="https://github.com/settings/tokens?type=beta" target="_blank" style="color:var(--primary);">github.com/settings/tokens</a> から発行（必要なスコープ: <code>repo</code> または <code>public_repo</code>）。
+        </div>
+        <div id="githubStatus" style="margin-bottom:12px;"></div>
+        <div id="githubInputArea">
+          <input id="githubTokenInput" type="password" placeholder="ghp_xxxx または github_pat_xxxx"
+            style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;font-family:monospace;transition:border-color .15s;box-sizing:border-box;"
+            onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+            <button class="btn btn-primary" onclick="saveGithubToken()" id="saveGithubBtn">接続する</button>
+            <span id="saveGithubMsg" style="font-size:12px;color:var(--success);display:none;"></span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1883,6 +1918,57 @@ function renderRules(role) {
         <tr><td class="tool-desc">エラー時の動作</td><td>代替手段があれば自動で試みる。すべて失敗した場合のみ報告</td></tr>
         <tr><td class="tool-desc">不明点の確認</td><td>1〜2個だけ端的に確認。多くを聞かない</td></tr>
       </table>
+    </div>`;
+}
+
+async function loadGithubStatus() {
+  try {
+    const data = await apiFetch('/api/settings/github/status');
+    const statusEl = document.getElementById('githubStatus');
+    const inputArea = document.getElementById('githubInputArea');
+    if (!statusEl) return;
+    if (data.connected) {
+      statusEl.innerHTML = `<span style="color:var(--success);font-size:13px;font-weight:600;">✓ GitHub 連携済み</span>`;
+      if (inputArea) inputArea.innerHTML = `<button class="btn btn-danger" onclick="disconnectGithub()" style="font-size:12px;padding:6px 14px;">連携を解除する</button>`;
+    } else {
+      statusEl.innerHTML = `<span style="color:var(--text-light);font-size:13px;">未連携</span>`;
+    }
+  } catch(e) {}
+}
+async function saveGithubToken() {
+  const input = document.getElementById('githubTokenInput');
+  const btn = document.getElementById('saveGithubBtn');
+  const msg = document.getElementById('saveGithubMsg');
+  if (!input?.value.trim()) return;
+  btn.disabled = true; btn.textContent = '接続中...';
+  try {
+    const resp = await fetch('/api/settings/github', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: input.value.trim() })
+    });
+    const d = await resp.json();
+    if (!resp.ok) throw new Error(d.error || '接続失敗');
+    if (msg) { msg.textContent = `✓ @${d.login} として接続しました`; msg.style.display = 'inline'; }
+    input.value = '';
+    await loadGithubStatus();
+  } catch(e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '接続する';
+  }
+}
+async function disconnectGithub() {
+  if (!confirm('GitHub 連携を解除しますか？')) return;
+  await fetch('/api/settings/github', { method: 'DELETE' });
+  await loadGithubStatus();
+  const inputArea = document.getElementById('githubInputArea');
+  if (inputArea) inputArea.innerHTML = `
+    <input id="githubTokenInput" type="password" placeholder="ghp_xxxx または github_pat_xxxx"
+      style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;font-family:monospace;transition:border-color .15s;box-sizing:border-box;"
+      onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+    <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+      <button class="btn btn-primary" onclick="saveGithubToken()" id="saveGithubBtn">接続する</button>
+      <span id="saveGithubMsg" style="font-size:12px;color:var(--success);display:none;"></span>
     </div>`;
 }
 
