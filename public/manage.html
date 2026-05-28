@@ -954,7 +954,7 @@ async function runTaskNow(id, btn) {
 }
 
 async function deleteTask(id) {
-  if (!confirm('この定期タスクを削除しますか？')) return;
+  if (!confirm('このタスクを削除しますか？')) return;
   await fetch(`/api/scheduled-tasks/${id}`, { method: 'DELETE' });
   await loadTasks();
 }
