@@ -92,6 +92,7 @@ h1 { font-size: 22px; font-weight: 700; color: #1a1d2e; margin-bottom: 8px; }
   <div class="magic-form" id="magicForm">
     <label>@acrovision.jp メールアドレス</label>
     <input type="email" id="magicEmail" placeholder="yourname@acrovision.jp" autocomplete="email" />
+    <div id="magicEmailError" style="display:none;color:#c53030;font-size:12px;margin-top:4px;">@acrovision.jp のアドレスを入力してください</div>
     <button class="magic-btn" id="magicBtn" onclick="sendMagicLink()">メールでログインリンクを送る</button>
   </div>
   <div id="magicSent" class="magic-sent" style="display:none;"></div>
@@ -102,12 +103,15 @@ async function sendMagicLink() {
   const emailEl = document.getElementById('magicEmail');
   const btn = document.getElementById('magicBtn');
   const email = emailEl.value.trim().toLowerCase();
+  const errEl = document.getElementById('magicEmailError');
   if (!email.endsWith('@acrovision.jp')) {
     emailEl.style.borderColor = '#e53e3e';
+    errEl.style.display = '';
     emailEl.focus();
     return;
   }
   emailEl.style.borderColor = '';
+  errEl.style.display = 'none';
   btn.disabled = true;
   btn.textContent = '送信中…';
   try {
