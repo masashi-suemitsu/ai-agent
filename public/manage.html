@@ -303,12 +303,13 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 <div class="page">
 <div class="layout">
   <nav class="tab-nav" id="tabNav">
-    <button class="tab-btn active" data-tab="tasks"      onclick="switchTab('tasks')"><span class="nav-icon">⏰</span><span class="nav-label">タスク</span></button>
-    <button class="tab-btn" data-tab="history"           onclick="switchTab('history')"><span class="nav-icon">📊</span><span class="nav-label">実行履歴</span></button>
-    <button class="tab-btn" data-tab="skills"            onclick="switchTab('skills')"><span class="nav-icon">⚙️</span><span class="nav-label">ジョブ</span></button>
-    <button class="tab-btn" data-tab="automation"        onclick="switchTab('automation')"><span class="nav-icon">🔗</span><span class="nav-label">自動化</span></button>
-    <button class="tab-btn" data-tab="memories"          onclick="switchTab('memories')"><span class="nav-icon">🧠</span><span class="nav-label">メモリ</span></button>
-    <button class="tab-btn" data-tab="workflows"         onclick="switchTab('workflows')"><span class="nav-icon">🔀</span><span class="nav-label">ワークフロー</span></button>
+    <button class="tab-btn active" data-tab="tasks"         onclick="switchTab('tasks')"><span class="nav-icon">⏰</span><span class="nav-label">タスク</span></button>
+    <button class="tab-btn" data-tab="history"            onclick="switchTab('history')"><span class="nav-icon">📊</span><span class="nav-label">実行履歴</span></button>
+    <button class="tab-btn" data-tab="skills"             onclick="switchTab('skills')"><span class="nav-icon">⚙️</span><span class="nav-label">ジョブ</span></button>
+    <button class="tab-btn" data-tab="anthropic-skills"   onclick="switchTab('anthropic-skills')"><span class="nav-icon">🏛️</span><span class="nav-label">スキル</span></button>
+    <button class="tab-btn" data-tab="workflows"          onclick="switchTab('workflows')"><span class="nav-icon">🔀</span><span class="nav-label">ワークフロー</span></button>
+    <button class="tab-btn" data-tab="memories"           onclick="switchTab('memories')"><span class="nav-icon">🧠</span><span class="nav-label">メモリ</span></button>
+    <button class="tab-btn" data-tab="automation"         onclick="switchTab('automation')"><span class="nav-icon">🔗</span><span class="nav-label">自動化</span></button>
     <div class="sidebar-sep"></div>
     <div class="sidebar-label">設定</div>
     <button class="tab-btn" data-tab="connectors"        onclick="switchTab('connectors')"><span class="nav-icon">🔌</span><span class="nav-label">コネクタ</span></button>
@@ -348,8 +349,25 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     <div id="historyList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
 
-  <!-- ─ スキル ─ -->
+  <!-- ─ ジョブ ─ -->
   <div class="tab-content" id="tab-skills">
+    <!-- マイジョブ -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;">💼 マイジョブ</div>
+      <label class="btn btn-outline" style="cursor:pointer;font-size:12px;" title="JSONファイルからジョブをインポート">
+        📥 インポート
+        <input type="file" accept=".json" style="display:none;" onchange="importSkill(this)">
+      </label>
+    </div>
+    <div id="myJobList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+
+    <!-- 共有ジョブ -->
+    <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;margin-top:24px;margin-bottom:10px;">🤝 共有ジョブ</div>
+    <div id="sharedJobList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+  </div>
+
+  <!-- ─ スキル（Anthropic公式） ─ -->
+  <div class="tab-content" id="tab-anthropic-skills">
     <!-- Anthropic 公式スキルカタログ -->
     <div style="margin-bottom:24px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
@@ -368,19 +386,6 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <div style="font-size:13px;font-weight:700;color:var(--text-light);margin-bottom:10px;letter-spacing:.03em;">📋 テンプレートから作成</div>
       <div id="skillTemplateGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;"></div>
     </div>
-    <!-- マイジョブ -->
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;">💼 マイジョブ</div>
-      <label class="btn btn-outline" style="cursor:pointer;font-size:12px;" title="JSONファイルからジョブをインポート">
-        📥 インポート
-        <input type="file" accept=".json" style="display:none;" onchange="importSkill(this)">
-      </label>
-    </div>
-    <div id="myJobList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
-
-    <!-- 共有ジョブ -->
-    <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;margin-top:24px;margin-bottom:10px;">🤝 共有ジョブ</div>
-    <div id="sharedJobList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
 
   <!-- ─ 自動化（Hooks・Batch・サブエージェント） ─ -->
@@ -1095,7 +1100,7 @@ function renderUserBadge(me) {
 }
 
 // ─ タブ切替 ─
-const TAB_NAMES = ['tasks','history','skills','automation','memories','workflows','connectors','rules','usage','chatsearch','dashboard','users'];
+const TAB_NAMES = ['tasks','history','skills','anthropic-skills','workflows','memories','automation','connectors','rules','usage','chatsearch','dashboard','users'];
 
 function switchTab(name) {
   if (!TAB_NAMES.includes(name)) name = 'tasks';
@@ -1104,7 +1109,7 @@ function switchTab(name) {
   document.getElementById('tab-' + name)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   if (name === 'history')    loadHistory();
-  if (name === 'skills')     loadAnthropicSkills();
+  if (name === 'anthropic-skills') { loadAnthropicSkills(); renderSkillTemplates(); }
   if (name === 'connectors') loadGithubStatus();
   if (name === 'rules')      loadCustomRules();
   if (name === 'users')      { loadUsers(); loadWebhookToggle(); loadPushToggle(); }
@@ -1617,15 +1622,15 @@ async function doRunSkillNow() {
             if (d.status === 'running') {
               const el = document.createElement('div');
               el.dataset.tool = d.tool;
-              el.innerHTML = `<span style="display:inline-block;width:8px;height:8px;background:#f6ad55;border-radius:50%;margin-right:6px;animation:pulse .8s infinite;"></span>${label}`;
+              el.innerHTML = `<span style="display:inline-block;width:8px;height:8px;background:#f6ad55;border-radius:50%;margin-right:6px;animation:pulse .8s infinite;"></span>${esc(label)}`;
               el.style.cssText = 'padding:2px 0;color:var(--text);';
               stepList.appendChild(el);
             } else {
-              const running = [...stepList.querySelectorAll(`[data-tool="${d.tool}"]`)].reverse()[0];
+              const running = [...stepList.querySelectorAll(`[data-tool="${CSS.escape(d.tool)}"]`)].reverse()[0];
               if (running) {
                 const icon = d.status === 'done' ? '✓' : '✕';
                 const color = d.status === 'done' ? '#48bb78' : '#e53e3e';
-                running.innerHTML = `<span style="color:${color};margin-right:6px;">${icon}</span>${label.replace('中', d.status === 'done' ? '完了' : 'エラー')}`;
+                running.innerHTML = `<span style="color:${color};margin-right:6px;">${icon}</span>${esc(label.replace('中', d.status === 'done' ? '完了' : 'エラー'))}`;
               }
             }
           }

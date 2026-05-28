@@ -1554,7 +1554,7 @@ function renderSlashMenu() {
       const rawDesc = (s.description || s.steps || '').replace(/\n/g, ' ');
       const desc = rawDesc.slice(0, 55);
       return `<div class="slash-item${i === _slashIndex ? ' s-sel' : ''}"
-        onmousedown="selectSlashSkill(${s.id},${JSON.stringify(s.title)})"
+        onmousedown="selectSlashSkill(${s.id},${esc(JSON.stringify(s.title))})"
         onmouseover="_slashIndex=${i};renderSlashMenu()">
         <div class="slash-item-icon">${icon}</div>
         <div class="slash-item-body">
@@ -1969,7 +1969,7 @@ async function send() {
               const card = document.createElement('div');
               card.style.cssText = 'margin:8px 0 4px;padding:10px 14px;background:#ebf8ff;border:1px solid #90cdf4;border-radius:10px;font-size:13px;color:#2b6cb0;line-height:1.6;';
               const typeLabel = d.task.task_type === 'once' ? '単発タスク' : '定期タスク';
-              card.innerHTML = `<strong>✅ ${typeLabel}を登録しました</strong><br><span style="color:#2d3748;">${d.task.title}</span><br><a href="/manage" style="font-size:11px;color:#3182ce;">/manage で確認・変更できます</a>`;
+              card.innerHTML = `<strong>✅ ${typeLabel}を登録しました</strong><br><span style="color:#2d3748;">${esc(d.task.title)}</span><br><a href="/manage" style="font-size:11px;color:#3182ce;">/manage で確認・変更できます</a>`;
               toolCallsEl.appendChild(card);
             }
           }
