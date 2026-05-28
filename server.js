@@ -4169,11 +4169,28 @@ async function runSkillBackground(task, ownerEmail) {
 }
 
 async function notifyTaskResult(ownerEmail, taskName, status, result) {
-  if (!process.env.SES_USER) return;
   const jst = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
   const icon = status === 'done' ? '✅' : '❌';
   const statusLabel = status === 'done' ? '成功' : 'エラー';
   const shortResult = (result || '').slice(0, 500);
+
+  // ── Chatwork 通知（エラー時は常に・成功時は TASK_NOTIFY_SUCCESS=1 の場合） ──
+  const sysToken  = process.env.CHATWORK_SYSTEM_TOKEN;
+  const notifyRoom = process.env.TASK_NOTIFY_CW_ROOM_ID;
+  const notifySuccess = process.env.TASK_NOTIFY_SUCCESS === '1';
+  if (sysToken && notifyRoom && (status === 'error' || notifySuccess)) {
+    const cwMsg = status === 'error'
+      ? `[info][title]${icon} AIタスクエラー: ${taskName}[/title]担当者: ${ownerEmail}\n実行日時: ${jst} (JST)\n\n${shortResult}\n\n[管理画面](https://d2jjp21sq86i80.cloudfront.net/manage)[/info]`
+      : `[info][title]${icon} AIタスク完了: ${taskName}[/title]担当者: ${ownerEmail} / ${jst}\n${shortResult.slice(0, 200)}[/info]`;
+    fetch(`${CW_BASE}/rooms/${notifyRoom}/messages`, {
+      method: 'POST',
+      headers: { 'X-ChatWorkToken': sysToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ body: cwMsg }).toString()
+    }).catch(e => console.error('[notify] Chatwork送信失敗:', e.message));
+  }
+
+  // ── メール通知 ──
+  if (!process.env.SES_USER) return;
   try {
     await getSesTransport().sendMail({
       from: process.env.SES_FROM || 'info@acrovision.co.jp',
