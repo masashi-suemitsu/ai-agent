@@ -2058,6 +2058,26 @@ const TOOLS = [
 ];
 
 // ── Tool Executor ──
+// SSRF 防御: IPv4 / IPv6 のループバック・プライベート・リンクローカル等を判定
+function isPrivateOrLoopbackHost(host) {
+  if (!host) return true;
+  host = host.toLowerCase().replace(/^\[|\]$/g, ''); // bracket-stripped IPv6
+  // IPv4
+  if (host === 'localhost' || host === '0.0.0.0') return true;
+  if (host.startsWith('127.') || host.startsWith('10.') || host.startsWith('192.168.') || host.startsWith('169.254.')) return true;
+  if (/^172\.(1[6-9]|2[0-9]|3[01])\./.test(host)) return true;
+  if (host.endsWith('.internal') || host.endsWith('.local')) return true;
+  // IPv6 ループバック / 全ゼロ
+  if (host === '::1' || host === '::' || host === '0:0:0:0:0:0:0:1' || host === '0:0:0:0:0:0:0:0') return true;
+  // IPv6 ULA (fc00::/7) → fc.. fd.. で始まる
+  if (/^f[cd][0-9a-f]{0,2}:/.test(host)) return true;
+  // IPv6 Link-local (fe80::/10) → fe80..febf で始まる
+  if (/^fe[89ab][0-9a-f]?:/.test(host)) return true;
+  // IPv4-mapped IPv6 (::ffff:192.168.x.x など)
+  if (host.startsWith('::ffff:')) return isPrivateOrLoopbackHost(host.slice(7));
+  return false;
+}
+
 async function executeTool(name, input, user) {
   const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim());
   const isAdmin = adminEmails.includes(user.email);
@@ -2635,9 +2655,9 @@ async function executeTool(name, input, user) {
     case 'fetch_url': {
       const u = new URL(input.url);
       if (!['http:', 'https:'].includes(u.protocol)) throw new Error('http(s) URLのみ対応');
-      // SSRF対策: ローカル/プライベートアドレスをブロック
+      // SSRF対策: ローカル/プライベート/IPv6内部アドレスをブロック
       const host = u.hostname.toLowerCase();
-      if (host === 'localhost' || host === '0.0.0.0' || host.startsWith('127.') || host.startsWith('10.') || host.startsWith('192.168.') || host.startsWith('169.254.') || /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host) || host.endsWith('.internal') || host.endsWith('.local')) {
+      if (isPrivateOrLoopbackHost(host)) {
         throw new Error(`内部アドレス ${host} へのアクセスは禁止されています`);
       }
       audit(user.email, user.name, 'tool.fetch_url', { url: input.url, mode: input.mode });
@@ -3128,7 +3148,7 @@ async function executeTool(name, input, user) {
         try {
           const u = new URL(url);
           const host = u.hostname.toLowerCase();
-          if (host === 'localhost' || host === '0.0.0.0' || host.startsWith('127.') || host.startsWith('10.') || host.startsWith('192.168.') || host.startsWith('169.254.') || /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host) || host.endsWith('.internal') || host.endsWith('.local')) {
+          if (isPrivateOrLoopbackHost(host)) {
             return { url, ok: false, error: '内部アドレスへのアクセスは禁止' };
           }
           const ctrl = new AbortController();
@@ -3493,10 +3513,11 @@ ${(input.candidate_info || '').slice(0, 3000)}
         };
       }
 
-      // 一括登録（Kintone APIは最大100件/リクエスト）
+      // 一括登録（Kintone APIは最大100件/リクエスト、API レート制限 100req/分）
       const BATCH = 100;
       let total_registered = 0;
       const errors = [];
+      const sleep = (ms) => new Promise(r => setTimeout(r, ms));
       for (let i = 0; i < rows.length; i += BATCH) {
         const batch = rows.slice(i, i + BATCH).map(toRecord);
         const resp = await fetch(`https://${domain}.cybozu.com/k/v1/records.json`, {
@@ -3511,7 +3532,17 @@ ${(input.candidate_info || '').slice(0, 3000)}
         } else {
           total_registered += batch.length;
         }
+        // 次のバッチがあるなら 700ms スロットル（100req/分 = 600ms/req より少し余裕を見る）
+        if (i + BATCH < rows.length) await sleep(700);
       }
+      // 完了時の詳細監査ログ（件数・エラー・ファイル名を残す）
+      audit(user.email, user.name, 'tool.kintone_bulk.done', {
+        app_id: input.app_id,
+        file_name: meta.data.name,
+        total_rows: rows.length,
+        total_registered,
+        errors_count: errors.length
+      });
       return {
         ok: errors.length === 0,
         app_id: input.app_id,
