@@ -325,7 +325,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
           <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;">🏛️ Anthropic 公式スキル</div>
           <span id="anthropicSkillsFetchedAt" style="font-size:10px;color:var(--text-light);"></span>
         </div>
-        <button class="btn btn-outline" style="font-size:11px;padding:3px 10px;" onclick="loadAnthropicSkills(true)">🔄 更新</button>
+        <button id="anthropicSkillsRefreshBtn" class="btn btn-outline" style="font-size:11px;padding:3px 10px;display:none;" onclick="loadAnthropicSkills(true)">🔄 更新</button>
       </div>
       <div id="anthropicSkillsGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">
         <div class="empty" style="grid-column:1/-1;padding:16px;"><p>読み込み中...</p></div>
@@ -1211,6 +1211,9 @@ async function loadAnthropicSkills(force = false) {
   _anthropicSkillsLoaded = true;
   const gallery = document.getElementById('anthropicSkillsGallery');
   if (!gallery) return;
+  // 更新ボタンは admin のみ表示
+  const refreshBtn = document.getElementById('anthropicSkillsRefreshBtn');
+  if (refreshBtn) refreshBtn.style.display = currentUser?.role === 'admin' ? '' : 'none';
   try {
     const data = await apiFetch('/api/anthropic-skills');
     const skills = data.skills || [];
