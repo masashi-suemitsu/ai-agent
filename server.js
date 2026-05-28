@@ -59,10 +59,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
 };
 
 app.set('trust proxy', 1);
@@ -270,7 +270,9 @@ function recordUsage(email, name, inputTokens, outputTokens, model, context) {
  'ALTER TABLE scheduled_tasks ADD COLUMN schedule_minute INTEGER DEFAULT 0',
  'ALTER TABLE scheduled_tasks ADD COLUMN schedule_weekday INTEGER',
  'ALTER TABLE scheduled_tasks ADD COLUMN model TEXT DEFAULT \'sonnet\'',
- 'ALTER TABLE scheduled_tasks ADD COLUMN shared INTEGER DEFAULT 0'
+ 'ALTER TABLE scheduled_tasks ADD COLUMN shared INTEGER DEFAULT 0',
+ 'ALTER TABLE scheduled_tasks ADD COLUMN shared_with TEXT',
+ 'ALTER TABLE user_skills ADD COLUMN shared_with TEXT'
 ].forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
 function audit(email, name, action, details = {}) {
@@ -560,6 +562,18 @@ app.get('/api/admin/logs', (req, res) => {
   res.json(rows);
 });
 
+// GET /api/members — 共有先ユーザー一覧（認証済みユーザー全員が参照可）
+app.get('/api/members', (req, res) => {
+  const rows = db.prepare(`
+    SELECT email, MAX(name) as name
+    FROM audit_logs
+    WHERE email != 'unknown' AND email != ?
+    GROUP BY email
+    ORDER BY name ASC
+  `).all(req.user.email);
+  res.json(rows);
+});
+
 // ── ユーザー管理 API（管理者専用） ──
 app.get('/api/admin/users', (req, res) => {
   const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim());
@@ -630,7 +644,7 @@ function getSystemPrompt(role) {
 - \`send_chatwork_message\`（個人アカウント送信）は必ずユーザーに内容確認してから実行
 - \`send_system_notification\`（システム通知アカウント送信）はユーザー確認不要で送信可能。定期タスクや自動通知に使用する
 - WP公開は必ずユーザーに内容確認してから実行
-- \`update_sheet_range\` / \`append_sheet_rows\`（Sheets書き込み）, \`send_gmail\`（Gmail送信）, \`create_calendar_event\`（予定作成）, \`create_drive_file\`（Driveファイル作成）, \`create_pptx\`（PowerPoint作成）はすべて2段階フロー必須: ①confirmed なしで呼ぶ → プレビューが返る → ②ユーザーに「○○を○○します。よろしいですか？」と提示 → ③ユーザーが「OK」「実行して」「はい」等で承認 → ④confirmed:true を付けて再呼出 → 実際に実行。スケジュールタスクからの呼出時は confirmed:true で直接呼んでよい
+- \`update_sheet_range\` / \`append_sheet_rows\`（Sheets書き込み）, \`send_gmail\`（Gmail送信）, \`create_calendar_event\`（予定作成）, \`create_drive_file\`（Driveファイル作成）, \`create_pptx\`（PowerPoint作成）, \`send_slack_message\`（Slack送信）, \`create_notion_page\`/\`update_notion_page\`（Notion書込）はすべて2段階フロー必須: ①confirmed なしで呼ぶ → プレビューが返る → ②ユーザーに「○○を○○します。よろしいですか？」と提示 → ③ユーザーが「OK」「実行して」「はい」等で承認 → ④confirmed:true を付けて再呼出 → 実際に実行。スケジュールタスクからの呼出時は confirmed:true で直接呼んでよい
 - 上記の確認を求めるとき、メッセージ末尾に必ず \`<confirm>実行する</confirm>\` を付けること。UIが自動でボタンを表示する（テキスト入力不要になる）
 - \`fetch_url\` は任意のWebページを取得可能。社内/ローカルIPは自動ブロック。HTMLはタグ除去テキストで返される（mode=html で生取得も可）
 - スプレッドシートをファイル名で探したいときは \`search_drive_files\` を使う（mime_type: "application/vnd.google-apps.spreadsheet" を指定すると絞り込める）
@@ -1029,6 +1043,89 @@ const TOOLS = [
         confirmed: { type: 'boolean', description: 'true の場合のみ実際に作成' }
       },
       required: ['name', 'type', 'content']
+    }
+  },
+  {
+    name: 'list_slack_channels',
+    description: 'Slackのチャンネル一覧を取得する。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        types: { type: 'string', description: 'public_channel,private_channel など（既定: public_channel）' },
+        limit: { type: 'number' }
+      }
+    }
+  },
+  {
+    name: 'get_slack_messages',
+    description: 'Slackチャンネルの最近のメッセージを取得する。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        channel: { type: 'string', description: 'チャンネルID' },
+        limit: { type: 'number', description: '取得件数（既定20、最大200）' }
+      },
+      required: ['channel']
+    }
+  },
+  {
+    name: 'send_slack_message',
+    description: 'Slackチャンネルにメッセージを送信する。必ず2段階フロー: ①confirmed なしでプレビュー → ②ユーザー承認 → ③confirmed:true で実行。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        channel: { type: 'string', description: 'チャンネルID または #channel-name' },
+        text: { type: 'string', description: 'メッセージ本文（Slack mrkdwn）' },
+        thread_ts: { type: 'string', description: 'スレッド返信時の親メッセージ ts（任意）' },
+        confirmed: { type: 'boolean' }
+      },
+      required: ['channel', 'text']
+    }
+  },
+  {
+    name: 'list_notion_databases',
+    description: 'Notionの利用可能データベース一覧を取得する（Integrationに共有されたDBのみ表示）。',
+    input_schema: { type: 'object', properties: { query: { type: 'string', description: '名前で絞り込み（任意）' } } }
+  },
+  {
+    name: 'query_notion_database',
+    description: 'Notionデータベースのページ一覧を取得する。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        database_id: { type: 'string' },
+        filter: { type: 'object', description: 'Notion filter object（任意）' },
+        sorts: { type: 'array', description: 'Notion sorts配列（任意）', items: {} },
+        page_size: { type: 'number', description: '取得件数（最大100、既定20）' }
+      },
+      required: ['database_id']
+    }
+  },
+  {
+    name: 'create_notion_page',
+    description: 'Notionデータベースに新規ページを作成する。必ず2段階フロー: ①confirmed なしでプレビュー → ②ユーザー承認 → ③confirmed:true で実行。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        database_id: { type: 'string' },
+        properties: { type: 'object', description: 'Notion properties object（DB スキーマに準拠）' },
+        children: { type: 'array', description: 'ページ本文ブロック配列（任意）', items: {} },
+        confirmed: { type: 'boolean' }
+      },
+      required: ['database_id', 'properties']
+    }
+  },
+  {
+    name: 'update_notion_page',
+    description: 'Notionの既存ページのプロパティを更新する。必ず2段階フロー必須。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        page_id: { type: 'string' },
+        properties: { type: 'object' },
+        confirmed: { type: 'boolean' }
+      },
+      required: ['page_id', 'properties']
     }
   },
   {
@@ -1534,6 +1631,127 @@ async function executeTool(name, input, user) {
       const r = await drive.files.create({ requestBody: fileMetadata, media, fields: 'id,name,mimeType,webViewLink' });
       return { ok: true, id: r.data.id, name: r.data.name, mimeType: r.data.mimeType, webViewLink: r.data.webViewLink };
     }
+    case 'list_slack_channels': {
+      if (!process.env.SLACK_BOT_TOKEN) throw new Error('SLACK_BOT_TOKEN 未設定。Slack Botトークンを管理者に依頼してください');
+      audit(user.email, user.name, 'tool.slack_channels');
+      const qs = new URLSearchParams({ types: input.types || 'public_channel', limit: String(input.limit || 200), exclude_archived: 'true' });
+      const r = await fetch(`https://slack.com/api/conversations.list?${qs}`, {
+        headers: { 'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}` }
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(`Slack error: ${d.error}`);
+      return (d.channels || []).map(c => ({ id: c.id, name: c.name, is_private: c.is_private, num_members: c.num_members }));
+    }
+    case 'get_slack_messages': {
+      if (!process.env.SLACK_BOT_TOKEN) throw new Error('SLACK_BOT_TOKEN 未設定');
+      audit(user.email, user.name, 'tool.slack_messages', { channel: input.channel });
+      const qs = new URLSearchParams({ channel: input.channel, limit: String(Math.min(input.limit || 20, 200)) });
+      const r = await fetch(`https://slack.com/api/conversations.history?${qs}`, {
+        headers: { 'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}` }
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(`Slack error: ${d.error}`);
+      return (d.messages || []).map(m => ({ ts: m.ts, user: m.user, text: m.text, thread_ts: m.thread_ts }));
+    }
+    case 'send_slack_message': {
+      if (!process.env.SLACK_BOT_TOKEN) throw new Error('SLACK_BOT_TOKEN 未設定');
+      if (!input.confirmed) {
+        audit(user.email, user.name, 'tool.slack_send.preview', { channel: input.channel });
+        return {
+          preview: true,
+          message: 'これはSlack送信プレビューです。チャンネル・本文を提示し、承認を得てから confirmed:true で再度呼んでください。',
+          channel: input.channel,
+          text_preview: input.text.slice(0, 500),
+          thread_ts: input.thread_ts || null
+        };
+      }
+      audit(user.email, user.name, 'tool.slack_send.execute', { channel: input.channel });
+      const body = { channel: input.channel, text: input.text };
+      if (input.thread_ts) body.thread_ts = input.thread_ts;
+      const r = await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`, 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(`Slack error: ${d.error}`);
+      return { ok: true, ts: d.ts, channel: d.channel };
+    }
+    case 'list_notion_databases': {
+      if (!process.env.NOTION_TOKEN) throw new Error('NOTION_TOKEN 未設定。Notion Integrationトークンを管理者に依頼してください');
+      audit(user.email, user.name, 'tool.notion_dbs', { query: input.query });
+      const r = await fetch('https://api.notion.com/v1/search', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${process.env.NOTION_TOKEN}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: input.query || '', filter: { value: 'database', property: 'object' }, page_size: 50 })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(`Notion error: ${d.message || r.status}`);
+      return (d.results || []).map(db => ({
+        id: db.id,
+        title: (db.title || []).map(t => t.plain_text).join(''),
+        url: db.url,
+        last_edited: db.last_edited_time
+      }));
+    }
+    case 'query_notion_database': {
+      if (!process.env.NOTION_TOKEN) throw new Error('NOTION_TOKEN 未設定');
+      audit(user.email, user.name, 'tool.notion_query', { dbId: input.database_id });
+      const body = { page_size: Math.min(input.page_size || 20, 100) };
+      if (input.filter) body.filter = input.filter;
+      if (input.sorts) body.sorts = input.sorts;
+      const r = await fetch(`https://api.notion.com/v1/databases/${input.database_id}/query`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${process.env.NOTION_TOKEN}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(`Notion error: ${d.message || r.status}`);
+      return { count: d.results?.length || 0, has_more: d.has_more, results: d.results };
+    }
+    case 'create_notion_page': {
+      if (!process.env.NOTION_TOKEN) throw new Error('NOTION_TOKEN 未設定');
+      if (!input.confirmed) {
+        audit(user.email, user.name, 'tool.notion_create.preview', { dbId: input.database_id });
+        return {
+          preview: true,
+          message: 'これはNotionページ作成プレビューです。データベース・プロパティを提示し、承認を得てから confirmed:true で再度呼んでください。',
+          database_id: input.database_id,
+          properties: input.properties,
+          children_count: (input.children || []).length
+        };
+      }
+      audit(user.email, user.name, 'tool.notion_create.execute', { dbId: input.database_id });
+      const r = await fetch('https://api.notion.com/v1/pages', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${process.env.NOTION_TOKEN}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parent: { database_id: input.database_id }, properties: input.properties, children: input.children || [] })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(`Notion error: ${d.message || r.status}`);
+      return { ok: true, id: d.id, url: d.url };
+    }
+    case 'update_notion_page': {
+      if (!process.env.NOTION_TOKEN) throw new Error('NOTION_TOKEN 未設定');
+      if (!input.confirmed) {
+        audit(user.email, user.name, 'tool.notion_update.preview', { pageId: input.page_id });
+        return {
+          preview: true,
+          message: 'これはNotionページ更新プレビューです。ユーザー承認後 confirmed:true で再度呼んでください。',
+          page_id: input.page_id,
+          properties: input.properties
+        };
+      }
+      audit(user.email, user.name, 'tool.notion_update.execute', { pageId: input.page_id });
+      const r = await fetch(`https://api.notion.com/v1/pages/${input.page_id}`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${process.env.NOTION_TOKEN}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ properties: input.properties })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(`Notion error: ${d.message || r.status}`);
+      return { ok: true, id: d.id, url: d.url };
+    }
     case 'create_pptx': {
       const drive = getDriveClientForUser(user);
       const slides = Array.isArray(input.slides) ? input.slides : [];
@@ -1806,9 +2024,12 @@ app.get('/api/skills', (req, res) => {
     SELECT us.*,
       (SELECT al.name FROM audit_logs al WHERE al.email = us.owner_email AND al.name != '' ORDER BY al.ts DESC LIMIT 1) as owner_name
     FROM user_skills us
-    WHERE us.owner_email=? OR us.shared=1
+    WHERE us.owner_email=?
+      OR (us.shared=1 AND us.shared_with IS NULL)
+      OR (us.shared=1 AND us.shared_with IS NOT NULL
+          AND EXISTS (SELECT 1 FROM json_each(us.shared_with) WHERE value=?))
     ORDER BY us.updated_at DESC
-  `).all(req.user.email);
+  `).all(req.user.email, req.user.email);
   res.json(rows);
 });
 
@@ -1843,13 +2064,18 @@ app.post('/api/skills', (req, res) => {
 app.put('/api/skills/:id', (req, res) => {
   const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
   if (!skill) return res.status(403).json({ error: '見つかりません' });
-  const { title, description, steps, shared } = req.body;
+  const { title, description, steps, shared, shared_with } = req.body;
 
-  // shared のみ更新（共有トグル）
-  if (shared !== undefined && title === undefined && description === undefined && steps === undefined) {
-    db.prepare(`UPDATE user_skills SET shared=?, updated_at=datetime('now','localtime') WHERE id=?`)
-      .run(shared ? 1 : 0, req.params.id);
-    audit(req.user.email, req.user.name, shared ? 'skill.share' : 'skill.unshare', { id: req.params.id, name: skill.name });
+  // 共有設定のみ更新（shared / shared_with）
+  if ((shared !== undefined || shared_with !== undefined) && title === undefined && description === undefined && steps === undefined) {
+    const newShared = shared !== undefined ? (shared ? 1 : 0) : skill.shared;
+    // shared=false なら shared_with もリセット
+    const newSharedWith = newShared === 0 ? null
+      : (shared_with === null ? null : (Array.isArray(shared_with) ? JSON.stringify(shared_with) : skill.shared_with));
+    db.prepare(`UPDATE user_skills SET shared=?, shared_with=?, updated_at=datetime('now','localtime') WHERE id=?`)
+      .run(newShared, newSharedWith, req.params.id);
+    const action = newShared === 0 ? 'skill.unshare' : (newSharedWith ? 'skill.share_team' : 'skill.share_all');
+    audit(req.user.email, req.user.name, action, { id: req.params.id, name: skill.name });
     return res.json({ ok: true });
   }
 
@@ -1872,7 +2098,7 @@ app.delete('/api/skills/:id', (req, res) => {
 
 // GET /api/skills/:id/estimate  — 実行コスト見積もり
 app.get('/api/skills/:id/estimate', (req, res) => {
-  const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR shared=1)').get(req.params.id, req.user.email);
+  const skill = db.prepare(`SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR (shared=1 AND (shared_with IS NULL OR EXISTS (SELECT 1 FROM json_each(shared_with) WHERE value=?))))`).get(req.params.id, req.user.email, req.user.email);
   if (!skill) return res.status(404).json({ error: 'Not found' });
 
   const role = req.user.role || getUserRole(req.user.email);
@@ -1913,7 +2139,7 @@ app.get('/api/skills/:id/estimate', (req, res) => {
 
 // POST /api/skills/:id/run
 app.post('/api/skills/:id/run', async (req, res) => {
-  const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR shared=1)').get(req.params.id, req.user.email);
+  const skill = db.prepare(`SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR (shared=1 AND (shared_with IS NULL OR EXISTS (SELECT 1 FROM json_each(shared_with) WHERE value=?))))`).get(req.params.id, req.user.email, req.user.email);
   if (!skill) return res.status(404).json({ error: 'Not found' });
 
   audit(req.user.email, req.user.name, 'skill.run', { id: skill.id, name: skill.name });
@@ -2788,9 +3014,12 @@ app.get('/api/scheduled-tasks', (req, res) => {
       SELECT st.*,
         (SELECT al.name FROM audit_logs al WHERE al.email = st.owner_email AND al.name != '' ORDER BY al.ts DESC LIMIT 1) as owner_name
       FROM scheduled_tasks st
-      WHERE st.owner_email=? OR st.shared=1
+      WHERE st.owner_email=?
+        OR (st.shared=1 AND st.shared_with IS NULL)
+        OR (st.shared=1 AND st.shared_with IS NOT NULL
+            AND EXISTS (SELECT 1 FROM json_each(st.shared_with) WHERE value=?))
       ORDER BY st.created_at DESC
-    `).all(req.user.email);
+    `).all(req.user.email, req.user.email);
     res.json(rows);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -2801,7 +3030,7 @@ app.post('/api/scheduled-tasks', (req, res) => {
 
   let taskData = {};
   if (skill_id) {
-    const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR shared=1)').get(skill_id, req.user.email);
+    const skill = db.prepare(`SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR (shared=1 AND (shared_with IS NULL OR EXISTS (SELECT 1 FROM json_each(shared_with) WHERE value=?))))`).get(skill_id, req.user.email, req.user.email);
     if (!skill) return res.status(404).json({ error: 'スキルが見つかりません' });
     taskData = { skill_id: skill.id, skill_name: skill.name, skill_title: skill.title, description: skill.description || '', steps: skill.steps || '' };
   } else {
@@ -2834,10 +3063,14 @@ app.put('/api/scheduled-tasks/:id', (req, res) => {
     const row = db.prepare('SELECT * FROM scheduled_tasks WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
     if (!row) return res.status(403).json({ error: '権限がありません' });
 
-    // 共有トグルのみの更新
-    if (shared !== undefined && interval_min === undefined && enabled === undefined && skill_title === undefined && description === undefined && steps === undefined && model === undefined) {
-      db.prepare('UPDATE scheduled_tasks SET shared=? WHERE id=?').run(shared ? 1 : 0, req.params.id);
-      audit(req.user.email, req.user.name, shared ? 'scheduled_task.share' : 'scheduled_task.unshare', { id: req.params.id, name: row.skill_title });
+    // 共有設定のみの更新（shared / shared_with）
+    if ((shared !== undefined || shared_with !== undefined) && interval_min === undefined && enabled === undefined && skill_title === undefined && description === undefined && steps === undefined && model === undefined) {
+      const newShared = shared !== undefined ? (shared ? 1 : 0) : row.shared;
+      const newSharedWith = newShared === 0 ? null
+        : (shared_with === null ? null : (Array.isArray(shared_with) ? JSON.stringify(shared_with) : row.shared_with));
+      db.prepare('UPDATE scheduled_tasks SET shared=?, shared_with=? WHERE id=?').run(newShared, newSharedWith, req.params.id);
+      const action = newShared === 0 ? 'scheduled_task.unshare' : (newSharedWith ? 'scheduled_task.share_team' : 'scheduled_task.share_all');
+      audit(req.user.email, req.user.name, action, { id: req.params.id, name: row.skill_title });
       return res.json({ ok: true });
     }
 
@@ -2877,7 +3110,7 @@ app.put('/api/scheduled-tasks/:id', (req, res) => {
 // POST /api/scheduled-tasks/:id/run — 即時実行（自分のタスク or 共有タスク）
 app.post('/api/scheduled-tasks/:id/run', (req, res) => {
   try {
-    const task = db.prepare('SELECT * FROM scheduled_tasks WHERE id=? AND (owner_email=? OR shared=1)').get(req.params.id, req.user.email);
+    const task = db.prepare(`SELECT * FROM scheduled_tasks WHERE id=? AND (owner_email=? OR (shared=1 AND (shared_with IS NULL OR EXISTS (SELECT 1 FROM json_each(shared_with) WHERE value=?))))`).get(req.params.id, req.user.email, req.user.email);
     if (!task) return res.status(403).json({ error: '権限がありません' });
     const isOwn = task.owner_email === req.user.email;
     const now = toUtcStr(Date.now());
