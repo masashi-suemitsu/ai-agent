@@ -102,7 +102,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 24px; }
 
 <script>
 function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-let currentScope = 'me';
+let currentScope = new URLSearchParams(location.search).get('scope') || 'me';
 
 async function loadDashboard() {
   const d = await fetch('/api/dashboard?scope=' + currentScope).then(r => r.json());
@@ -151,7 +151,7 @@ async function loadAudit() {
   const action = document.getElementById('auditAction').value.trim();
   const since = document.getElementById('auditSince').value;
   const limit = document.getElementById('auditLimit').value;
-  const qs = new URLSearchParams({ limit });
+  const qs = new URLSearchParams({ limit, scope: currentScope });
   if (email) qs.set('email', email);
   if (action) qs.set('action', action);
   if (since) qs.set('since', since + ' 00:00:00');
@@ -165,10 +165,22 @@ async function loadAudit() {
 
 function switchScope(s) {
   currentScope = s;
+  history.pushState({scope: s}, '', '/dashboard?scope=' + s);
   document.querySelectorAll('.scope-toggle button').forEach(b => b.classList.toggle('active', b.dataset.scope === s));
   loadDashboard();
+  loadAudit();
 }
 
+window.addEventListener('popstate', e => {
+  const s = (e.state && e.state.scope) || new URLSearchParams(location.search).get('scope') || 'me';
+  currentScope = s;
+  document.querySelectorAll('.scope-toggle button').forEach(b => b.classList.toggle('active', b.dataset.scope === s));
+  loadDashboard();
+  loadAudit();
+});
+
+// 初期ロード時にボタン状態を URL に合わせる
+document.querySelectorAll('.scope-toggle button').forEach(b => b.classList.toggle('active', b.dataset.scope === currentScope));
 loadDashboard();
 loadAudit();
 </script>

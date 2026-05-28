@@ -605,8 +605,8 @@ app.get('/auth/calendar/callback', async (req, res) => {
   if (error || !code) return res.redirect('/?calendar_error=1');
   const [csrfToken, emailB64] = (state || '').split('.');
   const expectedCsrf = req.session.oauth_csrf_calendar;
-  delete req.session.oauth_csrf_calendar;
   if (!csrfToken || !expectedCsrf || csrfToken !== expectedCsrf) return res.redirect('/?calendar_error=csrf');
+  delete req.session.oauth_csrf_calendar;
   let userEmail = req.user?.email;
   if (!userEmail && emailB64) {
     try { userEmail = Buffer.from(emailB64, 'base64url').toString('utf8'); } catch(e) {}
@@ -657,8 +657,8 @@ app.get('/auth/drive/callback', async (req, res) => {
   if (error || !code) return res.redirect('/?drive_error=1');
   const [csrfToken, emailB64] = (state || '').split('.');
   const expectedCsrf = req.session.oauth_csrf_drive;
-  delete req.session.oauth_csrf_drive;
   if (!csrfToken || !expectedCsrf || csrfToken !== expectedCsrf) return res.redirect('/?drive_error=csrf');
+  delete req.session.oauth_csrf_drive;
   let userEmail = req.user?.email;
   if (!userEmail && emailB64) {
     try { userEmail = Buffer.from(emailB64, 'base64url').toString('utf8'); } catch(e) {}
@@ -706,8 +706,8 @@ app.get('/auth/gmail/callback', async (req, res) => {
   if (error || !code) return res.redirect('/?gmail_error=1');
   const [csrfToken, emailB64] = (state || '').split('.');
   const expectedCsrf = req.session.oauth_csrf_gmail;
-  delete req.session.oauth_csrf_gmail;
   if (!csrfToken || !expectedCsrf || csrfToken !== expectedCsrf) return res.redirect('/?gmail_error=csrf');
+  delete req.session.oauth_csrf_gmail;
   let userEmail = req.user?.email;
   if (!userEmail && emailB64) {
     try { userEmail = Buffer.from(emailB64, 'base64url').toString('utf8'); } catch(e) {}
@@ -2738,11 +2738,14 @@ app.get('/api/conversations/search', (req, res) => {
 app.get('/api/audit-logs', (req, res) => {
   const role = req.user.role || getUserRole(req.user.email);
   const isAdmin = role === 'admin';
-  const { email, action, limit = 100, since } = req.query;
+  const { email, action, limit = 100, since, scope } = req.query;
   const where = [];
   const params = [];
-  if (!isAdmin) { where.push('email = ?'); params.push(req.user.email); }
-  else if (email) { where.push('email = ?'); params.push(email); }
+  if (!isAdmin || scope === 'me') {
+    where.push('email = ?'); params.push(req.user.email);
+  } else if (email) {
+    where.push('email = ?'); params.push(email);
+  }
   if (action) { where.push('action LIKE ?'); params.push(action + '%'); }
   if (since) { where.push('ts >= ?'); params.push(since); }
   const sql = `SELECT id, ts, email, name, action, details FROM audit_logs ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC LIMIT ?`;
@@ -3411,8 +3414,8 @@ app.get('/auth/chatwork/callback', async (req, res) => {
   if (error || !code) return res.redirect('/?chatwork_error=1');
   const [csrfToken, emailB64] = (state || '').split('.');
   const expectedCsrf = req.session.oauth_csrf_chatwork;
-  delete req.session.oauth_csrf_chatwork;
   if (!csrfToken || !expectedCsrf || csrfToken !== expectedCsrf) return res.redirect('/?chatwork_error=csrf');
+  delete req.session.oauth_csrf_chatwork;
   let userEmail = req.user?.email;
   if (!userEmail && emailB64) {
     try { userEmail = Buffer.from(emailB64, 'base64url').toString('utf8'); } catch(e) {}

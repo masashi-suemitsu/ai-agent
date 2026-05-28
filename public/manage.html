@@ -726,13 +726,22 @@ async function saveInterval(id) {
 }
 
 async function toggleTask(id, enabled) {
-  await fetch(`/api/scheduled-tasks/${id}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled })
-  });
   const lbl = document.getElementById(`task-toggle-label-${id}`);
-  if (lbl) lbl.textContent = enabled ? '有効' : '停止中';
-  allTasks = allTasks.map(t => t.id === id ? { ...t, enabled: enabled ? 1 : 0 } : t);
+  const chk = document.getElementById(`task-toggle-${id}`);
+  const prev = !enabled;
+  try {
+    const resp = await fetch(`/api/scheduled-tasks/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+    if (!resp.ok) throw new Error((await resp.json()).error || '更新失敗');
+    if (lbl) lbl.textContent = enabled ? '有効' : '停止中';
+    allTasks = allTasks.map(t => t.id === id ? { ...t, enabled: enabled ? 1 : 0 } : t);
+  } catch(e) {
+    if (chk) chk.checked = prev;
+    if (lbl) lbl.textContent = prev ? '有効' : '停止中';
+    alert('切り替えに失敗しました: ' + e.message);
+  }
 }
 
 async function runTaskNow(id, btn) {
