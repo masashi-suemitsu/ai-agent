@@ -14,6 +14,7 @@
   --input-bg: #f9fafb;
   --muted-bg: #f7f8fc;
   --card-hover: #f4f6fb;
+  --success-bg: #f0fff4;
 }
 [data-theme="dark"] {
   --border: #2d3748; --text: #e2e8f0; --text-light: #8a95a8; --bg: #1a1d2e;
@@ -22,6 +23,7 @@
   --input-bg: #252840;
   --muted-bg: #252840;
   --card-hover: #1e2133;
+  --success-bg: rgba(72,187,120,.15);
 }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
@@ -75,8 +77,8 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 .steps-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--primary); cursor: pointer; background: var(--primary-light); border: none; border-radius: 6px; padding: 5px 12px; transition: background .12s; }
 .steps-btn:hover { background: #dde8ff; }
 .result-box { margin-top: 10px; background: var(--muted-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
-.result-box.json-box { background: #f0f4ff; border-color: #c3d0f5; }
-@media (prefers-color-scheme: dark) { .result-box.json-box { background: #1a1f35; border-color: #2d3660; } }
+.result-box.json-box { background: var(--primary-light); border-color: #c3d0f5; }
+[data-theme="dark"] .result-box.json-box { border-color: #2d3660; }
 .steps-body { margin-top: 10px; background: var(--muted-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 12px; line-height: 1.85; color: var(--text); white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow-y: auto; display: none; }
 .steps-body.open { display: block; }
 
@@ -210,7 +212,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 .recommend-btn { margin-top: 8px; width: 100%; background: none; border: 1.5px dashed var(--primary); border-radius: 8px; padding: 8px; font-size: 12px; font-weight: 600; color: var(--primary); cursor: pointer; transition: all .15s; display: block; }
 .recommend-btn:hover { background: var(--primary-light); }
 .recommend-btn:disabled { opacity: .6; cursor: default; }
-.recommend-result { margin-top: 8px; background: #f0fff4; border: 1px solid #9ae6b4; border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.7; color: var(--text); }
+.recommend-result { margin-top: 8px; background: var(--success-bg); border: 1px solid #9ae6b4; border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.7; color: var(--text); }
 </style>
 <script>
 (function(){const t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
@@ -298,12 +300,12 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
                 <option value="pre_run">実行前 (pre_run)</option>
                 <option value="post_run" selected>実行後 (post_run)</option>
               </select>
-              <select id="hookActionSel" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;" onchange="onHookActionChange()">
+              <select id="hookActionSel" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);" onchange="onHookActionChange()">
                 <option value="chatwork_notify">Chatwork通知</option>
                 <option value="run_skill">スキル連鎖実行</option>
               </select>
             </div>
-            <div id="hookConfigArea" style="padding:8px 10px;background:#f7f8fc;border-radius:6px;border:1px solid var(--border);">
+            <div id="hookConfigArea" style="padding:8px 10px;background:var(--muted-bg);border-radius:6px;border:1px solid var(--border);">
               <div id="hookConfigChatwork">
                 <label style="font-size:12px;color:var(--text-light);">通知先ChatworkルームID</label>
                 <input type="text" id="hookRoomId" placeholder="12345678" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-top:4px;">
@@ -460,7 +462,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 <div class="modal-overlay" id="resultModal" onclick="if(event.target===this)closeResultModal()">
   <div class="modal-box" style="max-width:640px;">
     <div class="modal-title" id="resultModalTitle">実行結果</div>
-    <pre id="resultModalBody" style="white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.8;color:var(--text);background:#f7f8fc;border:1px solid var(--border);border-radius:8px;padding:14px;max-height:60vh;overflow-y:auto;font-family:inherit;"></pre>
+    <pre id="resultModalBody" style="white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.8;color:var(--text);background:var(--muted-bg);border:1px solid var(--border);border-radius:8px;padding:14px;max-height:60vh;overflow-y:auto;font-family:inherit;"></pre>
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="closeResultModal()">閉じる</button>
     </div>
@@ -600,7 +602,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     <div class="modal-title">▶ 今すぐ実行</div>
     <div class="modal-subtitle" id="runConfirmTitle" style="margin-bottom:12px;"></div>
     <!-- 変数入力エリア -->
-    <div id="runVariablesArea" style="display:none;margin-bottom:12px;background:#f0f4ff;border:1px solid #c3d0ff;border-radius:8px;padding:12px 14px;">
+    <div id="runVariablesArea" style="display:none;margin-bottom:12px;background:var(--primary-light);border:1px solid #c3d0ff;border-radius:8px;padding:12px 14px;">
       <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:8px;">📝 変数の入力</div>
       <div id="runVariablesList"></div>
     </div>
@@ -610,16 +612,16 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
         <span style="font-size:12px;font-weight:700;color:var(--primary);">📋 実行計画（Plan Mode）</span>
         <button onclick="loadPlan()" style="font-size:11px;border:1px solid var(--primary);color:var(--primary);background:var(--primary-light);border-radius:5px;padding:2px 8px;cursor:pointer;">更新</button>
       </div>
-      <div id="planContent" style="background:#f0f4ff;border:1px solid #c3d0ff;border-radius:8px;padding:12px 14px;font-size:12px;line-height:1.8;white-space:pre-wrap;max-height:220px;overflow-y:auto;color:var(--text);">
+      <div id="planContent" style="background:var(--primary-light);border:1px solid #c3d0ff;border-radius:8px;padding:12px 14px;font-size:12px;line-height:1.8;white-space:pre-wrap;max-height:220px;overflow-y:auto;color:var(--text);">
         <span style="color:var(--text-light);">プランを読み込み中...</span>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-      <button id="planModeToggle" onclick="togglePlanMode()" style="font-size:11px;border:1px solid var(--border);color:var(--text-light);background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;">📋 実行計画を確認する</button>
-      <button id="thinkingToggleSkill" onclick="toggleSkillThinking()" style="font-size:11px;border:1px solid var(--border);color:var(--text-light);background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;" title="拡張思考モード: 複雑なスキルをより深く考えて実行します">🧠 拡張思考モード</button>
+      <button id="planModeToggle" onclick="togglePlanMode()" style="font-size:11px;border:1px solid var(--border);color:var(--text-light);background:var(--panel-bg);border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;">📋 実行計画を確認する</button>
+      <button id="thinkingToggleSkill" onclick="toggleSkillThinking()" style="font-size:11px;border:1px solid var(--border);color:var(--text-light);background:var(--panel-bg);border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;" title="拡張思考モード: 複雑なスキルをより深く考えて実行します">🧠 拡張思考モード</button>
     </div>
     <!-- Step Display Area -->
-    <div id="runStepArea" style="display:none;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:#f7f8fc;">
+    <div id="runStepArea" style="display:none;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--muted-bg);">
       <div style="font-size:11px;font-weight:700;color:var(--text-light);margin-bottom:6px;">実行ステップ</div>
       <div id="runStepList" style="font-size:12px;line-height:1.7;"></div>
       <!-- Extended Thinking Display -->
@@ -630,7 +632,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
         </details>
       </div>
     </div>
-    <div id="runEstimateArea" style="background:#f7f8fc;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:4px;font-size:13px;line-height:1.9;color:var(--text);">
+    <div id="runEstimateArea" style="background:var(--muted-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:4px;font-size:13px;line-height:1.9;color:var(--text);">
       <span style="color:var(--text-light);">コスト算出中...</span>
     </div>
     <div style="font-size:11px;color:var(--text-light);margin-bottom:2px;padding:0 2px;">※ 見込みです。実際の使用量により変動します</div>
@@ -720,7 +722,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <label style="display:flex;align-items:center;gap:8px;">
         <input type="checkbox" id="mgLoopEnabled" onchange="mgOnLoopChange()"> ループ実行（完了後に自動で繰り返す）
       </label>
-      <div id="mgLoopSub" style="display:none;margin-top:8px;padding:10px 12px;background:#f7f8fc;border-radius:8px;border:1px solid var(--border);">
+      <div id="mgLoopSub" style="display:none;margin-top:8px;padding:10px 12px;background:var(--muted-bg);border-radius:8px;border:1px solid var(--border);">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
           <label style="font-size:12px;color:var(--text-light);font-weight:normal;">繰り返し回数上限</label>
           <input type="number" id="mgLoopRemaining" min="1" max="100" value="5" style="width:70px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:14px;"> 回
@@ -1434,7 +1436,7 @@ async function openVersionHistory(id, title) {
           <span style="font-size:11px;color:var(--text-light);">${fmtDt(v.saved_at)}</span>
         </div>
         ${v.description ? `<div style="font-size:12px;color:var(--text-light);margin-bottom:6px;">${esc(v.description)}</div>` : ''}
-        ${v.steps_preview ? `<pre style="font-size:11px;color:var(--text-light);background:#f7f8fc;border-radius:6px;padding:6px 8px;margin:0 0 8px;white-space:pre-wrap;max-height:80px;overflow:hidden;">${esc(v.steps_preview)}${v.steps_preview.length >= 200 ? '...' : ''}</pre>` : ''}
+        ${v.steps_preview ? `<pre style="font-size:11px;color:var(--text-light);background:var(--muted-bg);border-radius:6px;padding:6px 8px;margin:0 0 8px;white-space:pre-wrap;max-height:80px;overflow:hidden;">${esc(v.steps_preview)}${v.steps_preview.length >= 200 ? '...' : ''}</pre>` : ''}
         <button class="btn btn-outline" style="font-size:12px;padding:4px 12px;" onclick="restoreVersion(${id}, ${v.version_num})">⏮ この内容に復元</button>
       </div>`).join('');
   } catch(e) {
@@ -2105,7 +2107,7 @@ function renderUsers(users) {
     <div style="overflow-x:auto;">
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead>
-        <tr style="background:#f7f8fc;border-bottom:2px solid var(--border);">
+        <tr style="background:var(--muted-bg);border-bottom:2px solid var(--border);">
           <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--text-light);">ユーザー</th>
           <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--text-light);">ロール</th>
           <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--text-light);">最終ログイン</th>
@@ -2388,7 +2390,7 @@ async function startBatch() {
   const d = await r.json();
   const area = document.getElementById('batchResultArea');
   if (r.ok) {
-    area.innerHTML = `<div style="background:#f0fff4;border:1px solid #9ae6b4;border-radius:7px;padding:10px 12px;font-size:12px;color:#276749;">
+    area.innerHTML = `<div style="background:var(--success-bg);border:1px solid #9ae6b4;border-radius:7px;padding:10px 12px;font-size:12px;color:#276749;">
       ✅ バッチ送信完了<br>Batch ID: <code>${d.batch_id}</code><br>スキル数: ${d.skill_count}件<br>
       <span style="color:var(--text-light);">処理完了まで数分かかります。</span>
     </div>`;
