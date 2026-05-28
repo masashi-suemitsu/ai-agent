@@ -17,6 +17,20 @@ const mammoth = require('mammoth');
 const PptxGenJS = require('pptxgenjs');
 const { Readable } = require('stream');
 
+// MCP（Model Context Protocol）サーバー設定を環境変数から取得
+// 形式: MCP_SERVERS_JSON='[{"type":"url","url":"https://...","name":"srv","authorization_token":"..."}]'
+function getMcpServers() {
+  const raw = process.env.MCP_SERVERS_JSON;
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    console.error('[mcp] MCP_SERVERS_JSON parse error:', e.message);
+    return [];
+  }
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const HOME = process.env.HOME || '/home/ec2-user';
@@ -59,10 +73,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
 };
 
 app.set('trust proxy', 1);
@@ -1646,6 +1660,30 @@ async function executeTool(name, input, user) {
       const r = await drive.files.create({ requestBody: fileMetadata, media, fields: 'id,name,mimeType,webViewLink' });
       return { ok: true, id: r.data.id, name: r.data.name, mimeType: r.data.mimeType, webViewLink: r.data.webViewLink };
     }
+    case 'call_ms_graph': {
+      if (!process.env.MS_GRAPH_TOKEN) throw new Error('MS_GRAPH_TOKEN 未設定。Microsoft 365 Graph API トークンを管理者に依頼してください');
+      const method = (input.method || 'GET').toUpperCase();
+      const isWrite = method !== 'GET';
+      if (isWrite && !input.confirmed) {
+        audit(user.email, user.name, 'tool.ms_graph.preview', { method, path: input.path });
+        return {
+          preview: true,
+          message: 'これはMicrosoft Graph書き込みプレビューです。ユーザー承認後 confirmed:true で再度呼んでください。',
+          method, path: input.path, body: input.body
+        };
+      }
+      audit(user.email, user.name, isWrite ? 'tool.ms_graph.execute' : 'tool.ms_graph', { method, path: input.path });
+      const qs = input.query ? '?' + new URLSearchParams(input.query).toString() : '';
+      const r = await fetch(`https://graph.microsoft.com/v1.0${input.path}${qs}`, {
+        method,
+        headers: { 'Authorization': `Bearer ${process.env.MS_GRAPH_TOKEN}`, 'Content-Type': 'application/json' },
+        body: input.body ? JSON.stringify(input.body) : undefined
+      });
+      const text = await r.text();
+      const data = text ? (() => { try { return JSON.parse(text); } catch { return text; } })() : null;
+      if (!r.ok) throw new Error(`Graph error ${r.status}: ${data?.error?.message || text}`);
+      return data;
+    }
     case 'list_slack_channels': {
       if (!process.env.SLACK_BOT_TOKEN) throw new Error('SLACK_BOT_TOKEN 未設定。Slack Botトークンを管理者に依頼してください');
       audit(user.email, user.name, 'tool.slack_channels');
@@ -1905,6 +1943,7 @@ app.post('/api/chat', async (req, res) => {
     let toolRound = 0;
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
+    const mcpServers = getMcpServers();
 
     while (toolRound < 10) {
       const stream = anthropic.messages.stream({
@@ -1912,7 +1951,8 @@ app.post('/api/chat', async (req, res) => {
         max_tokens: 4096,
         system: systemPrompt,
         tools: activeTools,
-        messages
+        messages,
+        ...(mcpServers.length > 0 ? { mcp_servers: mcpServers, betas: ['mcp-client-2025-04-04'] } : {})
       });
 
       for await (const ev of stream) {
