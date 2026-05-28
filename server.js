@@ -1054,38 +1054,63 @@ async function compressConversationContext(oldMessages) {
 }
 
 // ── Auto Memory Extraction ──
+// 保存禁止パターン（メタ説明・一時操作・ノイズ）
+const MEMORY_NOISE_PATTERNS = [
+  /記憶すべき/,/保存すべき/,/可能であれば/,/申し訳/,/お手数/,
+  /一時的な/,/単発の/,/明確でない/,/含まれていない/,/接続確認/,
+  /技術的操作/,/ツール実行/,/エラー/,/不明/,/わかりません/,
+];
+
 async function extractAndSaveMemories(email, conversationMessages) {
   try {
     const recent = conversationMessages.slice(-8).map(m =>
       `${m.role}: ${typeof m.content === 'string' ? m.content.slice(0, 400) : '[ツール結果]'}`
     ).join('\n');
+
     const r = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 300,
+      max_tokens: 400,
       messages: [{
         role: 'user',
-        content: `以下の会話を読み、将来の別の会話でも役立つユーザー固有の事実のみをJSON配列で返してください。
+        content: `以下の会話から、将来の別の会話でも繰り返し役立つユーザー固有の情報のみをJSON配列で返してください。
 
-【保存すべきもの】ユーザーの繰り返す好み・習慣・明示的な指示・業務上の重要な設定値
-【保存しないもの】一時的な操作・一般知識・「記憶すべき事実」などのメタ説明・不確かな推測・単発の質問
+【保存してよいもの（すべてを満たすこと）】
+- ユーザーが明示的に「毎回」「いつも」「〜したい」と述べた習慣・好み
+- 繰り返し設定される定期タスク（曜日・時刻・通知先が具体的なもの）
+- ユーザーの業務上の役割・担当領域（明示されたもの）
 
-出力形式: ["事実1", "事実2"] または該当なし→ []
-説明文・前置き・箇条書きは一切不要。JSONのみ返すこと。
+【絶対に保存しないもの】
+- 1回限りの操作・調査・質問
+- AIの自己言及（「記憶すべき」「保存すべき」「明確でない」など）
+- エラー・接続確認・技術的な一時操作
+- 推測・不確かな情報
+- 前置き・説明・メタコメント
+
+該当なし→必ず [] を返す。JSON配列のみ出力。説明文不要。
 
 会話:
 ${recent}`
       }]
     });
+
     const text = r.content[0]?.text?.trim() || '';
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) return;
     let facts;
     try { facts = JSON.parse(match[0]); } catch { return; }
     if (!Array.isArray(facts) || facts.length === 0) return;
-    for (const fact of facts.slice(0, 3)) {
-      if (typeof fact === 'string' && fact.trim().length >= 15) {
-        db.prepare('INSERT INTO user_memories (email, memory) VALUES (?,?)').run(email, fact.trim().slice(0, 300));
-      }
+
+    // 既存メモリを取得して重複チェック用に使う
+    const existing = db.prepare('SELECT memory FROM user_memories WHERE email=? ORDER BY id DESC LIMIT 20').all(email).map(r => r.memory);
+
+    for (const fact of facts.slice(0, 2)) {
+      if (typeof fact !== 'string') continue;
+      const trimmed = fact.trim();
+      // 最低文字数・ノイズパターン・重複チェック
+      if (trimmed.length < 20) continue;
+      if (MEMORY_NOISE_PATTERNS.some(p => p.test(trimmed))) continue;
+      if (existing.some(e => e.includes(trimmed.slice(0, 20)))) continue;
+      db.prepare('INSERT INTO user_memories (email, memory) VALUES (?,?)').run(email, trimmed.slice(0, 200));
     }
   } catch(e) {
     console.error('[memory] extraction failed:', e.message);
