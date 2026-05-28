@@ -2215,6 +2215,44 @@ const TOOLS = [
   }
 ];
 
+// ── Computer Use (Playwright) ──
+const COMPUTER_TOOL = {
+  type: 'computer_20241022',
+  name: 'computer',
+  display_width_px: 1280,
+  display_height_px: 800,
+};
+
+let _cwBrowser = null;
+const _cwPages = new Map(); // email → { page, ctx }
+
+async function getCwPage(email) {
+  if (!_cwBrowser?.isConnected()) {
+    const { chromium } = require('playwright');
+    _cwBrowser = await chromium.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    });
+  }
+  const entry = _cwPages.get(email);
+  if (!entry || entry.page.isClosed()) {
+    const ctx = await _cwBrowser.newContext({
+      viewport: { width: 1280, height: 800 },
+      userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+    });
+    const page = await ctx.newPage();
+    await page.goto('about:blank');
+    _cwPages.set(email, { page, ctx });
+    return page;
+  }
+  return entry.page;
+}
+
+async function cwScreenshot(page) {
+  const buf = await page.screenshot({ type: 'png' });
+  return { image: { base64: buf.toString('base64'), mediaType: 'image/png' } };
+}
+
 // ── Tool Executor ──
 // SSRF 防御: IPv4 / IPv6 のループバック・プライベート・リンクローカル等を判定
 function isPrivateOrLoopbackHost(host) {
@@ -3804,6 +3842,65 @@ ${(input.candidate_info || '').slice(0, 3000)}
       return ghData;
     }
 
+    case 'computer': {
+      if (user.role !== 'admin') throw new Error('computer_use は管理者のみ使用できます');
+      const { action, coordinate, text, direction, amount, start_coordinate } = input;
+      const page = await getCwPage(user.email);
+      switch (action) {
+        case 'screenshot':
+          return cwScreenshot(page);
+        case 'left_click':
+          await page.mouse.click(coordinate[0], coordinate[1]);
+          await page.waitForTimeout(500);
+          return cwScreenshot(page);
+        case 'right_click':
+          await page.mouse.click(coordinate[0], coordinate[1], { button: 'right' });
+          await page.waitForTimeout(300);
+          return cwScreenshot(page);
+        case 'double_click':
+          await page.mouse.dblclick(coordinate[0], coordinate[1]);
+          await page.waitForTimeout(500);
+          return cwScreenshot(page);
+        case 'middle_click':
+          await page.mouse.click(coordinate[0], coordinate[1], { button: 'middle' });
+          return cwScreenshot(page);
+        case 'type':
+          await page.keyboard.type(text);
+          await page.waitForTimeout(300);
+          return cwScreenshot(page);
+        case 'key': {
+          const keyMap = { Return: 'Enter', BackSpace: 'Backspace', Escape: 'Escape', Tab: 'Tab', Delete: 'Delete', Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight', Page_Up: 'PageUp', Page_Down: 'PageDown', Home: 'Home', End: 'End' };
+          // ctrl+a → Control+a 形式に変換
+          const pwKey = (text || '').replace(/ctrl\+/g, 'Control+').replace(/alt\+/g, 'Alt+').replace(/shift\+/g, 'Shift+').replace(/super\+/g, 'Meta+');
+          await page.keyboard.press(keyMap[text] || pwKey);
+          await page.waitForTimeout(300);
+          return cwScreenshot(page);
+        }
+        case 'mouse_move':
+          await page.mouse.move(coordinate[0], coordinate[1]);
+          return cwScreenshot(page);
+        case 'scroll': {
+          const px = (amount || 3) * 100;
+          const dx = direction === 'left' ? -px : direction === 'right' ? px : 0;
+          const dy = direction === 'up' ? -px : direction === 'down' ? px : 0;
+          await page.mouse.wheel(dx, dy);
+          await page.waitForTimeout(300);
+          return cwScreenshot(page);
+        }
+        case 'left_click_drag':
+          await page.mouse.move(start_coordinate[0], start_coordinate[1]);
+          await page.mouse.down();
+          await page.mouse.move(coordinate[0], coordinate[1], { steps: 10 });
+          await page.mouse.up();
+          await page.waitForTimeout(300);
+          return cwScreenshot(page);
+        case 'cursor_position':
+          return { x: coordinate?.[0] || 0, y: coordinate?.[1] || 0 };
+        default:
+          throw new Error(`computer: 不明なアクション ${action}`);
+      }
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -3858,7 +3955,9 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
   try {
     const role = user.role || getUserRole(user.email);
     const allowedToolNames = TOOLS_FOR_ROLE[role];
-    const activeTools = allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS;
+    const baseTools = allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS;
+    // admin のみ computer_use を追加
+    const activeTools = role === 'admin' ? [...baseTools, COMPUTER_TOOL] : baseTools;
     const systemPrompt = getSystemPromptForUser(role, user.email);
 
     // Context Compression: 30件超なら古い部分をサマリ化
@@ -3916,16 +4015,22 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
       { ...activeTools[activeTools.length - 1], cache_control: { type: 'ephemeral' } }
     ] : activeTools;
     const useMcpBeta = mcpServers.length > 0;
+    const useComputerBeta = role === 'admin';
+    const useBeta = useMcpBeta || useComputerBeta;
+    const betaList = [
+      ...(useMcpBeta ? ['mcp-client-2025-04-04'] : []),
+      ...(useComputerBeta ? ['computer-use-2024-10-22'] : [])
+    ];
 
     while (toolRound < 10) {
-      const stream = (useMcpBeta ? anthropic.beta : anthropic).messages.stream({
+      const stream = (useBeta ? anthropic.beta : anthropic).messages.stream({
         model: chatModel,
         max_tokens: useThinking ? 16000 : 4096,
         system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
         tools: cachedTools,
         messages,
         ...(useThinking ? { thinking: { type: 'enabled', budget_tokens: 8000 } } : {}),
-        ...(useMcpBeta ? { betas: ['mcp-client-2025-04-04'], mcp_servers: mcpServers } : {})
+        ...(useBeta ? { betas: betaList, ...(useMcpBeta ? { mcp_servers: mcpServers } : {}) } : {})
       });
 
       for await (const ev of stream) {

@@ -26,6 +26,7 @@
     "passport-google-oauth20": "^2.0.0",
     "pdfkit": "^0.18.0",
     "pptxgenjs": "^4.0.1",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "playwright": "^1.49.0"
   }
 }
