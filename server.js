@@ -671,16 +671,24 @@ app.post('/webhooks/:token', express.json({ limit: '5mb' }), async (req, res) =>
   (async () => {
     try {
       const ownerEmail = wh.owner_email;
-      const promptTpl = wh.prompt_template || 'Webhook受信ペイロードを分析して必要な処理を実行してください:\n\n```json\n{{payload}}\n```';
-      const prompt = promptTpl.replace('{{payload}}', payloadStr);
       const role = getUserRole(ownerEmail);
+      // skill_name が指定されていればそのスキルの手順をプロンプトに使用
+      let basePrompt = '';
+      if (wh.skill_name) {
+        const skillRow = db.prepare('SELECT title, steps FROM user_skills WHERE owner_email=? AND name=?').get(ownerEmail, wh.skill_name);
+        if (skillRow) basePrompt = `# ${skillRow.title}\n\n${skillRow.steps}\n\n---\n\n`;
+      }
+      const defaultTpl = 'Webhook受信ペイロードを分析して必要な処理を実行してください:\n\n```json\n{{payload}}\n```';
+      const tpl = wh.prompt_template || defaultTpl;
+      const prompt = basePrompt + tpl.replace('{{payload}}', payloadStr);
       const allowedToolNames = TOOLS_FOR_ROLE[role];
       const activeTools = (allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS).filter(t => t.name !== 'register_task');
+      const systemPrompt = getSystemPromptForUser(role, ownerEmail) + '\n\n## 【Webhook自動実行モード】\nスキルの手順を今すぐ実行してください。register_task は使わない。Chatwork送信は send_system_notification を使用。';
       const messages = [{ role: 'user', content: prompt }];
       let result = '';
       let round = 0;
       while (round < 8) {
-        const resp = await anthropic.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 4096, tools: activeTools, messages });
+        const resp = await anthropic.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 4096, system: systemPrompt, tools: activeTools, messages });
         for (const block of resp.content) if (block.type === 'text') result += block.text;
         if (resp.stop_reason !== 'tool_use') break;
         messages.push({ role: 'assistant', content: resp.content });
@@ -3766,7 +3774,6 @@ app.get('/api/webhooks', (req, res) => {
 });
 app.post('/api/webhooks', (req, res) => {
   const { label = '', skill_name = '', prompt_template = '' } = req.body || {};
-  const crypto = require('crypto');
   const token = crypto.randomBytes(20).toString('hex');
   db.prepare('INSERT INTO webhook_tokens (token, owner_email, label, skill_name, prompt_template) VALUES (?,?,?,?,?)').run(token, req.user.email, label, skill_name, prompt_template);
   audit(req.user.email, req.user.name, 'webhook.create', { token });

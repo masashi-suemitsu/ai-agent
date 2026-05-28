@@ -304,10 +304,10 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
           <div style="font-size:13px;font-weight:700;margin-bottom:10px;">新しいフックを追加</div>
           <div style="display:grid;gap:8px;">
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <select id="hookSkillSel" style="flex:1;min-width:120px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;">
+              <select id="hookSkillSel" style="flex:1;min-width:120px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);">
                 <option value="">すべてのスキル（共通）</option>
               </select>
-              <select id="hookTypeSel" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;">
+              <select id="hookTypeSel" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);">
                 <option value="pre_run">実行前 (pre_run)</option>
                 <option value="post_run" selected>実行後 (post_run)</option>
               </select>
@@ -323,7 +323,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
               </div>
               <div id="hookConfigSkill" style="display:none;">
                 <label style="font-size:12px;color:var(--text-light);">連鎖実行するスキル</label>
-                <select id="hookNextSkillSel" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;margin-top:4px;"></select>
+                <select id="hookNextSkillSel" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);margin-top:4px;"></select>
               </div>
             </div>
             <button class="btn btn-primary" onclick="saveHook()" style="width:fit-content;">＋ フックを追加</button>
@@ -338,7 +338,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
         <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
             <label style="font-size:12px;color:var(--text-light);display:block;margin-bottom:4px;">実行するスキルを選択（複数可）</label>
-            <select id="batchSkillSel" multiple style="width:100%;height:100px;padding:4px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;"></select>
+            <select id="batchSkillSel" multiple style="width:100%;height:100px;padding:4px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);"></select>
           </div>
           <button class="btn btn-primary" onclick="startBatch()">📦 バッチ送信</button>
         </div>
@@ -630,7 +630,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     </div>
     <div class="modal-field">
       <label>AIモデル</label>
-      <select id="editTaskModel" style="width:100%;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;background:#fff;" onchange="updateModelDesc('edit')"></select>
+      <select id="editTaskModel" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:var(--input-bg);color:var(--text);" onchange="updateModelDesc('edit')"></select>
       <div id="editTaskModelDesc" class="model-desc-card" style="display:none;"></div>
       <button type="button" class="recommend-btn" id="editRecommendBtn" onclick="recommendModel('edit')">🤖 AIにおすすめを聞く</button>
       <div id="editRecommendResult" class="recommend-result" style="display:none;"></div>
@@ -758,7 +758,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     </div>
     <div class="modal-field">
       <label>AIモデル</label>
-      <select id="modalModel" style="width:100%;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;background:#fff;" onchange="updateModelDesc('modal')"></select>
+      <select id="modalModel" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:var(--input-bg);color:var(--text);" onchange="updateModelDesc('modal')"></select>
       <div id="modalModelDesc" class="model-desc-card" style="display:none;"></div>
       <button type="button" class="recommend-btn" id="modalRecommendBtn" onclick="recommendModel('modal')">🤖 AIにおすすめを聞く</button>
       <div id="modalRecommendResult" class="recommend-result" style="display:none;"></div>
@@ -1581,9 +1581,10 @@ async function createWebhook() {
 }
 async function deleteWebhook(token) {
   if (!confirm('このWebhookを削除しますか？')) return;
-  const r = await fetch(`/api/webhooks/${token}`, { method: 'DELETE' });
-  if (!r.ok) { alert('削除に失敗しました'); return; }
-  await loadWebhooks();
+  try {
+    await apiFetch(`/api/webhooks/${token}`, { method: 'DELETE' });
+    await loadWebhooks();
+  } catch(e) { alert('削除に失敗しました: ' + e.message); }
 }
 async function showWebhookLogs(token) {
   try {
