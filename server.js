@@ -1046,6 +1046,21 @@ const TOOLS = [
     }
   },
   {
+    name: 'call_ms_graph',
+    description: 'Microsoft 365のGraph APIを呼び出す。Outlook/Teams/OneDrive/SharePointのデータを取得・操作。GET以外（POST/PATCH/DELETE等）は2段階承認必須: ①confirmed なしでプレビュー → ②ユーザー承認 → ③confirmed:true で実行。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        method: { type: 'string', enum: ['GET','POST','PATCH','DELETE','PUT'], description: 'HTTPメソッド' },
+        path: { type: 'string', description: '/me/messages, /me/drive/root/children など。先頭スラッシュ必須' },
+        query: { type: 'object', description: 'クエリパラメータ（任意）' },
+        body: { type: 'object', description: 'リクエストボディ（POST/PATCH時）' },
+        confirmed: { type: 'boolean', description: 'GET以外で必須' }
+      },
+      required: ['method', 'path']
+    }
+  },
+  {
     name: 'list_slack_channels',
     description: 'Slackのチャンネル一覧を取得する。',
     input_schema: {

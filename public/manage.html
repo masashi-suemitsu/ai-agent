@@ -118,6 +118,20 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 .modal-overlay.open { opacity: 1; pointer-events: all; }
 .modal-box { background: #fff; border-radius: 16px; padding: 28px 32px; width: min(480px, 100%); max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
 .modal-box.modal-lg { width: min(720px, 100%); }
+/* 共有設定モーダル */
+.share-option-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.share-option-label { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; font-size: 14px; transition: all .15s; }
+.share-option-label:hover { border-color: var(--primary); background: var(--primary-light); }
+.share-option-label input[type=radio] { accent-color: var(--primary); width: 16px; height: 16px; flex-shrink: 0; }
+.share-option-label.selected { border-color: var(--primary); background: var(--primary-light); }
+.share-option-label .option-icon { font-size: 18px; }
+.share-option-label .option-text strong { display: block; font-size: 14px; font-weight: 700; }
+.share-option-label .option-text small { font-size: 11px; color: var(--text-light); }
+.member-list { border: 1px solid var(--border); border-radius: 8px; max-height: 200px; overflow-y: auto; margin-top: 8px; }
+.member-item { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 13px; cursor: pointer; }
+.member-item:last-child { border-bottom: none; }
+.member-item:hover { background: var(--bg); }
+.member-item input[type=checkbox] { accent-color: var(--primary); width: 15px; height: 15px; flex-shrink: 0; }
 .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
 .modal-subtitle { font-size: 13px; color: var(--primary-dark); font-weight: 600; margin-bottom: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .modal-field { margin-bottom: 16px; }
@@ -256,6 +270,48 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     <pre id="resultModalBody" style="white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.8;color:var(--text);background:#f7f8fc;border:1px solid var(--border);border-radius:8px;padding:14px;max-height:60vh;overflow-y:auto;font-family:inherit;"></pre>
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="closeResultModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─ 共有設定 Modal ─ -->
+<div class="modal-overlay" id="shareModal" onclick="if(event.target===this)closeShareModal()">
+  <div class="modal-box">
+    <div class="modal-title">🔒 共有設定</div>
+    <div class="modal-subtitle" id="shareModalTitle"></div>
+    <div class="share-option-group" id="shareOptionGroup">
+      <label class="share-option-label" id="shareOpt-private">
+        <input type="radio" name="shareMode" value="private" onchange="onShareModeChange('private')">
+        <span class="option-icon">🔒</span>
+        <span class="option-text">
+          <strong>自分のみ</strong>
+          <small>自分だけが閲覧・実行できます</small>
+        </span>
+      </label>
+      <label class="share-option-label" id="shareOpt-team">
+        <input type="radio" name="shareMode" value="team" onchange="onShareModeChange('team')">
+        <span class="option-icon">👥</span>
+        <span class="option-text">
+          <strong>チーム（メンバー指定）</strong>
+          <small>選択したメンバーのみ閲覧・実行できます</small>
+        </span>
+      </label>
+      <div id="memberSelectorWrap" style="display:none;padding-left:4px;">
+        <div style="font-size:12px;color:var(--text-light);margin-bottom:6px;">共有するメンバーを選択</div>
+        <div class="member-list" id="memberList"><div style="padding:12px;color:var(--text-light);font-size:13px;">読み込み中...</div></div>
+      </div>
+      <label class="share-option-label" id="shareOpt-all">
+        <input type="radio" name="shareMode" value="all" onchange="onShareModeChange('all')">
+        <span class="option-icon">🌐</span>
+        <span class="option-text">
+          <strong>全体（全員に公開）</strong>
+          <small>ログインしている全メンバーが閲覧・実行できます</small>
+        </span>
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeShareModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveShareSettings()">保存する</button>
     </div>
   </div>
 </div>
@@ -596,9 +652,7 @@ function renderMyTaskCard(t) {
         </label>
         <span class="toggle-label" id="task-toggle-label-${t.id}">${t.enabled ? '有効' : (isOnce && t.last_status === 'done' ? '実行済' : '停止中')}</span>
       </div>
-      <button class="btn ${t.shared ? 'btn-primary' : 'btn-outline'}" onclick="toggleShareTask(${t.id}, ${!t.shared})" title="${t.shared ? 'クリックで非公開に' : 'チームに共有する'}">
-        ${t.shared ? '🌐 共有中' : '🔒 共有する'}
-      </button>
+      ${shareBtn('task', t.id, t.shared, t.shared_with)}
       <button class="btn btn-outline" onclick="runTaskNow(${t.id}, this)" title="今すぐ実行">▶ 実行</button>
       <button class="btn btn-outline" onclick="openEditTask(${t.id})">✏️ 編集</button>
       <button class="btn btn-danger" onclick="deleteTask(${t.id})">削除</button>
@@ -688,14 +742,8 @@ async function deleteTask(id) {
   await loadTasks();
 }
 
-async function toggleShareTask(id, shared) {
-  const resp = await fetch(`/api/scheduled-tasks/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ shared })
-  });
-  if (!resp.ok) { alert('共有設定の変更に失敗しました'); return; }
-  await loadTasks();
+function toggleShareTask(id) {
+  openShareModal('task', id);
 }
 
 // ─ スキル ─
@@ -739,9 +787,7 @@ function renderSkills(skills) {
       <div class="steps-body" id="skill-steps-${s.id}">${esc(s.steps)}</div>` : ''}
       <div class="card-actions">
         ${isOwn ? `
-        <button class="btn ${s.shared ? 'btn-primary' : 'btn-outline'}" onclick="toggleShareSkill(${s.id}, ${!s.shared})" title="${s.shared ? 'クリックで非公開に' : 'チームに共有する'}">
-          ${s.shared ? '🌐 共有中' : '🔒 共有する'}
-        </button>
+        ${shareBtn('skill', s.id, s.shared, s.shared_with)}
         <button class="btn btn-orange" onclick="openModal(${s.id}, _skillCache[${s.id}].title)">⏰ 定期実行を設定</button>
         <button class="btn btn-outline" onclick="runSkillNow(${s.id}, _skillCache[${s.id}].title, this)">▶ 今すぐ実行</button>
         <button class="btn btn-outline" onclick="openEditSkill(${s.id})">✏️ 編集</button>
@@ -935,14 +981,114 @@ async function deleteSkill(id) {
   await loadSkills();
 }
 
-async function toggleShareSkill(id, shared) {
-  const resp = await fetch(`/api/skills/${id}`, {
+function shareBtn(type, id, shared, shared_with) {
+  let sw = shared_with;
+  if (typeof sw === 'string') { try { sw = JSON.parse(sw); } catch(e) { sw = null; } }
+  let cls = 'btn-outline', label = '🔒 共有する';
+  if (shared) {
+    if (!sw) { cls = 'btn-primary'; label = '🌐 全体公開'; }
+    else { cls = 'btn-primary'; label = `👥 ${sw.length}人と共有`; }
+  }
+  const fn = type === 'skill' ? `toggleShareSkill(${id})` : `toggleShareTask(${id})`;
+  return `<button class="btn ${cls}" onclick="${fn}" title="共有設定を変更">${label}</button>`;
+}
+
+function toggleShareSkill(id) {
+  openShareModal('skill', id);
+}
+
+// ─ 共有設定モーダル ─
+let _shareContext = null; // { type: 'skill'|'task', id }
+let _allMembers = [];
+
+async function openShareModal(type, id) {
+  const item = type === 'skill' ? _skillCache[id] : _taskCache[id];
+  if (!item) return;
+  _shareContext = { type, id };
+
+  // タイトル表示
+  document.getElementById('shareModalTitle').textContent =
+    type === 'skill' ? (item.title || item.name) : (item.skill_title || item.skill_name);
+
+  // 現在の設定を読み取り
+  let currentMode = 'private';
+  let currentEmails = [];
+  if (item.shared) {
+    let sw = item.shared_with;
+    if (typeof sw === 'string') { try { sw = JSON.parse(sw); } catch(e) { sw = null; } }
+    if (!sw) { currentMode = 'all'; }
+    else { currentMode = 'team'; currentEmails = sw; }
+  }
+
+  // ラジオ選択
+  document.querySelectorAll('input[name="shareMode"]').forEach(r => { r.checked = r.value === currentMode; });
+  updateShareOptionHighlight(currentMode);
+
+  // メンバー一覧読み込み
+  if (_allMembers.length === 0) {
+    _allMembers = await fetch('/api/members').then(r => r.json()).catch(() => []);
+  }
+  renderMemberList(currentEmails);
+  document.getElementById('memberSelectorWrap').style.display = currentMode === 'team' ? 'block' : 'none';
+
+  document.getElementById('shareModal').classList.add('open');
+}
+
+function closeShareModal() {
+  document.getElementById('shareModal').classList.remove('open');
+  _shareContext = null;
+}
+
+function onShareModeChange(mode) {
+  updateShareOptionHighlight(mode);
+  document.getElementById('memberSelectorWrap').style.display = mode === 'team' ? 'block' : 'none';
+}
+
+function updateShareOptionHighlight(mode) {
+  ['private', 'team', 'all'].forEach(m => {
+    document.getElementById(`shareOpt-${m}`)?.classList.toggle('selected', m === mode);
+  });
+}
+
+function renderMemberList(selectedEmails) {
+  const el = document.getElementById('memberList');
+  if (!_allMembers.length) {
+    el.innerHTML = '<div style="padding:12px;color:var(--text-light);font-size:13px;">メンバーが見つかりません</div>';
+    return;
+  }
+  el.innerHTML = _allMembers.map(m => {
+    const checked = selectedEmails.includes(m.email) ? 'checked' : '';
+    return `<label class="member-item">
+      <input type="checkbox" value="${esc(m.email)}" ${checked}>
+      <span>${esc(m.name || m.email.split('@')[0])}</span>
+      <span style="font-size:11px;color:var(--text-light);margin-left:auto;">${esc(m.email)}</span>
+    </label>`;
+  }).join('');
+}
+
+async function saveShareSettings() {
+  if (!_shareContext) return;
+  const mode = document.querySelector('input[name="shareMode"]:checked')?.value;
+  if (!mode) return;
+
+  let shared = mode !== 'private';
+  let shared_with = null;
+  if (mode === 'team') {
+    shared_with = [...document.querySelectorAll('#memberList input[type=checkbox]:checked')].map(c => c.value);
+    if (!shared_with.length) { alert('共有するメンバーを1人以上選択してください'); return; }
+  }
+
+  const { type, id } = _shareContext;
+  const url = type === 'skill' ? `/api/skills/${id}` : `/api/scheduled-tasks/${id}`;
+  const resp = await fetch(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ shared })
+    body: JSON.stringify({ shared, shared_with })
   });
   if (!resp.ok) { alert('共有設定の変更に失敗しました'); return; }
-  await loadSkills();
+  closeShareModal();
+  if (type === 'skill') await loadSkills();
+  else await loadTasks();
 }
 
 // ─ 権限・ルール ─

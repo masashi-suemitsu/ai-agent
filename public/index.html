@@ -713,6 +713,39 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
   </div>
 </div>
 
+<!-- ─ スキル共有設定 Modal（サイドバー用） ─ -->
+<div class="modal-overlay" id="sidebarShareModal" onclick="if(event.target===this)closeSidebarShareModal()">
+  <div class="modal-box">
+    <div class="modal-title">🔒 共有設定</div>
+    <div id="sidebarShareTitle" style="font-size:13px;color:#4a5ce8;font-weight:600;margin-bottom:18px;"></div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+      <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer;font-size:14px;" id="sidebarShareOpt-private">
+        <input type="radio" name="sidebarShareMode" value="private" onchange="onSidebarShareModeChange('private')" style="accent-color:#5b6eff;width:16px;height:16px;">
+        <span style="font-size:18px;">🔒</span>
+        <span><strong style="display:block;font-size:14px;font-weight:700;">自分のみ</strong><small style="font-size:11px;color:#718096;">自分だけが閲覧・実行できます</small></span>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer;font-size:14px;" id="sidebarShareOpt-team">
+        <input type="radio" name="sidebarShareMode" value="team" onchange="onSidebarShareModeChange('team')" style="accent-color:#5b6eff;width:16px;height:16px;">
+        <span style="font-size:18px;">👥</span>
+        <span><strong style="display:block;font-size:14px;font-weight:700;">チーム（メンバー指定）</strong><small style="font-size:11px;color:#718096;">選択したメンバーのみ閲覧・実行できます</small></span>
+      </label>
+      <div id="sidebarMemberSelectorWrap" style="display:none;padding-left:4px;">
+        <div style="font-size:12px;color:#718096;margin-bottom:6px;">共有するメンバーを選択</div>
+        <div id="sidebarMemberList" style="border:1px solid #e2e8f0;border-radius:8px;max-height:180px;overflow-y:auto;"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer;font-size:14px;" id="sidebarShareOpt-all">
+        <input type="radio" name="sidebarShareMode" value="all" onchange="onSidebarShareModeChange('all')" style="accent-color:#5b6eff;width:16px;height:16px;">
+        <span style="font-size:18px;">🌐</span>
+        <span><strong style="display:block;font-size:14px;font-weight:700;">全体（全員に公開）</strong><small style="font-size:11px;color:#718096;">ログインしている全メンバーが閲覧・実行できます</small></span>
+      </label>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+      <button onclick="closeSidebarShareModal()" style="padding:9px 18px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;font-size:14px;cursor:pointer;">キャンセル</button>
+      <button onclick="saveSidebarShareSettings()" style="padding:9px 18px;background:#5b6eff;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">保存する</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─ Run Confirm Modal ─ -->
 <div class="modal-overlay" id="runConfirmModal" onclick="if(event.target===this)closeRunConfirmModal()">
   <div class="modal-box">
@@ -883,7 +916,15 @@ async function loadSidebar() {
   // スキルを自分のものとチームのものに分ける
   const myEmail = currentUser?.email || '';
   const mySkills = skills.filter(s => s.owner_email === myEmail);
-  const teamSkills = skills.filter(s => s.owner_email !== myEmail && s.shared);
+  const teamSkills = skills.filter(s => s.owner_email !== myEmail);
+
+  // 共有ボタンラベル（3段階）
+  function skillShareIcon(s) {
+    if (!s.shared) return '🔒';
+    let sw = s.shared_with;
+    if (typeof sw === 'string') { try { sw = JSON.parse(sw); } catch(e) { sw = null; } }
+    return sw ? '👥' : '🌐';
+  }
 
   // マイスキル
   html += `<div class="sidebar-section-header" style="margin-top:8px;">マイスキル</div>`;
@@ -897,7 +938,7 @@ async function loadSidebar() {
           <div class="skill-desc">${esc(s.description || '')}</div>
         </div>
         <div class="skill-actions">
-          <button class="skill-share-btn ${s.shared ? 'shared' : ''}" onclick="toggleShareSkill(${s.id}, ${!s.shared})" title="${s.shared ? '共有中（クリックで非公開に）' : 'チームに共有する'}">${s.shared ? '🌐' : '🔒'}</button>
+          <button class="skill-share-btn ${s.shared ? 'shared' : ''}" onclick="openShareModal(${s.id})" title="共有設定">${skillShareIcon(s)}</button>
           <button class="skill-run-btn" style="background:#ed8936;" onclick="openScheduleModal(${s.id}, ${JSON.stringify(s.title)})" title="定期実行を設定">⏰</button>
           <button class="skill-run-btn" onclick="runSkill(${s.id}, ${JSON.stringify(s.title)})">実行</button>
           <button class="skill-del-btn" onclick="deleteSkill(${s.id})" title="削除">✕</button>
@@ -1214,14 +1255,89 @@ async function deleteSkill(id) {
   await loadSidebar();
 }
 
-// ─ スキル共有トグル ─
-async function toggleShareSkill(id, shared) {
-  const resp = await fetch(`/api/skills/${id}`, {
+// ─ スキル共有設定モーダル ─
+let _shareModalSkillId = null;
+let _shareAllMembers = [];
+
+async function openShareModal(skillId) {
+  _shareModalSkillId = skillId;
+  const skills = await fetch('/api/skills').then(r => r.json());
+  const skill = skills.find(s => s.id === skillId);
+  if (!skill) return;
+
+  document.getElementById('sidebarShareTitle').textContent = skill.title;
+
+  // 現在の設定
+  let currentMode = 'private';
+  let currentEmails = [];
+  if (skill.shared) {
+    let sw = skill.shared_with;
+    if (typeof sw === 'string') { try { sw = JSON.parse(sw); } catch(e) { sw = null; } }
+    currentMode = sw ? 'team' : 'all';
+    currentEmails = sw || [];
+  }
+  document.querySelectorAll('input[name="sidebarShareMode"]').forEach(r => { r.checked = r.value === currentMode; });
+  updateSidebarShareHighlight(currentMode);
+
+  // メンバー読み込み
+  if (_shareAllMembers.length === 0) {
+    _shareAllMembers = await fetch('/api/members').then(r => r.json()).catch(() => []);
+  }
+  renderSidebarMemberList(currentEmails, currentMode);
+
+  document.getElementById('sidebarShareModal').classList.add('open');
+}
+
+function closeSidebarShareModal() {
+  document.getElementById('sidebarShareModal').classList.remove('open');
+  _shareModalSkillId = null;
+}
+
+function onSidebarShareModeChange(mode) {
+  updateSidebarShareHighlight(mode);
+  document.getElementById('sidebarMemberSelectorWrap').style.display = mode === 'team' ? 'block' : 'none';
+}
+
+function updateSidebarShareHighlight(mode) {
+  ['private', 'team', 'all'].forEach(m => {
+    document.getElementById(`sidebarShareOpt-${m}`)?.classList.toggle('selected', m === mode);
+  });
+  document.getElementById('sidebarMemberSelectorWrap').style.display = mode === 'team' ? 'block' : 'none';
+}
+
+function renderSidebarMemberList(selectedEmails, mode) {
+  const el = document.getElementById('sidebarMemberList');
+  if (!_shareAllMembers.length) {
+    el.innerHTML = '<div style="padding:10px;color:#718096;font-size:13px;">メンバーが見つかりません</div>';
+    return;
+  }
+  el.innerHTML = _shareAllMembers.map(m => {
+    const checked = selectedEmails.includes(m.email) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;cursor:pointer;">
+      <input type="checkbox" value="${esc(m.email)}" ${checked} style="accent-color:#5b6eff;width:15px;height:15px;">
+      <span>${esc(m.name || m.email.split('@')[0])}</span>
+      <span style="font-size:11px;color:#718096;margin-left:auto;">${esc(m.email)}</span>
+    </label>`;
+  }).join('');
+}
+
+async function saveSidebarShareSettings() {
+  if (!_shareModalSkillId) return;
+  const mode = document.querySelector('input[name="sidebarShareMode"]:checked')?.value;
+  if (!mode) return;
+  const shared = mode !== 'private';
+  let shared_with = null;
+  if (mode === 'team') {
+    shared_with = [...document.querySelectorAll('#sidebarMemberList input[type=checkbox]:checked')].map(c => c.value);
+    if (!shared_with.length) { alert('メンバーを1人以上選択してください'); return; }
+  }
+  const resp = await fetch(`/api/skills/${_shareModalSkillId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ shared })
+    body: JSON.stringify({ shared, shared_with })
   });
   if (!resp.ok) { alert('共有設定の変更に失敗しました'); return; }
+  closeSidebarShareModal();
   await loadSidebar();
 }
 
