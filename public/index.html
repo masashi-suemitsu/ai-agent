@@ -732,6 +732,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
           style="border:1.5px solid var(--border);border-radius:10px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--text-light);transition:all .15s;white-space:nowrap;">🧠 深く考える</button>
       </div>
       <div class="input-row">
+        <button class="feature-btn" id="featureBtn" type="button" onclick="toggleFeatureMenu(event)" title="機能を選ぶ">🎯 機能を選ぶ</button>
         <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" style="display:none;" onchange="onFilesPicked(event)">
         <button class="attach-btn" type="button" onclick="document.getElementById('fileInput').click()" title="画像・PDFを添付">📎</button>
         <div class="input-wrapper">
