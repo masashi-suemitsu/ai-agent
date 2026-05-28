@@ -2585,7 +2585,7 @@ async function loadHooks() {
     const config = JSON.parse(h.config || '{}');
     const skillLabel = h.skill_id ? (skillMap[h.skill_id] || `ID:${h.skill_id}`) : 'すべてのスキル';
     const actionLabel = h.action === 'chatwork_notify' ? `Chatwork通知 (ルーム: ${config.room_id || '未設定'})` : `スキル連鎖 (ID: ${config.skill_id || '未設定'})`;
-    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;background:#fff;">
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;background:var(--panel-bg);">
       <div style="flex:1;font-size:12px;">
         <span style="font-weight:600;">${esc(skillLabel)}</span>
         <span style="color:var(--text-light);margin:0 6px;">›</span>
