@@ -1284,7 +1284,8 @@ async function runSkillNow(id, title, btn) {
   if (thinkBtn) { thinkBtn.textContent = '🧠 拡張思考モード'; thinkBtn.style.cssText = 'font-size:11px;border:1px solid var(--border);color:var(--text-light);background:var(--panel-bg);border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;'; }
   // 変数を検出してUIを表示
   const skill = _skillCache[id];
-  const varMatches = [...new Set([...(skill?.steps||'').matchAll(/\{\{(\w+)\}\}/g), ...(skill?.description||'').matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]))];
+  // [BUG8 fix] \w+ → [^}]+ に変更し日本語変数名も検出
+  const varMatches = [...new Set([...(skill?.steps||'').matchAll(/\{\{([^}]+)\}\}/g), ...(skill?.description||'').matchAll(/\{\{([^}]+)\}\}/g)].map(m => m[1].trim()))];
   const varArea = document.getElementById('runVariablesArea');
   const varList = document.getElementById('runVariablesList');
   if (varMatches.length > 0) {
@@ -1522,9 +1523,9 @@ function openEditSkill(id) {
   document.getElementById('editSkillTitle').value = s.title || '';
   document.getElementById('editSkillDesc').value = s.description || '';
   document.getElementById('editSkillSteps').value = s.steps || '';
-  // チェーンセレクトの選択肢を生成（自分のスキル一覧）
+  // [BUG6 fix] チェーン先は自分のスキルのみ（チームスキルは除外）
   const chainSel = document.getElementById('editSkillChain');
-  const mySkills = Object.values(_skillCache).filter(sk => sk.id !== id);
+  const mySkills = Object.values(_skillCache).filter(sk => sk.id !== id && sk.owner_email === currentUser?.email);
   chainSel.innerHTML = '<option value="">なし（チェーンしない）</option>' +
     mySkills.map(sk => `<option value="${sk.id}" ${sk.id === s.chain_skill_id ? 'selected' : ''}>${esc(sk.title)}</option>`).join('');
   document.getElementById('editSkillModal').classList.add('open');

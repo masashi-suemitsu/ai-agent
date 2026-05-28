@@ -74,8 +74,6 @@ header {
 header h1 { font-size: 15px; font-weight: 700; color: var(--text); }
 header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); display: inline; margin-left: 8px; }
 .header-right { display: flex; align-items: center; gap: 8px; }
-[data-theme="dark"] #githubBadge { color:#adbac7;background:#2d333b;border-color:#444c56; }
-[data-theme="dark"] #githubBadge:hover { background:#373e47; }
 .header-btn { background: none; border: 1px solid var(--border); border-radius: 7px; padding: 5px 12px; font-size: 12px; cursor: pointer; color: var(--text-light); transition: all .15s; display: flex; align-items: center; gap: 5px; }
 .header-btn:hover { border-color: var(--primary); color: var(--primary); }
 .header-btn.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
@@ -216,6 +214,18 @@ kbd { background: var(--input-bg); border: 1px solid var(--border); border-radiu
 .rs-footer-btn { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 8px; background: none; border: none; cursor: pointer; color: var(--text); font-size: 13px; font-weight: 500; transition: background .15s; }
 .rs-footer-btn:hover { background: var(--sidebar-hover); }
 .rs-footer-btn.active { background: var(--primary-light); }
+
+/* ─ Sidebar Tasks Section ─ */
+.rs-tasks-section { border-top: 1px solid var(--sidebar-border); flex-shrink: 0; }
+.rs-tasks-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px 4px; }
+.rs-tasks-title { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #a0aec0; }
+.rs-tasks-max { font-size: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; background: none; color: var(--text-light); cursor: pointer; outline: none; }
+.rs-tasks-max:focus { border-color: var(--primary); }
+.rs-task-item { padding: 6px 10px; margin: 1px 6px; border-radius: 7px; cursor: pointer; transition: background .12s; }
+.rs-task-item:hover { background: var(--sidebar-hover); }
+.rs-task-name { font-size: 12px; font-weight: 500; color: var(--sidebar-title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; }
+.rs-task-meta { font-size: 10px; color: var(--sidebar-text); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rs-tasks-empty { font-size: 11px; color: var(--sidebar-text); text-align: center; padding: 8px 12px 10px; opacity: .7; }
 
 /* Empty state */
 .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-light); text-align: center; padding: 40px 24px; }
@@ -678,11 +688,6 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
       <button class="feature-btn" id="featureBtn" type="button" onclick="toggleFeatureMenu(event)" title="機能を選ぶ">🎯 機能を選ぶ</button>
       <div class="feature-menu-popup" id="featureMenuPopup"></div>
     </div>
-    <a id="githubBadge" href="/manage#connectors" title="GitHub 連携済み — コネクタ設定へ"
-      style="display:none;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#24292e;background:#f0f0f0;border:1px solid #d0d7de;border-radius:20px;padding:3px 10px 3px 8px;text-decoration:none;transition:all .15s;"
-      onmouseover="this.style.background='#e6e6e6'" onmouseout="this.style.background='#f0f0f0'">
-      <span>🐙</span><span id="githubBadgeLogin"></span>
-    </a>
     <span id="userBadge" style="font-size:12px;color:#718096;"></span>
     <span id="roleBadge" style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;display:none;"></span>
     <button class="header-btn" type="button" onclick="exportConversation()" title="現在の会話をMarkdownでダウンロード">⬇ エクスポート</button>
@@ -790,8 +795,29 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
           <div class="rs-status disconnected" id="rs-gmail-status">確認中...</div>
         </div>
       </div>
+      <div class="rs-item" onclick="toggleGithub()" id="rs-github">
+        <span class="rs-icon">🐙</span>
+        <div class="rs-info">
+          <div class="rs-name">GitHub</div>
+          <div class="rs-status disconnected" id="rs-github-status">確認中...</div>
+        </div>
+      </div>
+    </div>
+    <div class="rs-tasks-section" id="rsTasksSection">
+      <div class="rs-tasks-header">
+        <span class="rs-tasks-title">有効なタスク</span>
+        <select class="rs-tasks-max" id="rsTasksMax" onchange="loadSidebarTasks()">
+          <option value="3">3件</option>
+          <option value="5" selected>5件</option>
+          <option value="10">10件</option>
+        </select>
+      </div>
+      <div id="rsTasksList"><div class="rs-tasks-empty">読み込み中...</div></div>
     </div>
     <div class="rs-footer">
+      <button class="rs-footer-btn" id="rs-skills-btn" onclick="toggleSkillsPanel()">
+        <span>⚡</span> スキル
+      </button>
       <button class="rs-footer-btn" id="rs-schedule-btn" onclick="toggleSchedule()">
         <span>⏰</span> タスク
       </button>
@@ -837,6 +863,15 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
     <button class="panel-close-btn" onclick="toggleGmail()">✕</button>
   </div>
   <div id="gmailStatusArea"></div>
+</div>
+
+<!-- ─ GitHub Panel ─ -->
+<div class="drive-panel" id="githubPanel">
+  <div class="drive-panel-header">
+    <h3>🐙 GitHub</h3>
+    <button class="panel-close-btn" onclick="toggleGithub()">✕</button>
+  </div>
+  <div id="githubStatusArea"></div>
 </div>
 
 <!-- ─ Schedule Panel ─ -->
@@ -898,6 +933,17 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
       <button class="modal-btn-cancel" onclick="closeRunConfirmModal()">キャンセル</button>
       <button class="modal-btn-save" id="runConfirmBtn" onclick="doRunSkill()" disabled>実行する</button>
     </div>
+  </div>
+</div>
+
+<!-- ─ Skills Panel ─ -->
+<div class="schedule-panel" id="skillsPanel">
+  <div class="schedule-panel-header">
+    <h3>⚡ スキル一覧</h3>
+    <button class="panel-close-btn" onclick="toggleSkillsPanel()">✕</button>
+  </div>
+  <div class="schedule-list" id="skillsPanelList">
+    <div style="color:#a0aec0;font-size:12px;padding:20px;text-align:center;">読み込み中...</div>
   </div>
 </div>
 
@@ -1109,14 +1155,6 @@ let currentUser = null;
   }
   await loadSidebar();
   loadRightSidebarStatuses();
-  fetch('/api/settings/github/status').then(r => r.json()).then(d => {
-    if (d.connected) {
-      const badge = document.getElementById('githubBadge');
-      const loginEl = document.getElementById('githubBadgeLogin');
-      if (badge) { badge.style.display = 'inline-flex'; }
-      if (loginEl) { loginEl.textContent = d.login ? '@' + d.login : 'GitHub'; }
-    }
-  }).catch(() => {});
 
   // OAuth コールバック後の通知 + manage画面からの会話直接リンク
   const urlParams = new URLSearchParams(window.location.search);
@@ -1413,14 +1451,16 @@ function renderSlashMenu() {
   menu.innerHTML = '<div class="slash-header">⚡ スキル選択 — Enter で実行 / Esc で閉じる</div>' +
     _slashFiltered.map((s, i) => {
       const icon = esc(s.icon || '⚡');
-      const desc = (s.prompt || '').replace(/\n/g, ' ').slice(0, 55);
+      // [BUG4 fix] s.prompt は存在しない → s.description/steps を使う
+      const rawDesc = (s.description || s.steps || '').replace(/\n/g, ' ');
+      const desc = rawDesc.slice(0, 55);
       return `<div class="slash-item${i === _slashIndex ? ' s-sel' : ''}"
         onmousedown="selectSlashSkill(${s.id},${JSON.stringify(s.title)})"
         onmouseover="_slashIndex=${i};renderSlashMenu()">
         <div class="slash-item-icon">${icon}</div>
         <div class="slash-item-body">
           <div class="slash-item-title">${esc(s.title)}</div>
-          ${desc ? `<div class="slash-item-desc">${esc(desc)}${(s.prompt||'').length > 55 ? '…' : ''}</div>` : ''}
+          ${desc ? `<div class="slash-item-desc">${esc(desc)}${rawDesc.length > 55 ? '…' : ''}</div>` : ''}
         </div>
       </div>`;
     }).join('');
@@ -1436,6 +1476,7 @@ function hideSlashMenu() {
 
 function selectSlashSkill(id, title) {
   hideSlashMenu();
+  if (typeof parallelMode !== 'undefined' && parallelMode) toggleParallelMode(); // [BUG10] 並列モード解除
   const input = document.getElementById('input');
   input.value = '';
   input.style.height = 'auto';
@@ -2023,10 +2064,10 @@ async function runSkill(id, title) {
   if (_runVarNames.length > 0) {
     varsArea.innerHTML = `<div style="background:var(--primary-light);border:1.5px solid var(--primary);border-radius:10px;padding:14px 16px;margin-bottom:12px;">
       <div style="font-size:11px;font-weight:700;color:var(--primary);letter-spacing:.05em;margin-bottom:10px;">📝 変数を入力してください</div>
-      ${_runVarNames.map(v => `
+      ${_runVarNames.map((v, i) => `
         <div style="margin-bottom:8px;">
           <label style="font-size:12px;font-weight:600;color:var(--text);">{{${esc(v)}}}</label>
-          <input type="text" id="runvar_${esc(v)}" placeholder="${esc(v)}を入力..."
+          <input type="text" id="runvar_${i}" placeholder="${esc(v)}を入力..."
             style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;">
         </div>`).join('')}
     </div>`;
@@ -2068,24 +2109,22 @@ let _runChainContext = null;
 async function doRunSkill() {
   const id = _runConfirmId;
   const title = _runConfirmTitle;
-
-  // 変数値を収集
+  // [BUG5 fix] インデックスベースのIDで変数値を収集（特殊文字含む変数名でも安全）
   const variables = {};
-  for (const v of _runVarNames) {
-    variables[v] = document.getElementById(`runvar_${v}`)?.value?.trim() || '';
+  for (let i = 0; i < _runVarNames.length; i++) {
+    variables[_runVarNames[i]] = document.getElementById(`runvar_${i}`)?.value?.trim() || '';
   }
-
-  // チェーン連鎖コンテキストを取り出し（使ったらリセット）
   const chainContext = _runChainContext;
   _runChainContext = null;
-
   closeRunConfirmModal();
   if (!id) return;
-
-  // ラベル生成（変数あれば最初の値を添える）
   const varLabel = Object.values(variables).filter(Boolean).slice(0, 2).join(' / ');
   const displayTitle = varLabel ? `${title}（${varLabel}）` : title;
+  await _execSkillRun(id, title, displayTitle, variables, chainContext);
+}
 
+// [BUG3/7 fix] スキル実行共通処理 — doRunSkill・チェーン連鎖どちらも使う
+async function _execSkillRun(id, title, displayTitle, variables, chainContext) {
   removeEmptyState();
   const msgsEl = document.getElementById('messages');
   const div = document.createElement('div');
@@ -2094,19 +2133,21 @@ async function doRunSkill() {
   div.innerHTML = `<div class="avatar">AI</div><div class="bubble"><strong>▶ ${esc(displayTitle)} を実行中...</strong><div class="run-output" id="${runId}"></div></div>`;
   msgsEl.appendChild(div);
   msgsEl.scrollTop = msgsEl.scrollHeight;
-
   const out = document.getElementById(runId);
   const resp = await fetch(`/api/skills/${id}/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ variables, ...(chainContext ? { chain_context: chainContext } : {}) })
+    body: JSON.stringify({ variables: variables || {}, ...(chainContext ? { chain_context: chainContext } : {}) })
   });
-  if (!resp.ok) { const e = await resp.json().catch(() => ({})); out.textContent = e.error || `実行失敗 (${resp.status})`; return; }
+  if (!resp.ok) {
+    const e = await resp.json().catch(() => ({}));
+    out.textContent = e.error || `実行失敗 (${resp.status})`;
+    return;
+  }
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
   let resultText = '';
-
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -2118,20 +2159,21 @@ async function doRunSkill() {
         const d = JSON.parse(line.slice(5));
         if (d.text) {
           resultText += d.text;
-          out.textContent += d.text;
+          out.appendChild(document.createTextNode(d.text)); // [BUG3 fix] textContent/innerHTML 混在を回避
           msgsEl.scrollTop = msgsEl.scrollHeight;
         }
-        // チェーン連鎖: 次のスキルへ自動実行
         if (d.chain_next_id) {
-          out.innerHTML += `\n\n<span style="color:var(--primary);font-weight:600;">🔗 → ${esc(d.chain_next_title)} を連鎖実行...</span>`;
+          // [BUG7 fix] モーダルをスキップして _execSkillRun を直接再帰呼び出し
+          const span = document.createElement('span');
+          span.style.cssText = 'color:var(--primary);font-weight:600;display:block;margin-top:8px;';
+          span.textContent = `🔗 → ${d.chain_next_title} を連鎖実行...`;
+          out.appendChild(span);
           msgsEl.scrollTop = msgsEl.scrollHeight;
-          setTimeout(() => {
-            _runChainContext = resultText;
-            runSkill(d.chain_next_id, d.chain_next_title);
-          }, 800);
+          const [cid, ctitle, cres] = [d.chain_next_id, d.chain_next_title, resultText];
+          setTimeout(() => _execSkillRun(cid, ctitle, `[チェーン] ${ctitle}`, {}, cres), 800);
         }
         if (d.done) {
-          out.textContent += '\n\n✓ 実行完了';
+          out.appendChild(document.createTextNode('\n\n✓ 実行完了')); // [BUG3 fix]
           div.querySelector('.bubble strong').textContent = `✓ ${title}`;
         }
       } catch {}
@@ -2399,8 +2441,8 @@ async function attachCwMessages() {
 }
 
 // ─ パネル共通クローズ ─
-const ALL_PANELS = ['cwPanel','drivePanel','calendarPanel','gmailPanel','historyPanel','schedulePanel'];
-const ALL_BTNS   = ['rs-chatwork','rs-drive','rs-calendar','rs-gmail','rs-history-btn','rs-schedule-btn'];
+const ALL_PANELS = ['cwPanel','drivePanel','calendarPanel','gmailPanel','githubPanel','historyPanel','schedulePanel','skillsPanel'];
+const ALL_BTNS   = ['rs-chatwork','rs-drive','rs-calendar','rs-gmail','rs-github','rs-history-btn','rs-schedule-btn','rs-skills-btn'];
 function closeAllPanels(except) {
   ALL_PANELS.forEach((id, i) => { if (id !== except) { document.getElementById(id)?.classList.remove('open'); document.getElementById(ALL_BTNS[i])?.classList.remove('active'); } });
   syncBackdrop();
@@ -2478,6 +2520,7 @@ async function loadRightSidebarStatuses() {
     { id: 'rs-drive-status',    url: '/api/drive/status' },
     { id: 'rs-calendar-status', url: '/api/calendar/status' },
     { id: 'rs-gmail-status',    url: '/api/gmail/status' },
+    { id: 'rs-github-status',   url: '/api/settings/github/status' },
   ];
   await Promise.all(apis.map(async ({ id, url }) => {
     const el = document.getElementById(id);
@@ -2487,7 +2530,11 @@ async function loadRightSidebarStatuses() {
       const connected = s.connected && !s.expired;
       const expired = s.connected && s.expired;
       el.className = 'rs-status ' + (connected ? 'connected' : expired ? 'expired' : 'disconnected');
-      el.textContent = connected ? '✅ 連携済み' : expired ? '⚠️ 期限切れ' : '─ 未連携';
+      if (id === 'rs-github-status' && connected && s.login) {
+        el.textContent = '✅ @' + s.login;
+      } else {
+        el.textContent = connected ? '✅ 連携済み' : expired ? '⚠️ 期限切れ' : '─ 未連携';
+      }
     } catch { el.textContent = '─'; }
   }));
 }
@@ -2657,6 +2704,81 @@ async function disconnectGmail() {
   if (!confirm('Gmail連携を解除しますか？')) return;
   await fetch('/api/gmail/disconnect', { method: 'DELETE' });
   await loadGmailStatus();
+}
+
+// ─ GitHub Panel ─
+async function toggleGithub() {
+  const panel = document.getElementById('githubPanel');
+  const btn = document.getElementById('rs-github');
+  const isOpen = panel.classList.contains('open');
+  closeAllPanels('githubPanel');
+  panel.classList.toggle('open', !isOpen);
+  btn.classList.toggle('active', !isOpen);
+  syncBackdrop();
+  if (!isOpen) await loadGithubPanelStatus();
+}
+
+async function loadGithubPanelStatus() {
+  const statusArea = document.getElementById('githubStatusArea');
+  try {
+    const status = await fetch('/api/settings/github/status').then(r => r.json());
+    if (status.connected) {
+      statusArea.innerHTML = `
+        <div style="text-align:center;padding:24px 16px;">
+          <div style="font-size:36px;margin-bottom:8px;">✅</div>
+          <div style="font-size:14px;font-weight:700;color:#276749;margin-bottom:4px;">GitHub 連携済み</div>
+          ${status.login ? `<div style="font-size:13px;color:#4a5568;margin-bottom:14px;">@${esc(status.login)}</div>` : ''}
+          <div style="font-size:12px;color:#4a5568;margin-bottom:16px;line-height:1.6;">AIエージェントが Issue・PR・リポジトリを操作できます</div>
+          <button onclick="disconnectGithubPanel()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
+        </div>`;
+    } else {
+      statusArea.innerHTML = `
+        <div style="padding:20px 16px;">
+          <div style="text-align:center;margin-bottom:16px;">
+            <div style="font-size:28px;margin-bottom:8px;">🐙</div>
+            <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">GitHub 未連携</div>
+            <div style="font-size:12px;color:#718096;margin-bottom:16px;line-height:1.6;">Personal Access Token を登録すると<br>AIエージェントが GitHub を操作できます</div>
+          </div>
+          <input id="ghPanelTokenInput" type="password" placeholder="ghp_xxxx または github_pat_xxxx"
+            style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px;outline:none;font-family:monospace;box-sizing:border-box;margin-bottom:10px;"
+            onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"
+            onkeydown="if(event.key==='Enter')saveGithubPanelToken()">
+          <button onclick="saveGithubPanelToken()" id="ghPanelSaveBtn" style="width:100%;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:600;cursor:pointer;">接続する</button>
+          <div style="font-size:11px;color:#718096;margin-top:10px;line-height:1.6;text-align:center;">
+            <a href="https://github.com/settings/tokens?type=beta" target="_blank" style="color:var(--primary);">github.com/settings/tokens</a> でトークンを発行<br>スコープ: <code>repo</code> または <code>public_repo</code>
+          </div>
+        </div>`;
+    }
+  } catch(e) {
+    statusArea.innerHTML = `<div style="padding:16px;color:var(--danger);font-size:12px;">${esc(e.message)}</div>`;
+  }
+}
+
+async function saveGithubPanelToken() {
+  const input = document.getElementById('ghPanelTokenInput');
+  const btn = document.getElementById('ghPanelSaveBtn');
+  if (!input?.value.trim()) return;
+  btn.disabled = true; btn.textContent = '接続中...';
+  try {
+    const resp = await fetch('/api/settings/github', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: input.value.trim() })
+    });
+    const d = await resp.json();
+    if (!resp.ok) throw new Error(d.error || '接続失敗');
+    await loadGithubPanelStatus();
+    await loadRightSidebarStatuses();
+  } catch(e) {
+    alert(e.message);
+    btn.disabled = false; btn.textContent = '接続する';
+  }
+}
+
+async function disconnectGithubPanel() {
+  if (!confirm('GitHub 連携を解除しますか？')) return;
+  await fetch('/api/settings/github', { method: 'DELETE' });
+  await loadGithubPanelStatus();
+  await loadRightSidebarStatuses();
 }
 
 async function loadGmailMessages() {

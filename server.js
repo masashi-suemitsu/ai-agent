@@ -4101,10 +4101,20 @@ app.put('/api/skills/:id', (req, res) => {
   db.prepare('INSERT OR IGNORE INTO skill_versions (skill_id, version_num, title, description, steps) VALUES (?,?,?,?,?)')
     .run(req.params.id, nextVer, skill.title, skill.description, skill.steps);
   db.prepare('DELETE FROM skill_versions WHERE skill_id=? AND version_num <= ?').run(req.params.id, nextVer - 10);
-  // chain_skill_id は null (なし) または数値
-  const chainId = req.body.chain_skill_id !== undefined
-    ? (req.body.chain_skill_id ? Number(req.body.chain_skill_id) : null)
-    : skill.chain_skill_id;
+  // chain_skill_id: アクセス可能なスキルかを確認してから保存 [BUG2 fix]
+  let chainId = skill.chain_skill_id; // デフォルトは既存値
+  if (req.body.chain_skill_id !== undefined) {
+    if (!req.body.chain_skill_id) {
+      chainId = null; // 空文字 or null → チェーン解除
+    } else {
+      const cid = Number(req.body.chain_skill_id);
+      const accessible = db.prepare(
+        `SELECT id FROM user_skills WHERE id=? AND (owner_email=? OR (shared=1 AND (shared_with IS NULL OR EXISTS (SELECT 1 FROM json_each(shared_with) WHERE value=?))))`
+      ).get(cid, req.user.email, req.user.email);
+      if (!accessible) return res.status(400).json({ error: 'chain_skill_id が無効です' });
+      chainId = cid;
+    }
+  }
   db.prepare(`UPDATE user_skills SET title=?, description=?, steps=?, shared=?, chain_skill_id=?, updated_at=datetime('now','localtime') WHERE id=?`)
     .run(title.trim(), description ?? skill.description, steps ?? skill.steps,
       shared !== undefined ? (shared ? 1 : 0) : skill.shared, chainId, req.params.id);
@@ -4372,9 +4382,11 @@ app.post('/api/skills/:id/run', async (req, res) => {
     recordUsage(req.user.email, req.user.name, totalInputTokens, totalOutputTokens, 'claude-sonnet-4-6', 'skill_run');
     // Hooks: post_run
     executeHooks('post_run', skill, req.user.email, resultBuffer).catch(() => {});
-    // スキルチェーン: 連鎖先があればクライアントに通知
+    // スキルチェーン: 連鎖先があればクライアントに通知（アクセス権チェック付き）[BUG1 fix]
     if (skill.chain_skill_id) {
-      const chainSkill = db.prepare('SELECT id, title FROM user_skills WHERE id=?').get(skill.chain_skill_id);
+      const chainSkill = db.prepare(
+        `SELECT id, title FROM user_skills WHERE id=? AND (owner_email=? OR (shared=1 AND (shared_with IS NULL OR EXISTS (SELECT 1 FROM json_each(shared_with) WHERE value=?))))`
+      ).get(skill.chain_skill_id, req.user.email, req.user.email);
       if (chainSkill) {
         res.write(`data: ${JSON.stringify({ chain_next_id: chainSkill.id, chain_next_title: chainSkill.title })}\n\n`);
       }
