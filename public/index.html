@@ -2047,6 +2047,9 @@ function closeRunConfirmModal() {
   _runConfirmTitle = null;
 }
 
+// チェーン連鎖用コンテキスト
+let _runChainContext = null;
+
 async function doRunSkill() {
   const id = _runConfirmId;
   const title = _runConfirmTitle;
@@ -2056,6 +2059,10 @@ async function doRunSkill() {
   for (const v of _runVarNames) {
     variables[v] = document.getElementById(`runvar_${v}`)?.value?.trim() || '';
   }
+
+  // チェーン連鎖コンテキストを取り出し（使ったらリセット）
+  const chainContext = _runChainContext;
+  _runChainContext = null;
 
   closeRunConfirmModal();
   if (!id) return;
@@ -2077,12 +2084,13 @@ async function doRunSkill() {
   const resp = await fetch(`/api/skills/${id}/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ variables })
+    body: JSON.stringify({ variables, ...(chainContext ? { chain_context: chainContext } : {}) })
   });
   if (!resp.ok) { const e = await resp.json().catch(() => ({})); out.textContent = e.error || `実行失敗 (${resp.status})`; return; }
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
+  let resultText = '';
 
   while (true) {
     const { done, value } = await reader.read();
@@ -2093,7 +2101,20 @@ async function doRunSkill() {
       if (!line.startsWith('data:')) continue;
       try {
         const d = JSON.parse(line.slice(5));
-        if (d.text) { out.textContent += d.text; msgsEl.scrollTop = msgsEl.scrollHeight; }
+        if (d.text) {
+          resultText += d.text;
+          out.textContent += d.text;
+          msgsEl.scrollTop = msgsEl.scrollHeight;
+        }
+        // チェーン連鎖: 次のスキルへ自動実行
+        if (d.chain_next_id) {
+          out.innerHTML += `\n\n<span style="color:var(--primary);font-weight:600;">🔗 → ${esc(d.chain_next_title)} を連鎖実行...</span>`;
+          msgsEl.scrollTop = msgsEl.scrollHeight;
+          setTimeout(() => {
+            _runChainContext = resultText;
+            runSkill(d.chain_next_id, d.chain_next_title);
+          }, 800);
+        }
         if (d.done) {
           out.textContent += '\n\n✓ 実行完了';
           div.querySelector('.bubble strong').textContent = `✓ ${title}`;

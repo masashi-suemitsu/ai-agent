@@ -306,6 +306,7 @@ db.exec(`
   );
 `);
 try { db.exec(`ALTER TABLE user_settings ADD COLUMN github_token TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE user_settings ADD COLUMN github_login TEXT DEFAULT ''`); } catch(e) {}
 
 // ユーザーロールテーブル（DBベース管理）
 db.exec(`
@@ -4529,8 +4530,8 @@ app.put('/api/user-settings', (req, res) => {
 
 // ── GitHub PAT 連携 API ──
 app.get('/api/settings/github/status', (req, res) => {
-  const row = db.prepare('SELECT github_token FROM user_settings WHERE email=?').get(req.user.email);
-  res.json({ connected: !!(row?.github_token) });
+  const row = db.prepare('SELECT github_token, github_login FROM user_settings WHERE email=?').get(req.user.email);
+  res.json({ connected: !!(row?.github_token), login: row?.github_login || '' });
 });
 
 app.post('/api/settings/github', async (req, res) => {
@@ -4550,16 +4551,16 @@ app.post('/api/settings/github', async (req, res) => {
     return res.status(502).json({ error: 'GitHub への接続に失敗しました' });
   }
   db.prepare(`
-    INSERT INTO user_settings (email, github_token, updated_at)
-    VALUES (?, ?, datetime('now','localtime'))
-    ON CONFLICT(email) DO UPDATE SET github_token=excluded.github_token, updated_at=excluded.updated_at
-  `).run(req.user.email, token);
+    INSERT INTO user_settings (email, github_token, github_login, updated_at)
+    VALUES (?, ?, ?, datetime('now','localtime'))
+    ON CONFLICT(email) DO UPDATE SET github_token=excluded.github_token, github_login=excluded.github_login, updated_at=excluded.updated_at
+  `).run(req.user.email, token, me.login);
   audit(req.user.email, req.user.name, 'github.connect', { login: me.login });
   res.json({ ok: true, login: me.login, avatar_url: me.avatar_url });
 });
 
 app.delete('/api/settings/github', (req, res) => {
-  db.prepare(`UPDATE user_settings SET github_token='' WHERE email=?`).run(req.user.email);
+  db.prepare(`UPDATE user_settings SET github_token='', github_login='' WHERE email=?`).run(req.user.email);
   audit(req.user.email, req.user.name, 'github.disconnect');
   res.json({ ok: true });
 });
@@ -5305,7 +5306,7 @@ app.get('/api/connectors/status', (req, res) => {
     calendar:  { connected: !!db.prepare('SELECT 1 FROM user_calendar_tokens WHERE email=?').get(email) },
     gmail:     { connected: !!db.prepare('SELECT 1 FROM user_gmail_tokens WHERE email=?').get(email) },
     chatwork:  { connected: !!db.prepare('SELECT 1 FROM user_chatwork_tokens WHERE email=?').get(email) },
-    github:    { connected: !!(db.prepare('SELECT github_token FROM user_settings WHERE email=?').get(email)?.github_token) },
+    github:    (() => { const r = db.prepare('SELECT github_token, github_login FROM user_settings WHERE email=?').get(email); return { connected: !!(r?.github_token), login: r?.github_login || '' }; })(),
   };
   const e = process.env;
   const system = {
