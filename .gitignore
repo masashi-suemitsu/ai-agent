@@ -8,6 +8,7 @@ ecosystem.config.js
 .env.*
 
 # Claude Code / ローカル開発用
-.claude/
+.claude/settings.local*.json
+.claude/worktrees/
 _ul
 memo/
