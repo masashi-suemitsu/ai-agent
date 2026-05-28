@@ -83,6 +83,24 @@ git push origin main
 ssh claude-agent "cd ~/claude-agent-web && git pull && npm install && pm2 restart all"
 ```
 
+> **再発防止: post-merge フック**  
+> EC2 の `~/claude-agent-web/.git/hooks/post-merge` で、`git pull` 後に `package.json` / `package-lock.json` が変わっていれば自動で `npm install` が走る（2026-05-28 設置）。`git pull` だけで終わって 502 になる事故を防ぐためのセーフティネット。  
+> `pm2 restart` は自動化していない（古いコードのまま動かす状態は事故にならないため）。CIから戻すには明示的に `pm2 restart all`。
+> 
+> フックは git 管理外。万一消えたら以下で再設置:
+> ```bash
+> cat > ~/claude-agent-web/.git/hooks/post-merge << 'EOF'
+> #!/bin/bash
+> changed=$(git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD 2>/dev/null)
+> if echo "$changed" | grep -qE "^package(-lock)?\.json$"; then
+>   cd "$(git rev-parse --show-toplevel)" || exit 0
+>   echo "[post-merge] package.json changed → npm install"
+>   npm install 2>&1
+> fi
+> EOF
+> chmod +x ~/claude-agent-web/.git/hooks/post-merge
+> ```
+
 ### サーバーで直接編集・動作確認したとき
 
 ```bash
