@@ -536,8 +536,15 @@ function isWebhookEnabled() {
   const row = db.prepare("SELECT value FROM app_settings WHERE key='webhook_enabled'").get();
   return row?.value === '1';
 }
+// Web Push 通知のグローバル ON/OFF（admin 専用トグル・デフォルト OFF）
+db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('push_enabled', '0')").run();
+function isPushEnabled() {
+  const row = db.prepare("SELECT value FROM app_settings WHERE key='push_enabled'").get();
+  return row?.value === '1';
+}
 
 async function sendPushNotifications(email, title, body) {
+  if (!isPushEnabled()) return; // 機能フラグ OFF: 送信スキップ
   const subs = db.prepare('SELECT * FROM push_subscriptions WHERE email=?').all(email);
   for (const sub of subs) {
     try {
@@ -947,6 +954,21 @@ app.post('/api/admin/webhook-toggle', (req, res) => {
   const enabled = req.body?.enabled ? '1' : '0';
   db.prepare("INSERT INTO app_settings (key,value) VALUES ('webhook_enabled', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(enabled);
   audit(req.user.email, req.user.name, 'webhook.toggle', { enabled: enabled === '1' });
+  res.json({ ok: true, enabled: enabled === '1' });
+});
+
+// ── Web Push 通知フラグ（admin専用） ──
+app.get('/api/admin/push-toggle', (req, res) => {
+  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim());
+  if (!adminEmails.includes(req.user.email)) return res.status(403).json({ error: '管理者専用' });
+  res.json({ enabled: isPushEnabled() });
+});
+app.post('/api/admin/push-toggle', (req, res) => {
+  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim());
+  if (!adminEmails.includes(req.user.email)) return res.status(403).json({ error: '管理者専用' });
+  const enabled = req.body?.enabled ? '1' : '0';
+  db.prepare("INSERT INTO app_settings (key,value) VALUES ('push_enabled', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(enabled);
+  audit(req.user.email, req.user.name, 'push.toggle', { enabled: enabled === '1' });
   res.json({ ok: true, enabled: enabled === '1' });
 });
 
@@ -6155,9 +6177,13 @@ async function notifyTaskResult(ownerEmail, taskName, status, result) {
 }
 
 // ── Push API ──
-app.get('/api/push/vapid-key', (req, res) => res.json({ publicKey: VAPID_PUBLIC_KEY }));
+app.get('/api/push/vapid-key', (req, res) => {
+  if (!isPushEnabled()) return res.status(503).json({ error: 'push notifications are disabled by administrator' });
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
 
 app.post('/api/push/subscribe', (req, res) => {
+  if (!isPushEnabled()) return res.status(503).json({ error: 'push notifications are disabled by administrator' });
   const { endpoint, keys } = req.body;
   if (!endpoint || !keys?.auth || !keys?.p256dh) return res.status(400).json({ error: 'invalid subscription' });
   // 別ユーザーの endpoint を奪取できないよう owner 検証
@@ -6171,6 +6197,7 @@ app.post('/api/push/subscribe', (req, res) => {
   res.json({ ok: true });
 });
 
+// DELETE は OFF 状態でも許可（既存サブスクの掃除を可能にする）
 app.delete('/api/push/subscribe', (req, res) => {
   const { endpoint } = req.body;
   if (endpoint) db.prepare('DELETE FROM push_subscriptions WHERE email=? AND endpoint=?').run(req.user.email, endpoint);
@@ -6178,9 +6205,10 @@ app.delete('/api/push/subscribe', (req, res) => {
   res.json({ ok: true });
 });
 
+// status は OFF でも許可（UI が enabled 状態を反映できるよう enabled も返す）
 app.get('/api/push/status', (req, res) => {
   const count = db.prepare('SELECT COUNT(*) as n FROM push_subscriptions WHERE email=?').get(req.user.email);
-  res.json({ subscribed: (count?.n || 0) > 0 });
+  res.json({ subscribed: (count?.n || 0) > 0, enabled: isPushEnabled() });
 });
 
 // ── スキル エクスポート / インポート ──

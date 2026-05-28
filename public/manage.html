@@ -420,6 +420,21 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <div id="webhookToggleMsg" style="font-size:12px;margin-top:8px;min-height:18px;"></div>
     </div>
 
+    <!-- Web Push 通知トグル -->
+    <div style="margin-bottom:16px;padding:16px;background:var(--card-bg);border:1px solid var(--border);border-radius:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:240px;">
+          <div style="font-size:14px;font-weight:700;color:var(--text);">🔔 Web Push 通知</div>
+          <div style="font-size:12px;color:var(--text-light);margin-top:4px;line-height:1.5;">ブラウザのバックグラウンドプッシュ通知（AIタスク完了時など）。<strong>使う予定がない間は OFF 推奨</strong>（VAPID鍵管理と購読APIの攻撃面を遮断）。OFF 時は新規購読 API が 503、通知送信もスキップされます。</div>
+        </div>
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;">
+          <span id="pushToggleLabel" style="font-size:13px;font-weight:600;color:var(--text-light);">読み込み中...</span>
+          <input type="checkbox" id="pushToggle" onchange="togglePush()" style="width:18px;height:18px;cursor:pointer;">
+        </label>
+      </div>
+      <div id="pushToggleMsg" style="font-size:12px;margin-top:8px;min-height:18px;"></div>
+    </div>
+
     <div id="userMgmtContent"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
 
@@ -906,7 +921,7 @@ function switchTab(name) {
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   if (name === 'history')   loadHistory();
   if (name === 'rules')     loadCustomRules();
-  if (name === 'users')     { loadUsers(); loadWebhookToggle(); }
+  if (name === 'users')     { loadUsers(); loadWebhookToggle(); loadPushToggle(); }
   if (name === 'usage')     loadUsage();
   if (name === 'dashboard') { loadDashStats(); loadDashAudit(); loadDashTrends(); }
   if (name === 'automation') { loadHooks(); loadBatchHistory(); loadWebhooks(); initPushStatus(); }
@@ -2296,6 +2311,45 @@ function statusColor(s) {
 }
 
 // ─ ユーザー管理 ─
+// Web Push 機能フラグ（admin 専用）
+async function loadPushToggle() {
+  try {
+    const r = await fetch('/api/admin/push-toggle');
+    if (!r.ok) return;
+    const d = await r.json();
+    const cb = document.getElementById('pushToggle');
+    const lb = document.getElementById('pushToggleLabel');
+    if (cb) cb.checked = !!d.enabled;
+    if (lb) lb.textContent = d.enabled ? '✅ ON' : '🔒 OFF';
+  } catch(e) {}
+}
+async function togglePush() {
+  const cb = document.getElementById('pushToggle');
+  const lb = document.getElementById('pushToggleLabel');
+  const msg = document.getElementById('pushToggleMsg');
+  const enabled = cb.checked;
+  if (msg) { msg.style.color = 'var(--text-light)'; msg.textContent = '更新中…'; }
+  try {
+    const r = await fetch('/api/admin/push-toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+    if (!r.ok) throw new Error('failed');
+    const d = await r.json();
+    if (lb) lb.textContent = d.enabled ? '✅ ON' : '🔒 OFF';
+    if (msg) {
+      msg.textContent = d.enabled
+        ? '✅ Web Push 通知を有効化しました'
+        : '🔒 Web Push 通知を無効化しました（新規購読 API は 503・送信はスキップ）';
+      setTimeout(() => { if (msg) msg.textContent = ''; }, 4000);
+    }
+  } catch(e) {
+    if (msg) { msg.style.color = '#e53e3e'; msg.textContent = 'エラー: ' + (e.message || 'failed'); }
+    if (cb) cb.checked = !enabled; // 失敗時はロールバック
+  }
+}
+
 // Webhook 機能フラグ（admin 専用）
 async function loadWebhookToggle() {
   try {
