@@ -3660,12 +3660,13 @@ app.post('/api/ai/chat', async (req, res) => {
 
 // ── Google Calendar API ──
 function getCalendarClientForUser(user) {
-  let tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_calendar_tokens WHERE email=?').get(user.email);
-  let tableName = 'user_calendar_tokens';
+  // メインログイントークン（user_drive_tokens）が calendar フルスコープを持つため優先。
+  // 旧 user_calendar_tokens は calendar.readonly のみの場合があり書込不可なのでフォールバック扱い。
+  let tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
+  let tableName = 'user_drive_tokens';
   if (!tokenRow?.refresh_token) {
-    // メインログインのスコープに calendar が含まれるためフォールバック
-    tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
-    tableName = 'user_drive_tokens';
+    tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_calendar_tokens WHERE email=?').get(user.email);
+    tableName = 'user_calendar_tokens';
   }
   if (!tokenRow?.refresh_token) {
     throw new Error('Googleカレンダー未連携。一度ログアウトして再ログインし、カレンダー権限を許可してください');
@@ -3820,11 +3821,13 @@ app.get('/api/drive/read/:id', async (req, res) => {
 
 // ── Gmail API ──
 function getGmailClientForUser(user) {
-  let tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_gmail_tokens WHERE email=?').get(user.email);
-  let tableName = 'user_gmail_tokens';
+  // メインログイントークン（user_drive_tokens）が gmail.send/readonly を持つため優先。
+  // 旧 user_gmail_tokens は gmail.readonly のみで送信不可なのでフォールバック扱い。
+  let tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
+  let tableName = 'user_drive_tokens';
   if (!tokenRow?.refresh_token) {
-    tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
-    tableName = 'user_drive_tokens';
+    tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_gmail_tokens WHERE email=?').get(user.email);
+    tableName = 'user_gmail_tokens';
   }
   if (!tokenRow?.refresh_token) {
     throw new Error('Gmail未連携。一度ログアウトして再ログインし、Gmail権限を許可してください');
