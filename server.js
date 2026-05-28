@@ -121,10 +121,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','compare_models','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  recruit: new Set(['query_corp_db','call_oss_ai','compare_models','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  user:    new Set(['call_oss_ai','compare_models','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  recruit: new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  user:    new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
 };
 
 app.set('trust proxy', 1);
@@ -1649,6 +1649,126 @@ async function executeTool(name, input, user) {
       return await callGenericApi(user, input, 'hubspot', 'https://api.hubapi.com', process.env.HUBSPOT_TOKEN, 'HUBSPOT_TOKEN');
     case 'call_lineworks_api':
       return await callGenericApi(user, input, 'lineworks', 'https://www.worksapis.com', process.env.LINEWORKS_TOKEN, 'LINEWORKS_TOKEN');
+    case 'extract_receipt': {
+      audit(user.email, user.name, 'tool.extract_receipt', { fileId: input.file_id });
+      const drive = getDriveClientForUser(user);
+      const meta = await drive.files.get({ fileId: input.file_id, fields: 'name,mimeType' });
+      const mt = meta.data.mimeType;
+      const isPdf = mt === 'application/pdf';
+      const isImg = mt?.startsWith('image/');
+      if (!isPdf && !isImg) throw new Error(`${mt} は領収書抽出非対応（画像/PDFのみ）`);
+      const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'arraybuffer' });
+      const buf = Buffer.from(r.data);
+      const limit = isImg ? 5 * 1024 * 1024 : 32 * 1024 * 1024;
+      if (buf.length > limit) throw new Error(`ファイルが大きすぎます（${(buf.length/1024/1024).toFixed(1)}MB > ${limit/1024/1024}MB）`);
+      const block = isImg
+        ? { type: 'image', source: { type: 'base64', media_type: mt, data: buf.toString('base64') } }
+        : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') } };
+      const extra = (input.extra_fields || []).join(', ');
+      const prompt = `この領収書/レシート/請求書から以下の情報を抽出し、有効なJSONのみで回答してください（前後のテキスト一切不要）:
+{
+  "vendor": "店舗名・発行元",
+  "date": "YYYY-MM-DD",
+  "total_amount": 数値,
+  "currency": "JPY等",
+  "tax_amount": 数値 or null,
+  "tax_rate": 数値 or null,
+  "items": [{"name": "...", "quantity": 数値, "unit_price": 数値, "amount": 数値}],
+  "payment_method": "現金/カード/その他",
+  "receipt_number": "領収書番号 or null",
+  "category": "推測カテゴリ（飲食/交通/書籍/通信費等）",
+  "confidence": "high/medium/low"${extra ? `,\n  ${input.extra_fields.map(f => `"${f}": ""`).join(',\n  ')}` : ''}
+}
+読み取れない項目は null にする。`;
+      const resp = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6', max_tokens: 1500,
+        messages: [{ role: 'user', content: [block, { type: 'text', text: prompt }] }]
+      });
+      const text = (resp.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { error: 'JSON抽出失敗', raw: text };
+      try { return { ok: true, extracted: JSON.parse(jsonMatch[0]), file_name: meta.data.name }; }
+      catch (e) { return { error: 'JSONパース失敗: ' + e.message, raw: jsonMatch[0] }; }
+    }
+    case 'mask_pii': {
+      audit(user.email, user.name, 'tool.mask_pii', { len: input.text?.length });
+      const keep = new Set(input.keep || []);
+      let s = String(input.text || '');
+      const counts = {};
+      const mask = (key, regex, label) => {
+        if (keep.has(key)) return;
+        let n = 0;
+        s = s.replace(regex, () => { n++; return label; });
+        if (n > 0) counts[key] = n;
+      };
+      mask('email', /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, '[EMAIL]');
+      mask('phone', /(?:\+?81|0)\d{1,4}[-\s]?\d{1,4}[-\s]?\d{3,4}/g, '[PHONE]');
+      mask('credit_card', /\b(?:\d[ -]*?){13,19}\b/g, '[CARD]');
+      mask('mynumber', /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, '[MYNUMBER]');
+      mask('postal_code', /〒?\s?\d{3}-?\d{4}/g, '[POSTAL]');
+      return { masked: s, counts, original_length: input.text?.length || 0 };
+    }
+    case 'review_contract': {
+      audit(user.email, user.name, 'tool.review_contract', { fileId: input.file_id });
+      const drive = getDriveClientForUser(user);
+      const meta = await drive.files.get({ fileId: input.file_id, fields: 'name,mimeType' });
+      const mt = meta.data.mimeType;
+      let documentBlock;
+      let plainText = '';
+      if (mt === 'application/pdf') {
+        const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'arraybuffer' });
+        documentBlock = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: Buffer.from(r.data).toString('base64') } };
+      } else if (mt === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'arraybuffer' });
+        const x = await mammoth.extractRawText({ buffer: Buffer.from(r.data) });
+        plainText = x.value;
+      } else if (mt === 'application/vnd.google-apps.document') {
+        const r = await drive.files.export({ fileId: input.file_id, mimeType: 'text/plain' }, { responseType: 'text' });
+        plainText = String(r.data);
+      } else if (mt?.startsWith('text/')) {
+        const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'text' });
+        plainText = String(r.data);
+      } else {
+        throw new Error(`${mt} はレビュー非対応（PDF/Word/Docs/text のみ）`);
+      }
+      const focus = (input.focus || ['liability','term','cancellation','payment','confidentiality','ip']).join(', ');
+      const stance = input.counterparty ? `相手方（${input.counterparty}）の立場` : '自社の立場';
+      const sys = `あなたは契約書レビューを支援するアシスタントです。${stance}で契約書を読み、リスクや確認すべき条項を指摘してください。あくまで参考意見であり最終判断は法務担当が行うことを前提に。重点観点: ${focus}`;
+      const userBlocks = documentBlock
+        ? [documentBlock, { type: 'text', text: '上記契約書をレビューしてください。下記JSON形式で回答してください（前後説明不要）:\n{"summary":"全体概要","risks":[{"clause":"条項","level":"high|medium|low","issue":"問題点","suggestion":"対応案"}],"checkpoints":["確認すべき事項"],"overall_score":"概ね妥当/要修正/危険"}' }]
+        : [{ type: 'text', text: `契約書テキスト:\n\n${plainText.slice(0, 50000)}\n\n上記契約書をレビューしてください。下記JSON形式で回答してください（前後説明不要）:\n{"summary":"全体概要","risks":[{"clause":"条項","level":"high|medium|low","issue":"問題点","suggestion":"対応案"}],"checkpoints":["確認すべき事項"],"overall_score":"概ね妥当/要修正/危険"}` }];
+      const resp = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6', max_tokens: 4096, system: sys,
+        messages: [{ role: 'user', content: userBlocks }]
+      });
+      const text = (resp.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { error: 'JSON抽出失敗', raw: text };
+      try { return { ok: true, file_name: meta.data.name, review: JSON.parse(jsonMatch[0]) }; }
+      catch (e) { return { error: 'JSONパース失敗: ' + e.message, raw: jsonMatch[0] }; }
+    }
+    case 'transcribe_audio': {
+      if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY 未設定。Whisper API利用にはOpenAI APIキーを管理者に依頼してください');
+      audit(user.email, user.name, 'tool.transcribe', { fileId: input.file_id });
+      const drive = getDriveClientForUser(user);
+      const meta = await drive.files.get({ fileId: input.file_id, fields: 'name,mimeType,size' });
+      const size = parseInt(meta.data.size || '0', 10);
+      if (size > 25 * 1024 * 1024) throw new Error(`Whisper APIは25MBまで（実際: ${(size/1024/1024).toFixed(1)}MB）`);
+      const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'arraybuffer' });
+      const buf = Buffer.from(r.data);
+      const fd = new FormData();
+      fd.append('file', new Blob([buf], { type: meta.data.mimeType }), meta.data.name);
+      fd.append('model', 'whisper-1');
+      fd.append('language', input.language || 'ja');
+      const tr = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + process.env.OPENAI_API_KEY },
+        body: fd
+      });
+      const d = await tr.json();
+      if (!tr.ok) throw new Error(`Whisper error: ${d.error?.message || tr.status}`);
+      return { ok: true, file_name: meta.data.name, text: d.text };
+    }
     case 'compare_models': {
       const MODEL_MAP = { haiku: 'claude-haiku-4-5-20251001', sonnet: 'claude-sonnet-4-6' };
       const models = (input.models && input.models.length > 0) ? input.models : ['haiku', 'sonnet'];
