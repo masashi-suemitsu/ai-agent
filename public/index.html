@@ -1856,6 +1856,15 @@ async function send() {
   const decoder = new TextDecoder();
   let buf = '';
 
+  // 5分応答なければタイムアウトエラー表示
+  let chatTimeoutId = setTimeout(() => {
+    reader.cancel();
+    aiBubble.innerHTML = '<div class="ai-error">⚠️ AIの応答がタイムアウトしました。もう一度お試しください。</div>';
+    sending = false;
+    document.getElementById('sendBtn').disabled = false;
+    document.getElementById('input').focus();
+  }, 5 * 60 * 1000);
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -1924,6 +1933,14 @@ async function send() {
             compare_models: 'AIモデルを比較中',
             mask_pii: '個人情報をマスク中',
             fetch_url: 'Webページを取得中',
+            get_search_console: 'Search Consoleを取得中',
+            get_analytics: 'GA4アナリティクスを取得中',
+            computer: 'ブラウザを操作中',
+            browser_navigate: 'ブラウザでページを開いています',
+            browser_screenshot: 'スクリーンショットを取得中',
+            browser_click: 'ブラウザでクリック中',
+            browser_type: 'ブラウザに入力中',
+            browser_get_text: 'ページのテキストを取得中',
           };
           let toolCallsEl = aiBubble.querySelector('.tool-calls');
           if (!toolCallsEl) {
@@ -2023,6 +2040,7 @@ async function send() {
     }
   }
 
+  clearTimeout(chatTimeoutId);
   sending = false;
   document.getElementById('sendBtn').disabled = false;
   document.getElementById('input').focus();
