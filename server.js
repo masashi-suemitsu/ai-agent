@@ -697,6 +697,7 @@ function requireAdmin(req, res, next) {
 
 // ── 認証不要ルート ──
 app.get('/login', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 

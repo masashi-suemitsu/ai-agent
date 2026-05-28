@@ -2030,8 +2030,50 @@ async function loadConnectors() {
       </div>`;
   }).join('');
 
+  const isAdmin = currentUser?.role === 'admin';
   const systemCards = SYSTEM_CONNECTORS.map(c => {
     const ok = data.system[c.key];
+    const badge = ok
+      ? `<span style="font-size:11px;font-weight:700;color:#276749;background:#c6f6d5;padding:2px 9px;border-radius:20px;white-space:nowrap;">● 設定済み</span>`
+      : `<span style="font-size:11px;color:var(--text-light);background:var(--muted-bg);border:1px solid var(--border);padding:2px 9px;border-radius:20px;white-space:nowrap;">─ 未設定</span>`;
+
+    // Slack は admin が UI から Bot Token を設定できる
+    if (c.key === 'slack') {
+      const adminForm = isAdmin ? `
+        <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+          ${ok ? `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <span style="font-size:12px;color:#276749;">✓ Bot Token 設定済み</span>
+              <button class="btn btn-danger" onclick="slackDisconnect()" style="font-size:12px;">接続を解除する</button>
+            </div>` : `
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <input id="slackTokenInput" type="password" placeholder="xoxb-xxxx-xxxx-xxxx"
+                style="flex:1;min-width:220px;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;font-family:monospace;"
+                onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"
+                onkeydown="if(event.key==='Enter')slackConnect()">
+              <button class="btn btn-primary" onclick="slackConnect()" style="white-space:nowrap;">接続する</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-light);margin-top:6px;">
+              <a href="https://api.slack.com/apps" target="_blank" style="color:var(--primary);">api.slack.com/apps</a> でアプリを作成 → OAuth Scopes: <code>channels:read, chat:write, channels:history</code> → Bot Token (xoxb-...) をコピー
+            </div>`
+          }
+        </div>` : '';
+      return `
+        <div class="card" style="display:flex;flex-direction:column;gap:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:34px;height:34px;background:var(--muted-bg);border:1px solid var(--border);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">${c.icon}</div>
+              <div>
+                <div style="font-size:14px;font-weight:700;">${c.name}</div>
+                <div style="font-size:11px;color:var(--text-light);">${c.desc}</div>
+              </div>
+            </div>
+            ${badge}
+          </div>
+          ${adminForm}
+        </div>`;
+    }
+
     return `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:var(--panel-bg);border:1px solid var(--border);border-radius:10px;">
         <div style="display:flex;align-items:center;gap:10px;">
@@ -2041,13 +2083,12 @@ async function loadConnectors() {
             <div style="font-size:11px;color:var(--text-light);">${c.desc}</div>
           </div>
         </div>
-        ${ok
-          ? `<span style="font-size:11px;font-weight:700;color:#276749;background:#c6f6d5;padding:2px 9px;border-radius:20px;white-space:nowrap;">● 設定済み</span>`
-          : `<span style="font-size:11px;color:var(--text-light);background:var(--muted-bg);border:1px solid var(--border);padding:2px 9px;border-radius:20px;white-space:nowrap;">─ 未設定</span>`
-        }
+        ${badge}
       </div>`;
-  }).join('');
+  });
 
+  const slackCard  = systemCards.find((_,i) => SYSTEM_CONNECTORS[i].key === 'slack') || '';
+  const otherCards = systemCards.filter((_,i) => SYSTEM_CONNECTORS[i].key !== 'slack');
   el.innerHTML = `
     <div style="max-width:720px;display:grid;gap:24px;">
       <div>
@@ -2056,7 +2097,8 @@ async function loadConnectors() {
       </div>
       <div>
         <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.04em;margin-bottom:12px;">🔧 システム連携（管理者が設定・全員で共有）</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;">${systemCards}</div>
+        ${slackCard}
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-top:8px;">${otherCards.join('')}</div>
       </div>
     </div>`;
 }
@@ -2084,6 +2126,35 @@ async function saveGithubToken() {
     alert(e.message);
     if (btn) { btn.disabled = false; btn.textContent = '接続する'; }
   }
+}
+
+async function slackConnect() {
+  const input = document.getElementById('slackTokenInput');
+  if (!input?.value.trim()) return;
+  const btn = input.nextElementSibling;
+  if (btn) { btn.disabled = true; btn.textContent = '接続中...'; }
+  try {
+    const resp = await fetch('/api/settings/slack', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: input.value.trim() })
+    });
+    const d = await resp.json();
+    if (!resp.ok) throw new Error(d.error || '接続失敗');
+    _usageLoaded = false;
+    await loadConnectors();
+    alert(`✅ Slack（${d.workspace}）に接続しました`);
+  } catch(e) {
+    alert('❌ ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '接続する'; }
+  }
+}
+
+async function slackDisconnect() {
+  if (!confirm('Slack との接続を解除しますか？')) return;
+  try {
+    await fetch('/api/settings/slack', { method: 'DELETE' });
+    await loadConnectors();
+  } catch(e) { alert(e.message); }
 }
 
 async function loadCustomRules() {
