@@ -2926,7 +2926,7 @@ async function executeTool(name, input, user) {
         return {
           preview: true,
           message: 'これはPowerPoint作成プレビューです。スライド構成をユーザーに提示し、承認を得てから confirmed:true で再度呼んでください。',
-          file_name: input.file_name + '.pptx',
+          file_name: String(input.file_name || 'presentation').replace(/[\\/:*?"<>|]/g, '_').slice(0, 50) + '.pptx',
           title: input.title || input.file_name,
           slide_count: slides.length,
           outline: slides.map((s, i) => ({
@@ -2966,7 +2966,7 @@ async function executeTool(name, input, user) {
         }
       }
       const buf = await pptx.write({ outputType: 'nodebuffer' });
-      const fileMetadata = { name: input.file_name + '.pptx' };
+      const fileMetadata = { name: String(input.file_name || 'presentation').replace(/[\\/:*?"<>|]/g, '_').slice(0, 50) + '.pptx' };
       if (input.folder_id) fileMetadata.parents = [input.folder_id];
       const r = await drive.files.create({
         requestBody: fileMetadata,
@@ -3317,9 +3317,9 @@ ${(input.candidate_info || '').slice(0, 3000)}
       });
       const text = (resp.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return { error: 'スクリーニング結果の生成に失敗しました', raw: text.slice(0, 500) };
+      if (!jsonMatch) throw new Error('スクリーニング結果の生成に失敗しました: ' + text.slice(0, 200));
       try { return { ok: true, screening: JSON.parse(jsonMatch[0]) }; }
-      catch (e) { return { error: 'JSONパース失敗: ' + e.message, raw: jsonMatch[0].slice(0, 500) }; }
+      catch (e) { throw new Error('JSONパース失敗: ' + e.message); }
     }
 
     case 'bulk_register_kintone': {
