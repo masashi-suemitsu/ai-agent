@@ -4125,6 +4125,8 @@ ${(input.candidate_info || '').slice(0, 3000)}
 
     case 'browser_navigate': {
       if (user.role !== 'admin') throw new Error('browser_navigate は管理者のみ使用できます');
+      const navUrl = new URL(input.url);
+      if (isPrivateOrLoopbackHost(navUrl.hostname)) throw new Error(`内部アドレス ${navUrl.hostname} へのアクセスは禁止されています`);
       const page = await getCwPage(user.email);
       await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await page.waitForTimeout(1000);
@@ -4308,9 +4310,9 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
         ...(useBeta ? { betas: betaList, ...(useMcpBeta ? { mcp_servers: mcpServers } : {}) } : {})
       });
 
-      // ストリームエラーを早期に捕捉してクライアントに返す
-      stream.on('error', (err) => {
-        res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      // ストリームエラーを early catch（once で二重書き込み防止）
+      stream.once('error', (err) => {
+        if (!res.writableEnded) res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
       });
 
       for await (const ev of stream) {
@@ -4637,7 +4639,10 @@ app.get('/api/skills', (req, res) => {
 app.post('/api/skills', (req, res) => {
   const { name, title, description, steps, shared } = req.body;
   if (!name || !/^[a-z0-9-]+$/.test(name)) return res.status(400).json({ error: 'name は英小文字・数字・ハイフンのみ' });
-  if (!title) return res.status(400).json({ error: 'title は必須' });
+  if (!title?.trim()) return res.status(400).json({ error: 'title は必須' });
+  if (title.length > 200) return res.status(400).json({ error: 'title が長すぎます（最大200文字）' });
+  if ((description || '').length > 2000) return res.status(400).json({ error: 'description が長すぎます（最大2000文字）' });
+  if ((steps || '').length > 50000) return res.status(400).json({ error: 'steps が長すぎます（最大50000文字）' });
 
   audit(req.user.email, req.user.name, 'skill.save', { name, title });
 
@@ -4684,6 +4689,9 @@ app.put('/api/skills/:id', (req, res) => {
   }
 
   if (!title?.trim()) return res.status(400).json({ error: 'title は必須' });
+  if (title.length > 200) return res.status(400).json({ error: 'title が長すぎます（最大200文字）' });
+  if ((description || '').length > 2000) return res.status(400).json({ error: 'description が長すぎます（最大2000文字）' });
+  if ((steps || '').length > 50000) return res.status(400).json({ error: 'steps が長すぎます（最大50000文字）' });
   // 更新前の内容をバージョンとして自動保存
   const maxVer = db.prepare('SELECT MAX(version_num) as v FROM skill_versions WHERE skill_id=?').get(req.params.id);
   const nextVer = (maxVer?.v || 0) + 1;
