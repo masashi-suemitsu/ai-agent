@@ -1061,19 +1061,30 @@ async function extractAndSaveMemories(email, conversationMessages) {
     ).join('\n');
     const r = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 400,
+      max_tokens: 300,
       messages: [{
         role: 'user',
-        content: `会話から将来の会話でも役立つ「記憶すべき重要な事実」のみを抽出してください。\n- ユーザーの好み・習慣・繰り返す指示のみ対象\n- 一時的な内容・一般的な知識は除外\n- 該当なければ「なし」と返す\n- 箇条書きで返す\n\n会話:\n${recent}`
+        content: `以下の会話を読み、将来の別の会話でも役立つユーザー固有の事実のみをJSON配列で返してください。
+
+【保存すべきもの】ユーザーの繰り返す好み・習慣・明示的な指示・業務上の重要な設定値
+【保存しないもの】一時的な操作・一般知識・「記憶すべき事実」などのメタ説明・不確かな推測・単発の質問
+
+出力形式: ["事実1", "事実2"] または該当なし→ []
+説明文・前置き・箇条書きは一切不要。JSONのみ返すこと。
+
+会話:
+${recent}`
       }]
     });
     const text = r.content[0]?.text?.trim() || '';
-    if (!text || text === 'なし' || (text.includes('なし') && text.length < 15)) return;
-    const facts = text.split('\n').filter(l => l.trim().length > 5 && !/^#+/.test(l.trim()));
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return;
+    let facts;
+    try { facts = JSON.parse(match[0]); } catch { return; }
+    if (!Array.isArray(facts) || facts.length === 0) return;
     for (const fact of facts.slice(0, 3)) {
-      const clean = fact.replace(/^[-・*•\d.]\s*/, '').trim();
-      if (clean.length > 5) {
-        db.prepare('INSERT INTO user_memories (email, memory) VALUES (?,?)').run(email, clean.slice(0, 300));
+      if (typeof fact === 'string' && fact.trim().length >= 15) {
+        db.prepare('INSERT INTO user_memories (email, memory) VALUES (?,?)').run(email, fact.trim().slice(0, 300));
       }
     }
   } catch(e) {
