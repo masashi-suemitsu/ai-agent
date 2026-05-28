@@ -676,6 +676,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
     </div>
     <span id="userBadge" style="font-size:12px;color:#718096;"></span>
     <span id="roleBadge" style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;display:none;"></span>
+    <button class="header-btn" type="button" onclick="exportConversation()" title="現在の会話をMarkdownでダウンロード">⬇ エクスポート</button>
     <button class="header-btn" id="themeToggleBtn" type="button" onclick="toggleTheme()" title="テーマ切替 (Ctrl+Shift+L)">🌙</button>
     <button class="header-btn" type="button" onclick="showShortcutHelp()" title="キーボードショートカット (?)">⌨</button>
     <a href="/about" class="header-btn" style="text-decoration:none;" title="サービス概要・使い方">❔ ヘルプ</a>
@@ -1279,6 +1280,26 @@ function newTask() {
   document.getElementById('input').value = '';
   autoResize(document.getElementById('input'));
   document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+}
+
+async function exportConversation() {
+  if (!currentConvId) { alert('会話を選択してください'); return; }
+  try {
+    const msgs = await fetch(`/api/conversations/${currentConvId}/messages`).then(r => r.json());
+    if (!msgs.length) { alert('会話が空です'); return; }
+    const lines = [`# 会話エクスポート`, `日時: ${new Date().toLocaleString('ja-JP')}`, ''];
+    for (const m of msgs) {
+      lines.push(`## ${m.role === 'user' ? 'ユーザー' : 'AI'}`);
+      lines.push(m.content || '');
+      lines.push('');
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `conversation_${currentConvId}_${new Date().toISOString().slice(0,10)}.md`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch(e) { alert('エクスポートに失敗しました: ' + e.message); }
 }
 
 function createEmptyState() {
