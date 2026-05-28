@@ -617,6 +617,51 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
 .modal-btn-save { flex: 2; background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .12s; }
 .modal-btn-save:hover:not(:disabled) { background: var(--primary-dark); }
 .modal-btn-save:disabled { background: #a0aec0; cursor: default; }
+
+/* ─ Feature Mode Menu ─ */
+.feature-btn {
+  background: var(--panel-bg); border: 1.5px solid var(--border); border-radius: 10px;
+  padding: 0 12px; height: 40px; cursor: pointer; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 5px; transition: all .15s; flex-shrink: 0;
+  color: var(--text); white-space: nowrap;
+}
+.feature-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+.feature-btn.menu-open { border-color: var(--primary); color: var(--primary); }
+.feature-menu-popup {
+  position: absolute; bottom: calc(100% + 8px); left: 0;
+  background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: 16px; box-shadow: 0 8px 40px rgba(0,0,0,.18);
+  padding: 14px; z-index: 200; width: 440px;
+  display: none; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.feature-menu-popup.open { display: grid; }
+.fmi {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: 10px; cursor: pointer; transition: all .12s;
+  border: 1.5px solid transparent; user-select: none;
+}
+.fmi:hover { background: var(--muted-bg); border-color: var(--border); }
+.fmi.active { border-color: currentColor; }
+.fmi-icon { font-size: 22px; flex-shrink: 0; line-height: 1; }
+.fmi-text { flex: 1; min-width: 0; }
+.fmi-label { font-size: 13px; font-weight: 700; color: var(--text); }
+.fmi-desc  { font-size: 11px; color: var(--text-light); margin-top: 2px; }
+.fmi-check { font-size: 14px; font-weight: 700; flex-shrink: 0; }
+/* ─ Mode Bar ─ */
+.mode-bar {
+  display: none; align-items: center; gap: 10px;
+  padding: 7px 18px; border-top: 2px solid transparent;
+  border-radius: 0; font-size: 12px;
+}
+.mode-bar.show { display: flex; }
+.mode-bar-icon  { font-size: 18px; flex-shrink: 0; }
+.mode-bar-label { font-weight: 700; white-space: nowrap; }
+.mode-bar-desc  { flex: 1; color: var(--text-light); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mode-bar-clear {
+  background: none; border: none; cursor: pointer; color: var(--text-light);
+  font-size: 16px; padding: 0 4px; line-height: 1; transition: color .12s; flex-shrink: 0;
+}
+.mode-bar-clear:hover { color: var(--danger); }
 </style>
 </head>
 <body>
@@ -671,6 +716,12 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
           💡 不具合・改善要望はこちら → 改善提案ボックス
         </a>
       </div>
+    </div>
+    <div class="mode-bar" id="modeBar">
+      <span class="mode-bar-icon" id="modeBarIcon"></span>
+      <span class="mode-bar-label" id="modeBarLabel"></span>
+      <span class="mode-bar-desc"  id="modeBarDesc"></span>
+      <button class="mode-bar-clear" onclick="clearMode()" title="モードを解除">✕</button>
     </div>
     <div class="attach-bar" id="attachBar" style="display:none;"></div>
     <div class="input-area">
@@ -1367,6 +1418,170 @@ function handleKey(e) {
     if (e.key === 'Escape') { hideSlashMenu(); return; }
   }
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+}
+
+// ─ Feature Mode Menu ─
+const FEATURE_MODES = [
+  {
+    id: 'contract', icon: '📋', label: '契約書チェック',
+    desc: 'PDF・Wordのリスク条項を分析',
+    color: '#5b6eff',
+    fileAccept: '.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    fileRequired: true,
+    placeholder: '契約書（PDF・Word）を添付してください',
+    autoMsg: (n) => `この契約書「${n}」を法務観点でレビューしてください。リスク条項・確認ポイントを抽出してください。`
+  },
+  {
+    id: 'receipt', icon: '🧾', label: '請求書・レシート読取',
+    desc: '画像・PDFから金額・日付を自動抽出',
+    color: '#38a169',
+    fileAccept: 'image/*,application/pdf',
+    fileRequired: true,
+    placeholder: '請求書・レシートの画像またはPDFを添付してください',
+    autoMsg: (n) => `この書類「${n}」から金額・日付・品目を抽出してください。`
+  },
+  {
+    id: 'jobposting', icon: '📝', label: '求人原稿チェック',
+    desc: '法令遵守・品質・訴求力を評価',
+    color: '#d97706',
+    fileRequired: false,
+    placeholder: '求人原稿のテキストを貼り付けてください（職種・仕事内容・給与など）',
+    textPrefix: 'この求人原稿をチェックしてください:\n\n'
+  },
+  {
+    id: 'minutes', icon: '🗒️', label: '議事録作成',
+    desc: '文字起こし・メモから議事録を自動生成',
+    color: '#6366f1',
+    fileAccept: 'audio/*,video/*',
+    fileRequired: false,
+    placeholder: '会議の文字起こしを貼り付けるか、音声ファイルを添付してください',
+    textPrefix: '以下の会議テキストから議事録を作成してください:\n\n',
+    audioMsg: (n) => `音声ファイル「${n}」を文字起こしして議事録を作成してください。`
+  },
+  {
+    id: 'health', icon: '🖥️', label: 'サーバーヘルスチェック',
+    desc: 'URL稼働・SSL・応答時間を一括確認',
+    color: '#0891b2',
+    fileRequired: false,
+    placeholder: 'チェックするURLを入力してください（改行区切りで複数可）',
+    textPrefix: '以下のURLのサーバーヘルスチェックをしてください:\n'
+  },
+  {
+    id: 'data', icon: '📊', label: 'データアシスタント',
+    desc: '社内DBを自然言語で検索・分析',
+    color: '#7c3aed',
+    fileRequired: false,
+    placeholder: '知りたいことを入力してください（例: 今月の案件数は？）'
+  },
+  {
+    id: 'report', icon: '📈', label: '週次レポート生成',
+    desc: '案件・月報・請求のKPIを自動集計',
+    color: '#dc2626',
+    fileRequired: false,
+    placeholder: '「今月のレポートを生成して」または送信ボタンを押してください',
+    autoMsg: () => '今月の週次レポートを生成してください。案件数・月報提出・請求状況を含めてください。'
+  }
+];
+
+let currentMode = null;
+
+function toggleFeatureMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('featureMenuPopup');
+  const btn  = document.getElementById('featureBtn');
+  const open = menu.classList.toggle('open');
+  btn.classList.toggle('menu-open', open);
+  if (open) {
+    renderFeatureMenu();
+    setTimeout(() => document.addEventListener('click', closeFeatureMenuOutside, { once: true }), 0);
+  }
+}
+
+function closeFeatureMenuOutside(e) {
+  const menu = document.getElementById('featureMenuPopup');
+  const btn  = document.getElementById('featureBtn');
+  if (!menu.contains(e.target) && e.target !== btn) {
+    menu.classList.remove('open');
+    btn.classList.remove('menu-open');
+  }
+}
+
+function setMode(modeId) {
+  currentMode = FEATURE_MODES.find(m => m.id === modeId) || null;
+  document.getElementById('featureMenuPopup').classList.remove('open');
+  document.getElementById('featureBtn').classList.remove('menu-open');
+  if (!currentMode) { clearMode(); return; }
+
+  // mode bar
+  const bar = document.getElementById('modeBar');
+  document.getElementById('modeBarIcon').textContent  = currentMode.icon;
+  document.getElementById('modeBarLabel').textContent = currentMode.label + 'モード';
+  document.getElementById('modeBarLabel').style.color = currentMode.color;
+  document.getElementById('modeBarDesc').textContent  = currentMode.placeholder || '';
+  bar.style.borderTopColor = currentMode.color + '66';
+  bar.style.background     = currentMode.color + '14';
+  bar.classList.add('show');
+
+  // feature button
+  const btn = document.getElementById('featureBtn');
+  btn.textContent    = currentMode.icon + ' ' + currentMode.label;
+  btn.style.borderColor = currentMode.color;
+  btn.style.color       = currentMode.color;
+  btn.style.background  = currentMode.color + '14';
+
+  // file input accept
+  const fi = document.getElementById('fileInput');
+  fi.setAttribute('accept', currentMode.fileAccept || 'image/jpeg,image/png,image/gif,image/webp,application/pdf');
+  // file input multiple: only single for file-required modes
+  fi.multiple = !currentMode.fileRequired;
+
+  // textarea placeholder
+  document.getElementById('input').placeholder = currentMode.placeholder || 'どんな仕事を任せますか？';
+
+  renderFeatureMenu();
+
+  // auto-send for report mode (no input required)
+  if (modeId === 'report' && currentMode.autoMsg) {
+    const ta = document.getElementById('input');
+    ta.value = currentMode.autoMsg();
+    ta.dispatchEvent(new Event('input'));
+    clearMode();
+    setTimeout(() => send(), 50);
+    return;
+  }
+
+  document.getElementById('input').focus();
+}
+
+function clearMode() {
+  currentMode = null;
+  document.getElementById('modeBar').classList.remove('show');
+  const fi = document.getElementById('fileInput');
+  fi.setAttribute('accept', 'image/jpeg,image/png,image/gif,image/webp,application/pdf');
+  fi.multiple = true;
+  const ta = document.getElementById('input');
+  ta.placeholder = 'どんな仕事を任せますか？（/ でスキル検索）';
+  const btn = document.getElementById('featureBtn');
+  btn.textContent   = '🎯 機能を選ぶ';
+  btn.style.borderColor = '';
+  btn.style.color       = '';
+  btn.style.background  = '';
+  renderFeatureMenu();
+}
+
+function renderFeatureMenu() {
+  const menu = document.getElementById('featureMenuPopup');
+  menu.innerHTML = FEATURE_MODES.map(m => {
+    const active = currentMode?.id === m.id;
+    return `<div class="fmi${active ? ' active' : ''}" style="color:${m.color}" onclick="setMode('${m.id}')">
+      <span class="fmi-icon">${m.icon}</span>
+      <div class="fmi-text">
+        <div class="fmi-label" style="color:var(--text)">${m.label}</div>
+        <div class="fmi-desc">${m.desc}</div>
+      </div>
+      ${active ? '<span class="fmi-check">✓</span>' : ''}
+    </div>`;
+  }).join('');
 }
 
 async function send() {
@@ -2509,6 +2724,25 @@ async function addFile(file) {
   }
   mediaAttachments.push({ name: file.name, kind, mediaType: file.type, base64 });
   renderAttachBar();
+  // ファイルモードで自動メッセージ・自動送信
+  if (currentMode) {
+    const isAudio = file.type.startsWith('audio/') || file.type.startsWith('video/');
+    let autoText = '';
+    if (isAudio && currentMode.audioMsg) {
+      autoText = currentMode.audioMsg(file.name);
+    } else if (currentMode.autoMsg) {
+      autoText = currentMode.autoMsg(file.name);
+    }
+    if (autoText) {
+      const ta = document.getElementById('input');
+      ta.value = autoText;
+      ta.dispatchEvent(new Event('input'));
+    }
+    if (currentMode.fileRequired) {
+      clearMode();
+      setTimeout(() => send(), 150);
+    }
+  }
 }
 
 async function onFilesPicked(e) {
