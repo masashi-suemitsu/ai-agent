@@ -38,13 +38,17 @@ git commit -m "feat/fix/ops: 変更内容"
 git push origin main
 
 # 2. EC2 に反映（server.js 変更あり）
-ssh claude-agent "cd ~/claude-agent-web && git pull && npm install && pm2 restart all"
+ssh claude-agent "cd ~/claude-agent-web && git pull && npm install && ./scripts/preflight.sh && pm2 restart all"
 
 # HTML/CSS のみ変更の場合（pm2 restart 不要）
 ssh claude-agent "cd ~/claude-agent-web && git pull"
 ```
 
 > `npm install` は package.json に変化がなくても冪等なので毎回実行して問題なし。
+>
+> `./scripts/preflight.sh` は構文チェック＋全 require の解決検証で、失敗すると `&&` で
+> `pm2 restart all` が走らない。webpush 不在等の MODULE_NOT_FOUND を pm2 へ伝播させず、
+> 502 クラッシュループを未然に止めるための安全弁（2026-05-28 の事案を受けて追加）。
 
 ---
 

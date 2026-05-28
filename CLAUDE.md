@@ -80,7 +80,8 @@ git commit -m "feat/fix/ops: 変更内容"
 git push origin main
 
 # サーバーに反映（npm install は常に実行 — package.json 変更がなくても冪等で安全）
-ssh claude-agent "cd ~/claude-agent-web && git pull && npm install && pm2 restart all"
+# preflight でクラッシュ要因を事前検知（失敗すれば && により pm2 restart は走らない）
+ssh claude-agent "cd ~/claude-agent-web && git pull && npm install && ./scripts/preflight.sh && pm2 restart all"
 ```
 
 > **再発防止: post-merge フック**  
