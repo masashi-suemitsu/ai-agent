@@ -144,6 +144,31 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 .modal-btn-save:disabled { opacity: .6; cursor: default; }
 .modal-actions { display: flex; gap: 8px; margin-top: 24px; }
 
+/* ─ ダッシュボードタブ ─ */
+.dash-scope-toggle { display: flex; gap: 8px; margin-bottom: 20px; }
+.dash-scope-toggle button { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; transition: all .15s; }
+.dash-scope-toggle button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.dash-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 16px; }
+.stat-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; }
+.stat-label { font-size: 11px; color: var(--text-light); font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
+.stat-value { font-size: 30px; font-weight: 800; color: var(--primary); margin-top: 4px; }
+.stat-sub { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+.dash-panel { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; }
+.dash-panel h2 { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+.dash-ptable { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dash-ptable th { text-align: left; padding: 6px 10px; background: #f7f8fc; color: var(--text-light); font-weight: 600; border-bottom: 1px solid var(--border); }
+.dash-ptable td { padding: 6px 10px; border-bottom: 1px solid #edf0f5; }
+.dash-bar { height: 6px; background: var(--primary-light); border-radius: 3px; overflow: hidden; }
+.dash-bar-fill { height: 100%; background: var(--primary); }
+.dash-audit-filter { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.dash-audit-filter input, .dash-audit-filter select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; outline: none; }
+.dash-audit-filter input:focus, .dash-audit-filter select:focus { border-color: var(--primary); }
+.dash-audit-filter button { background: var(--primary); color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.dtag { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+.dtag.ok { background: #c6f6d5; color: #22543d; }
+.dtag.ng { background: #fed7d7; color: #742a2a; }
+.dtag.warn { background: #feebc8; color: #7b341e; }
+
 .admin-badge { display: inline-block; background: #e53e3e; color: #fff; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 4px; vertical-align: middle; margin-left: 5px; letter-spacing: .04em; line-height: 1.6; }
 .admin-only-banner { display: flex; align-items: flex-start; gap: 12px; background: #fff5f5; border: 1px solid #feb2b2; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
 .admin-only-banner .aob-icon { font-size: 22px; flex-shrink: 0; line-height: 1; }
@@ -250,6 +275,42 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   <!-- ─ 利用状況 ─ -->
   <div class="tab-content" id="tab-usage">
     <div id="usageContent"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+  </div>
+
+  <!-- ─ ダッシュボード（管理者専用） ─ -->
+  <div class="tab-content" id="tab-dashboard">
+    <div class="dash-scope-toggle" id="dashScopeToggle">
+      <button class="active" data-scope="me" onclick="switchDashScope('me')">👤 自分</button>
+      <button data-scope="all" onclick="switchDashScope('all')">🌐 全社</button>
+    </div>
+    <div class="dash-grid" id="dashStatsGrid"></div>
+    <div class="dash-panel">
+      <h2>🔧 よく使うツール（今月）</h2>
+      <div id="dashTopTools"></div>
+    </div>
+    <div class="dash-panel">
+      <h2>⏰ 最近のタスク実行</h2>
+      <div id="dashRecentTasks"></div>
+    </div>
+    <div class="dash-panel" id="dashActiveUsersPanel" style="display:none;">
+      <h2>🏃 アクティブユーザー（今日・全社）</h2>
+      <div id="dashActiveUsers"></div>
+    </div>
+    <div class="dash-panel">
+      <h2>📋 監査ログ</h2>
+      <div class="dash-audit-filter">
+        <input type="text" id="dashAuditEmail" placeholder="email 絞り込み" />
+        <input type="text" id="dashAuditAction" placeholder="action 接頭辞 (例: tool.)" />
+        <input type="date" id="dashAuditSince" />
+        <select id="dashAuditLimit">
+          <option value="50">50件</option>
+          <option value="100" selected>100件</option>
+          <option value="500">500件</option>
+        </select>
+        <button onclick="loadDashAudit()">適用</button>
+      </div>
+      <div id="dashAuditTable"></div>
+    </div>
   </div>
 </div>
 
@@ -518,12 +579,17 @@ let _usdJpyUpdatedAt = null;
   renderUserBadge(currentUser);
   if (currentUser.role === 'admin') {
     const nav = document.getElementById('tabNav');
-    const btn = document.createElement('button');
-    btn.className = 'tab-btn';
-    btn.dataset.tab = 'users';
-    btn.innerHTML = '👤 ユーザー<span class="admin-badge">管理者のみ</span>';
-    btn.onclick = () => switchTab('users');
-    nav.appendChild(btn);
+    [
+      { tab: 'dashboard', label: '📊 ダッシュボード' },
+      { tab: 'users',     label: '👤 ユーザー' },
+    ].forEach(({ tab, label }) => {
+      const btn = document.createElement('button');
+      btn.className = 'tab-btn';
+      btn.dataset.tab = tab;
+      btn.innerHTML = `${label}<span class="admin-badge">管理者のみ</span>`;
+      btn.onclick = () => switchTab(tab);
+      nav.appendChild(btn);
+    });
   }
   fetch('/api/exchange-rate').then(r => r.json()).then(d => {
     if (d.usd_jpy && d.usd_jpy > 50) { _usdJpy = d.usd_jpy; _usdJpyUpdatedAt = d.updated_at; }
@@ -556,7 +622,7 @@ function renderUserBadge(me) {
 }
 
 // ─ タブ切替 ─
-const TAB_NAMES = ['tasks','history','skills','rules','usage','users'];
+const TAB_NAMES = ['tasks','history','skills','rules','usage','dashboard','users'];
 
 function switchTab(name) {
   if (!TAB_NAMES.includes(name)) name = 'tasks';
@@ -564,10 +630,11 @@ function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + name)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
-  if (name === 'history') loadHistory();
-  if (name === 'rules') loadCustomRules();
-  if (name === 'users') loadUsers();
-  if (name === 'usage') loadUsage();
+  if (name === 'history')   loadHistory();
+  if (name === 'rules')     loadCustomRules();
+  if (name === 'users')     loadUsers();
+  if (name === 'usage')     loadUsage();
+  if (name === 'dashboard') { loadDashStats(); loadDashAudit(); }
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
 }
 
