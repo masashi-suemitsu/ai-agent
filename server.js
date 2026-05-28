@@ -2908,7 +2908,7 @@ async function fetchUsdJpy() {
   }
 }
 fetchUsdJpy();
-setInterval(fetchUsdJpy, 60 * 60 * 1000); // 1時間ごと更新
+setInterval(fetchUsdJpy, 24 * 60 * 60 * 1000); // 1日1回更新
 
 // GET /api/exchange-rate
 app.get('/api/exchange-rate', (req, res) => {
