@@ -13,7 +13,7 @@ const Database = require('better-sqlite3');
 
 const { google } = require('googleapis');
 const mysql = require('mysql2/promise');
-const nodemailer = require('nodemailer');
+const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
 const xlsx = require('xlsx');
 const mammoth = require('mammoth');
 const PptxGenJS = require('pptxgenjs');
@@ -1943,7 +1943,7 @@ async function executeTool(name, input, user) {
       return await wpFetch('/posts', { method: 'POST', body: JSON.stringify({ title: input.title, content: input.content, status: input.status || 'draft' }) });
     }
     case 'send_email': {
-      if (!process.env.SES_USER) throw new Error('SES未設定');
+      if (!process.env.SES_FROM) throw new Error('SES未設定');
       if (!isAdmin) throw new Error('管理者のみメール送信可能です');
       audit(user.email, user.name, 'tool.email', { to: input.to, subject: input.subject?.slice(0, 50) });
       const info = await getSesTransport().sendMail({ from: process.env.SES_FROM || 'info@acrovision.co.jp', to: input.to, subject: input.subject, text: input.text, html: input.html });
@@ -3412,23 +3412,39 @@ app.get('/api/conversations', (req, res) => {
   res.json(rows);
 });
 
-// GET /api/conversations/search?q=xxx
+// GET /api/conversations/search?q=xxx&from=YYYY-MM-DD&to=YYYY-MM-DD&limit=30
 app.get('/api/conversations/search', (req, res) => {
-  const q = String(req.query.q || '').trim();
-  if (!q) return res.json([]);
-  const like = '%' + q.replace(/[\\%_]/g, ch => '\\' + ch) + '%';
-  // 各会話につき最初にマッチしたメッセージのスニペットを返す
+  const q    = String(req.query.q || '').trim();
+  const from = req.query.from ? String(req.query.from) : null;
+  const to   = req.query.to   ? String(req.query.to) + ' 23:59:59' : null;
+  const lim  = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+  if (!q && !from && !to) return res.json([]);
+
+  const like = q ? '%' + q.replace(/[\\%_]/g, ch => '\\' + ch) + '%' : null;
+
+  const whereParts = ['c.user_email = ?'];
+  const params = [req.user.email];
+
+  if (like) {
+    whereParts.push(`(c.title LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id=c.id AND m.content LIKE ? ESCAPE '\\'))`);
+    params.push(like, like);
+  }
+  if (from) { whereParts.push('c.updated_at >= ?'); params.push(from); }
+  if (to)   { whereParts.push('c.updated_at <= ?'); params.push(to); }
+
+  // スニペット用サブクエリパラメータ
+  const snipParams = like ? [q, like] : [null, null];
   const rows = db.prepare(`
     SELECT c.id, c.title, c.updated_at,
-           (SELECT substr(m.content, MAX(1, instr(LOWER(m.content), LOWER(?)) - 30), 120)
-            FROM messages m WHERE m.conversation_id = c.id AND m.content LIKE ? ESCAPE '\\'
-            ORDER BY m.id LIMIT 1) AS snippet,
-           (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.content LIKE ? ESCAPE '\\') AS hits
+      ${like ? `(SELECT GROUP_CONCAT(substr(content, MAX(1, instr(LOWER(content), LOWER(?)) - 50), 200), '|||')
+                 FROM (SELECT content FROM messages WHERE conversation_id=c.id AND content LIKE ? ESCAPE '\\' ORDER BY id LIMIT 3)
+               )` : 'NULL'} AS snippets,
+      ${like ? `(SELECT COUNT(*) FROM messages WHERE conversation_id=c.id AND content LIKE ? ESCAPE '\\')` : '0'} AS hits
     FROM conversations c
-    WHERE c.user_email = ?
-      AND (c.title LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id=c.id AND m.content LIKE ? ESCAPE '\\'))
-    ORDER BY c.updated_at DESC LIMIT 50
-  `).all(q, like, like, req.user.email, like, like);
+    WHERE ${whereParts.join(' AND ')}
+    ORDER BY c.updated_at DESC LIMIT ?
+  `).all(...snipParams, ...(like ? [like] : []), ...params, lim);
+
   audit(req.user.email, req.user.name, 'conversations.search', { q: q.slice(0, 50), results: rows.length });
   res.json(rows);
 });
@@ -4492,21 +4508,43 @@ app.post('/api/wp/posts', async (req, res) => {
   } catch(e) { serverError(res, e); }
 });
 
-// ── AWS SES (nodemailer) ──
+// ── AWS SES (SDK + EC2 IAM Role) ──
+// 認証は AWS SDK default credential chain（EC2 IAM Role → ~/.aws/credentials → env）
+// corp-dev-ec2 の SesSend.php と同じパターン。SES_USER/SES_SECRET（旧 SMTP 認証）は無視する。
+let _sesClient = null;
+function getSesClient() {
+  if (!_sesClient) {
+    const region = process.env.SES_REGION
+      || (process.env.SES_HOST || 'email-smtp.us-west-2.amazonaws.com').match(/email-smtp\.([^.]+)/)?.[1]
+      || 'us-west-2';
+    _sesClient = new SESClient({ region });
+  }
+  return _sesClient;
+}
 function getSesTransport() {
-  const port = parseInt(process.env.SES_PORT || '465');
-  return nodemailer.createTransport({
-    host: process.env.SES_HOST || 'email-smtp.us-west-2.amazonaws.com',
-    port,
-    secure: port === 465,
-    requireTLS: port !== 465,
-    auth: { user: process.env.SES_USER, pass: process.env.SES_SECRET }
-  });
+  return {
+    async sendMail({ from, to, subject, text, html }) {
+      const recipients = Array.isArray(to) ? to : [to];
+      const body = {};
+      if (text) body.Text = { Charset: 'UTF-8', Data: text };
+      if (html) body.Html = { Charset: 'UTF-8', Data: html };
+      if (!body.Text && !body.Html) body.Text = { Charset: 'UTF-8', Data: '' };
+      const result = await getSesClient().send(new SendEmailCommand({
+        Source: from || process.env.SES_FROM || 'info@acrovision.co.jp',
+        Destination: { ToAddresses: recipients },
+        Message: {
+          Subject: { Charset: 'UTF-8', Data: subject || '' },
+          Body: body,
+        },
+      }));
+      return { messageId: result.MessageId };
+    }
+  };
 }
 
 // POST /api/email/send  body: { to, subject, text, html }
 app.post('/api/email/send', async (req, res) => {
-  if (!process.env.SES_USER) return res.status(503).json({ error: 'SES未設定' });
+  if (!process.env.SES_FROM) return res.status(503).json({ error: 'SES未設定' });
   const { to, subject, text, html } = req.body;
   if (!to || !subject || (!text && !html)) return res.status(400).json({ error: 'to/subject/text は必須' });
   const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim());
@@ -5075,7 +5113,7 @@ function feedbackLogStatus(reportId, before, after, user, note = '') {
 }
 
 async function feedbackNotifyByEmail(report, reporterEmail, reporterName) {
-  if (!process.env.SES_USER) {
+  if (!process.env.SES_FROM) {
     console.log('[feedback] SES未設定のためメール通知スキップ');
     return false;
   }
@@ -5752,7 +5790,7 @@ async function notifyTaskResult(ownerEmail, taskName, status, result) {
   }
 
   // ── メール通知 ──
-  if (!process.env.SES_USER) return;
+  if (!process.env.SES_FROM) return;
   try {
     await getSesTransport().sendMail({
       from: process.env.SES_FROM || 'info@acrovision.co.jp',
