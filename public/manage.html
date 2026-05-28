@@ -364,6 +364,8 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <button class="filter-btn" onclick="filterHistory('done', this)">成功</button>
       <button class="filter-btn" onclick="filterHistory('error', this)">エラー</button>
       <button class="filter-btn" onclick="filterHistory('running', this)">実行中</button>
+      <button class="filter-btn" onclick="filterHistory('workflow', this)">🔀 ワークフロー</button>
+      <button class="filter-btn" onclick="filterHistory('job', this)">⚙️ ジョブ</button>
     </div>
     <div id="historyList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
@@ -2513,7 +2515,10 @@ async function loadHistory() {
 function filterHistory(type, btn) {
   document.querySelectorAll('#tab-history .filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  const filtered = type === 'all' ? allHistory : allHistory.filter(r => r.status === type);
+  const filtered = type === 'all'      ? allHistory
+                 : type === 'workflow' ? allHistory.filter(r => r.run_type === 'workflow')
+                 : type === 'job'      ? allHistory.filter(r => r.run_type !== 'workflow')
+                 : allHistory.filter(r => r.status === type);
   renderHistory(filtered);
 }
 
@@ -2605,6 +2610,10 @@ function renderHistory(runs) {
   el.innerHTML = countNote + runs.map(r => {
     const statusColor = r.status === 'done' ? 'badge-green' : r.status === 'error' ? 'badge-red' : 'badge-orange';
     const statusText  = r.status === 'done' ? '✓ 成功' : r.status === 'error' ? '✗ エラー' : '⟳ 実行中';
+    const isWf = r.run_type === 'workflow';
+    const typeBadge = isWf
+      ? `<span class="badge" style="background:#e9d8fd;color:#6b46c1;">🔀 ワークフロー</span>`
+      : `<span class="badge" style="background:#e2e8f0;color:#4a5568;">⚙️ ジョブ</span>`;
     const started  = fmtDt(r.started_at);
     const finished = fmtDt(r.finished_at);
     const duration = r.started_at && r.finished_at
@@ -2617,14 +2626,13 @@ function renderHistory(runs) {
     return `<div class="card">
       <div class="card-header">
         <div class="card-title">${esc(r.skill_title || r.skill_name)}</div>
-        <div class="card-badges"><span class="badge ${statusColor}">${statusText}</span></div>
+        <div class="card-badges">${typeBadge}<span class="badge ${statusColor}">${statusText}</span></div>
       </div>
       <div class="card-meta">
         <span>🕐 開始: ${started}</span>
         <span>🏁 完了: ${finished}</span>
         <span>⏱ 所要: ${duration}</span>
-        ${(r.input_tokens || r.output_tokens) ? `<span>🔢 ${(r.input_tokens||0).toLocaleString()}入 / ${(r.output_tokens||0).toLocaleString()}出 tok</span>` : ''}
-        <span style="font-size:11px;color:#a0aec0;">ジョブ: ${esc(r.skill_name)}</span>
+        ${(!isWf && (r.input_tokens || r.output_tokens)) ? `<span>🔢 ${(r.input_tokens||0).toLocaleString()}入 / ${(r.output_tokens||0).toLocaleString()}出 tok</span>` : ''}
       </div>
       ${errorBox}${resultHtml}
     </div>`;

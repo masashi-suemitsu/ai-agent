@@ -1304,10 +1304,25 @@ function getSystemPrompt(role) {
 
 タスク登録はスキルの保存とは独立しています。スキルを保存せずに直接チャットからタスクを登録することも可能です。
 
-**【重要制約】タスクの自動実行・スケジュール管理は必ず \`register_task\` ツールのみで行う。**
+**【重要制約】タスクの自動実行・スケジュール管理は必ず \`register_task\` または \`create_workflow\` ツールで行う。**
 - Google Apps Script・Zapier・cron・その他外部ツールの利用を提案しない
-- 「自分では予約送信できない」「タイマー機能がない」などの説明は不要。\`register_task\` で実現できる
-- ユーザーが自動実行・予約実行を求めたら、迷わず \`register_task\` を使う
+- 「自分では予約送信できない」「タイマー機能がない」などの説明は不要
+- ユーザーが自動実行・予約実行を求めたら、迷わず \`register_task\` か \`create_workflow\` を使う
+
+## ワークフロー機能（create_workflow / list_workflows / run_workflow）
+**register_task と create_workflow の使い分け:**
+- 単一の処理（1つの指示で完結）→ \`register_task\`
+- 複数の処理を順番に連結（Step1の結果をStep2に渡すなど）→ \`create_workflow\`
+
+**create_workflow の使い方:**
+- steps の id は s1, s2, s3 ... と連番
+- 前のステップの出力を次で使うには output_var に変数名を設定し、次の prompt で \`{{変数名}}\` と参照
+- 各ステップの prompt にはどのツールを使うかも含めて具体的に記述
+- 作成後は「ワークフロー『名前』を作成しました（ID: X）。/manage#workflows で確認・編集できます。」と案内
+- そのまま実行したいか確認し、望むなら \`run_workflow\` を呼ぶ
+
+**list_workflows**: 「ワークフロー一覧」「どんな自動化がある？」のときに使う
+**run_workflow**: 「今すぐ実行して」のときに名前またはIDで指定して使う
 
 ## 個人ルール機能
 ユーザーは /manage > 権限・ルール タブの「個人ルール」に、自分専用の指示を登録できます。
@@ -5437,11 +5452,20 @@ app.get('/api/skills/batches', (req, res) => {
 
 // ── Task Runs API ──
 
-// GET /api/task-runs
+// GET /api/task-runs  — ジョブ・タスク実行 + ワークフロー実行を統合返却
 app.get('/api/task-runs', (req, res) => {
-  const rows = db.prepare(
-    'SELECT * FROM task_runs WHERE user_email=? ORDER BY started_at DESC LIMIT 100'
-  ).all(req.user.email);
+  const rows = db.prepare(`
+    SELECT id, user_email, skill_name, skill_title, status, result,
+           started_at, finished_at, input_tokens, output_tokens, 'job' AS run_type
+    FROM task_runs WHERE user_email=?
+    UNION ALL
+    SELECT wr.id, wr.owner_email, w.name, w.name, wr.status, wr.result,
+           wr.started_at, wr.finished_at, NULL, NULL, 'workflow' AS run_type
+    FROM workflow_runs wr
+    JOIN workflows w ON w.id = wr.workflow_id
+    WHERE wr.owner_email=?
+    ORDER BY started_at DESC LIMIT 200
+  `).all(req.user.email, req.user.email);
   res.json(rows);
 });
 
