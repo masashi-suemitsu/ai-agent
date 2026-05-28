@@ -121,10 +121,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_server_health','check_job_posting','generate_weekly_report']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting']),
-  recruit: new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting']),
-  user:    new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes'])
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_server_health','check_job_posting','generate_weekly_report','generate_presentation','summarize_document','draft_email_reply','screen_candidate']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply']),
+  recruit: new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply','screen_candidate']),
+  user:    new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_meeting_minutes','generate_presentation','summarize_document','draft_email_reply'])
 };
 
 app.set('trust proxy', 1);
@@ -3021,6 +3021,198 @@ async function executeTool(name, input, user) {
       }
       return { ok: true, report };
     }
+    case 'generate_presentation': {
+      audit(user.email, user.name, 'tool.generate_presentation', { topic: input.topic });
+      const drive = getDriveClientForUser(user);
+      const slideCount = Math.min(Math.max(input.slide_count || 8, 4), 20);
+      const keyPoints = (input.key_points || []).map(p => `- ${p}`).join('\n');
+      const designPrompt = `あなたはプレゼンテーション専門家です。以下の条件でPowerPointスライド構成をJSONで設計してください。
+テーマ: ${input.topic}
+目的: ${input.purpose || '社内説明'}
+対象: ${input.audience || '社内スタッフ'}
+スライド枚数: ${slideCount}枚
+${keyPoints ? `必須ポイント:\n${keyPoints}` : ''}
+
+出力形式（JSON配列のみ、説明文不要）:
+[
+  {"layout":"title","title":"タイトル","subtitle":"サブタイトル"},
+  {"layout":"bullets","title":"スライドタイトル","bullets":["項目1","項目2","項目3"]},
+  {"layout":"content","title":"スライドタイトル","body":"本文テキスト"},
+  {"layout":"two_column","title":"タイトル","left":"左カラム内容","right":"右カラム内容"},
+  {"layout":"section","title":"セクション区切りタイトル"}
+]
+最初のスライドはlayout:title、最後はlayout:bulletsでまとめ（次のステップ・まとめなど）にすること。`;
+
+      const designResp = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6', max_tokens: 4096,
+        messages: [{ role: 'user', content: designPrompt }]
+      });
+      const designText = (designResp.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+      const matchSlides = designText.match(/\[[\s\S]*\]/);
+      if (!matchSlides) return { error: 'スライド構成の生成に失敗しました', raw: designText.slice(0, 500) };
+      let slides;
+      try { slides = JSON.parse(matchSlides[0]); } catch (e) { return { error: 'スライドJSONパース失敗: ' + e.message }; }
+
+      const pptx = new PptxGenJS();
+      pptx.layout = 'LAYOUT_16x9';
+      pptx.title = input.topic;
+      const FONT = 'Yu Gothic';
+      for (const s of slides) {
+        const slide = pptx.addSlide();
+        if (s.layout === 'title') {
+          slide.background = { color: '5B6EFF' };
+          if (s.title) slide.addText(s.title, { x: 0.5, y: 2.2, w: 9, h: 1.8, fontSize: 36, bold: true, color: 'FFFFFF', align: 'center', fontFace: FONT });
+          if (s.subtitle) slide.addText(s.subtitle, { x: 0.5, y: 4.2, w: 9, h: 0.8, fontSize: 20, color: 'FFFFFF', align: 'center', fontFace: FONT });
+        } else if (s.layout === 'section') {
+          slide.background = { color: 'F4F6FB' };
+          if (s.title) slide.addText(s.title, { x: 0.5, y: 2.5, w: 9, h: 1.5, fontSize: 32, bold: true, color: '5B6EFF', align: 'center', fontFace: FONT });
+        } else if (s.layout === 'two_column') {
+          if (s.title) slide.addText(s.title, { x: 0.4, y: 0.3, w: 9.2, h: 0.7, fontSize: 24, bold: true, color: '2D3748', fontFace: FONT });
+          slide.addText(String(s.left || ''), { x: 0.4, y: 1.2, w: 4.5, h: 4.2, fontSize: 14, color: '2D3748', fontFace: FONT, valign: 'top' });
+          slide.addText(String(s.right || ''), { x: 5.1, y: 1.2, w: 4.5, h: 4.2, fontSize: 14, color: '2D3748', fontFace: FONT, valign: 'top' });
+        } else if (s.layout === 'bullets') {
+          if (s.title) slide.addText(s.title, { x: 0.4, y: 0.3, w: 9.2, h: 0.7, fontSize: 24, bold: true, color: '2D3748', fontFace: FONT });
+          const bullets = (s.bullets || []).map(b => ({ text: String(b), options: { bullet: true } }));
+          if (bullets.length) slide.addText(bullets, { x: 0.5, y: 1.2, w: 9, h: 4.2, fontSize: 18, color: '2D3748', fontFace: FONT, valign: 'top', paraSpaceAfter: 10 });
+        } else {
+          if (s.title) slide.addText(s.title, { x: 0.4, y: 0.3, w: 9.2, h: 0.7, fontSize: 24, bold: true, color: '2D3748', fontFace: FONT });
+          if (s.body) slide.addText(String(s.body), { x: 0.5, y: 1.2, w: 9, h: 4.2, fontSize: 16, color: '2D3748', fontFace: FONT, valign: 'top' });
+        }
+      }
+      const buf = await pptx.write({ outputType: 'nodebuffer' });
+      const safeName = input.topic.replace(/[\\/:*?"<>|]/g, '_').slice(0, 50);
+      const fileMeta = { name: safeName + '.pptx' };
+      if (input.folder_id) fileMeta.parents = [input.folder_id];
+      const dr = await drive.files.create({
+        requestBody: fileMeta,
+        media: { mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', body: Readable.from(buf) },
+        fields: 'id,name,webViewLink'
+      });
+      return { ok: true, id: dr.data.id, name: dr.data.name, slide_count: slides.length, webViewLink: dr.data.webViewLink };
+    }
+
+    case 'summarize_document': {
+      audit(user.email, user.name, 'tool.summarize_document', { fileId: input.file_id });
+      const drive = getDriveClientForUser(user);
+      const meta = await drive.files.get({ fileId: input.file_id, fields: 'name,mimeType' });
+      const mt = meta.data.mimeType;
+      let textContent = '';
+      let documentBlock = null;
+
+      if (mt === 'application/pdf') {
+        const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'arraybuffer' });
+        const buf = Buffer.from(r.data);
+        if (buf.length > 32 * 1024 * 1024) throw new Error('PDFが大きすぎます（32MB上限）');
+        documentBlock = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') } };
+      } else if (mt === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'arraybuffer' });
+        const x = await mammoth.extractRawText({ buffer: Buffer.from(r.data) });
+        textContent = x.value;
+      } else if (mt === 'application/vnd.google-apps.document') {
+        const r = await drive.files.export({ fileId: input.file_id, mimeType: 'text/plain' }, { responseType: 'text' });
+        textContent = String(r.data);
+      } else if (mt?.startsWith('text/')) {
+        const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'text' });
+        textContent = String(r.data);
+      } else {
+        throw new Error(`${mt} は要約非対応（PDF/Word/Googleドキュメント/テキストのみ）`);
+      }
+
+      const focusNote = input.focus ? `\n重点観点: ${input.focus}` : '';
+      const format = input.output_format === 'prose' ? '文章形式（段落）' : '箇条書き（•）';
+      const maxLen = input.max_length || 500;
+      const promptText = `以下の文書を要約してください。${focusNote}
+出力形式: ${format}
+最大文字数: ${maxLen}文字以内
+ファイル名: ${meta.data.name}
+
+${textContent ? `文書テキスト:\n${textContent.slice(0, 60000)}` : '（上記の文書を読んでください）'}`;
+
+      const userContent = documentBlock
+        ? [documentBlock, { type: 'text', text: promptText }]
+        : [{ type: 'text', text: promptText }];
+
+      const resp = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6', max_tokens: 2048,
+        messages: [{ role: 'user', content: userContent }]
+      });
+      const summary = (resp.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+      return { ok: true, file_name: meta.data.name, file_type: mt, summary };
+    }
+
+    case 'draft_email_reply': {
+      audit(user.email, user.name, 'tool.draft_email_reply', { intent: input.reply_intent?.slice(0, 50) });
+      const toneMap = { formal: '非常に丁寧・敬語を最大限に使用', standard: '一般的なビジネスメール敬語', brief: '簡潔・要点のみ' };
+      const toneDesc = toneMap[input.tone] || toneMap.standard;
+      const senderName = input.sender_name || user.name || '';
+      const addInfo = input.additional_info ? `\n追加情報: ${input.additional_info}` : '';
+      const intentNote = input.reply_intent ? `\n返信の意図: ${input.reply_intent}` : '';
+
+      const resp = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6', max_tokens: 1500,
+        messages: [{
+          role: 'user',
+          content: `以下のメールへの返信下書きを作成してください。
+トーン: ${toneDesc}
+差出人名: ${senderName}${intentNote}${addInfo}
+
+--- 元メール ---
+${input.original_email.slice(0, 3000)}
+--- ここまで ---
+
+返信メールをJSON形式で出力してください（説明文不要）:
+{"subject":"件名","body":"本文（署名前まで）","signature":"${senderName}\\n株式会社アクロビジョン"}`
+        }]
+      });
+      const text = (resp.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { ok: true, draft: text };
+      try {
+        const draft = JSON.parse(jsonMatch[0]);
+        return { ok: true, subject: draft.subject, body: draft.body, signature: draft.signature, full_text: `件名: ${draft.subject}\n\n${draft.body}\n\n${draft.signature}` };
+      } catch { return { ok: true, draft: text }; }
+    }
+
+    case 'screen_candidate': {
+      audit(user.email, user.name, 'tool.screen_candidate', { job_type: input.job_type });
+      const criteria = (input.evaluation_criteria || ['technical_skill', 'experience', 'cultural_fit']).join('・');
+      const jobType = input.job_type || '正社員';
+
+      const resp = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6', max_tokens: 2500,
+        system: 'あなたは採用支援AIです。候補者情報と求人要件を客観的に分析し、採用担当者の一次スクリーニングを支援します。あくまで参考情報であり、最終判断は採用担当者が行います。',
+        messages: [{
+          role: 'user',
+          content: `以下の候補者を評価してください。
+雇用形態: ${jobType}
+評価軸: ${criteria}
+
+--- 求人要件 ---
+${input.job_requirements.slice(0, 2000)}
+
+--- 候補者情報 ---
+${input.candidate_info.slice(0, 3000)}
+
+下記JSON形式で回答してください（説明文不要）:
+{
+  "overall_score": 0〜100の数値,
+  "recommendation": "strong_yes/yes/maybe/no",
+  "summary": "候補者の総合評価（2〜3文）",
+  "strengths": ["強み1","強み2","強み3"],
+  "concerns": ["懸念点1","懸念点2"],
+  "missing_requirements": ["不足している要件"],
+  "interview_questions": ["面接で確認すべき質問1","質問2","質問3"],
+  "criteria_scores": {"評価軸名": スコア0〜100}
+}`
+        }]
+      });
+      const text = (resp.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { error: 'スクリーニング結果の生成に失敗しました', raw: text.slice(0, 500) };
+      try { return { ok: true, screening: JSON.parse(jsonMatch[0]) }; }
+      catch (e) { return { error: 'JSONパース失敗: ' + e.message, raw: jsonMatch[0].slice(0, 500) }; }
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

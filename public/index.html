@@ -1484,6 +1484,38 @@ const FEATURE_MODES = [
     fileRequired: false,
     placeholder: '「今月のレポートを生成して」または送信ボタンを押してください',
     autoMsg: () => '今月の週次レポートを生成してください。案件数・月報提出・請求状況を含めてください。'
+  },
+  {
+    id: 'presentation', icon: '🎞️', label: 'プレゼン資料生成',
+    desc: 'テーマを渡すだけでPPTXを自動作成',
+    color: '#0369a1',
+    fileRequired: false,
+    placeholder: 'プレゼンのテーマを入力してください（例: 2025年度事業計画、新サービス紹介）',
+    textPrefix: '以下のテーマでプレゼン資料（PowerPoint）を作成してください:\n\n'
+  },
+  {
+    id: 'docsummary', icon: '📄', label: '文書要約',
+    desc: 'Drive上のWord・PDF・Docsを要約',
+    color: '#059669',
+    fileRequired: false,
+    placeholder: 'DriveのファイルIDまたは「〇〇というファイルを要約して」と入力してください',
+    textPrefix: 'このファイルを要約してください: '
+  },
+  {
+    id: 'emaildraft', icon: '✉️', label: 'メール下書き',
+    desc: '受信メールに対する返信文を自動生成',
+    color: '#7c3aed',
+    fileRequired: false,
+    placeholder: '返信したいメールの本文を貼り付けてください',
+    textPrefix: '以下のメールへの返信下書きを作成してください:\n\n'
+  },
+  {
+    id: 'screening', icon: '🔍', label: '採用スクリーニング',
+    desc: '候補者情報と求人要件を照合・スコアリング',
+    color: '#b45309',
+    fileRequired: false,
+    placeholder: '候補者情報（経歴・スキル）と求人要件を貼り付けてください',
+    textPrefix: '以下の候補者を採用要件と照合してスクリーニングしてください:\n\n'
   }
 ];
 
@@ -1703,6 +1735,10 @@ async function send() {
             check_server_health: 'サーバーヘルスをチェック中',
             check_job_posting: '求人原稿をチェック中',
             generate_weekly_report: '週次レポートを生成中',
+            generate_presentation: 'スライドを生成中',
+            summarize_document: '文書を要約中',
+            draft_email_reply: 'メール下書きを作成中',
+            screen_candidate: '候補者をスクリーニング中',
             compare_models: 'AIモデルを比較中',
             mask_pii: '個人情報をマスク中',
             fetch_url: 'Webページを取得中',
