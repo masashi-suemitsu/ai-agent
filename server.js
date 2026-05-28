@@ -423,7 +423,10 @@ app.get('/auth/drive', requireAuth, (req, res) => {
   const authUrl = oauth2.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
-    scope: ['https://www.googleapis.com/auth/drive.readonly'],
+    scope: [
+      'https://www.googleapis.com/auth/drive.readonly',
+      'https://www.googleapis.com/auth/spreadsheets'
+    ],
     state
   });
   res.redirect(authUrl);
@@ -1626,6 +1629,27 @@ app.get('/api/conversations', (req, res) => {
   const rows = db.prepare(
     'SELECT id, title, created_at, updated_at FROM conversations WHERE user_email=? ORDER BY updated_at DESC LIMIT 50'
   ).all(req.user.email);
+  res.json(rows);
+});
+
+// GET /api/conversations/search?q=xxx
+app.get('/api/conversations/search', (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (!q) return res.json([]);
+  const like = '%' + q.replace(/[\\%_]/g, ch => '\\' + ch) + '%';
+  // 各会話につき最初にマッチしたメッセージのスニペットを返す
+  const rows = db.prepare(`
+    SELECT c.id, c.title, c.updated_at,
+           (SELECT substr(m.content, MAX(1, instr(LOWER(m.content), LOWER(?)) - 30), 120)
+            FROM messages m WHERE m.conversation_id = c.id AND m.content LIKE ? ESCAPE '\\'
+            ORDER BY m.id LIMIT 1) AS snippet,
+           (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.content LIKE ? ESCAPE '\\') AS hits
+    FROM conversations c
+    WHERE c.user_email = ?
+      AND (c.title LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id=c.id AND m.content LIKE ? ESCAPE '\\'))
+    ORDER BY c.updated_at DESC LIMIT 50
+  `).all(q, like, like, req.user.email, like, like);
+  audit(req.user.email, req.user.name, 'conversations.search', { q: q.slice(0, 50), results: rows.length });
   res.json(rows);
 });
 
