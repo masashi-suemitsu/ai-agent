@@ -3605,10 +3605,12 @@ app.post('/api/wp/posts', async (req, res) => {
 
 // ── AWS SES (nodemailer) ──
 function getSesTransport() {
+  const port = parseInt(process.env.SES_PORT || '465');
   return nodemailer.createTransport({
     host: process.env.SES_HOST || 'email-smtp.us-west-2.amazonaws.com',
-    port: parseInt(process.env.SES_PORT || '465'),
-    secure: (process.env.SES_PORT ? process.env.SES_PORT === '465' : true),
+    port,
+    secure: port === 465,
+    requireTLS: port !== 465,
     auth: { user: process.env.SES_USER, pass: process.env.SES_SECRET }
   });
 }
