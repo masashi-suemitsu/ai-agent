@@ -6581,11 +6581,8 @@ async function notifyTaskResult(ownerEmail, taskName, status, result) {
   // ── プッシュ通知 ──
   sendPushNotifications(ownerEmail, `${icon} タスク${statusLabel}: ${taskName}`, shortResult.slice(0, 100) || jst).catch(() => {});
 
-  // ── メール通知 ──
+  // ── メール通知（オーナー本人のみ・成功・失敗どちらも） ──
   if (!process.env.SES_FROM) return;
-  const TASK_ALERT_MAIL = process.env.TASK_ALERT_MAIL || 'marketing@acrovision.co.jp';
-
-  // オーナー本人への通知（成功・失敗どちらも）
   try {
     await getSesTransport().sendMail({
       from: process.env.SES_FROM || 'info@acrovision.co.jp',
@@ -6594,21 +6591,7 @@ async function notifyTaskResult(ownerEmail, taskName, status, result) {
       text: `タスク実行結果のお知らせ\n\nタスク名: ${taskName}\nステータス: ${statusLabel}\n実行日時: ${jst} (JST)\n\n--- 結果 ---\n${shortResult}\n\n管理画面: https://d2jjp21sq86i80.cloudfront.net/manage`
     });
   } catch(e) {
-    console.error('[notify] オーナーへのメール送信失敗:', e.message);
-  }
-
-  // 失敗時は会社アドレスにも通知（オーナーと同一の場合は重複スキップ）
-  if (status === 'error' && ownerEmail !== TASK_ALERT_MAIL) {
-    try {
-      await getSesTransport().sendMail({
-        from: process.env.SES_FROM || 'info@acrovision.co.jp',
-        to: TASK_ALERT_MAIL,
-        subject: `❌ [AIエージェント] タスク失敗アラート: ${taskName}`,
-        text: `スケジュールタスクの失敗を検知しました。\n\nタスク名: ${taskName}\nオーナー: ${ownerEmail}\n実行日時: ${jst} (JST)\n\n--- エラー内容 ---\n${shortResult}\n\n管理画面: https://d2jjp21sq86i80.cloudfront.net/manage`
-      });
-    } catch(e) {
-      console.error('[notify] アラートメール送信失敗:', e.message);
-    }
+    console.error('[notify] メール送信失敗:', e.message);
   }
 }
 
