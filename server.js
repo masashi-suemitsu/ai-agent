@@ -3019,19 +3019,17 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
       ...activeTools.slice(0, -1),
       { ...activeTools[activeTools.length - 1], cache_control: { type: 'ephemeral' } }
     ] : activeTools;
-    const betaFlags = ['prompt-caching-2024-07-31'];
-    if (mcpServers.length > 0) betaFlags.push('mcp-client-2025-04-04');
+    const useMcpBeta = mcpServers.length > 0;
 
     while (toolRound < 10) {
-      const stream = anthropic.messages.stream({
+      const stream = (useMcpBeta ? anthropic.beta : anthropic).messages.stream({
         model: chatModel,
         max_tokens: useThinking ? 16000 : 4096,
         system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
         tools: cachedTools,
         messages,
-        betas: betaFlags,
         ...(useThinking ? { thinking: { type: 'enabled', budget_tokens: 8000 } } : {}),
-        ...(mcpServers.length > 0 ? { mcp_servers: mcpServers } : {})
+        ...(useMcpBeta ? { betas: ['mcp-client-2025-04-04'], mcp_servers: mcpServers } : {})
       });
 
       for await (const ev of stream) {
@@ -3499,7 +3497,6 @@ app.post('/api/skills/:id/run', async (req, res) => {
           system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
           tools: cachedSkillTools,
           messages,
-          betas: ['prompt-caching-2024-07-31'],
           ...(useSkillThinking ? { thinking: { type: 'enabled', budget_tokens: 8000 } } : {})
         });
 
@@ -5243,8 +5240,7 @@ async function runSkillBackground(task, ownerEmail) {
             max_tokens: 4096,
             system: [{ type: 'text', text: bgSystemPrompt, cache_control: { type: 'ephemeral' } }],
             tools: cachedBgTools,
-            messages,
-            betas: ['prompt-caching-2024-07-31']
+            messages
           });
           inTokens  += response.usage?.input_tokens  || 0;
           outTokens += response.usage?.output_tokens || 0;
