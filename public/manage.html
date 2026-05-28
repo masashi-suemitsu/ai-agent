@@ -2643,7 +2643,7 @@ async function runChatSearch() {
     results.innerHTML = '<div style="color:var(--text-light);font-size:13px;padding:16px 0;">読み込み中…</div>';
     summary.textContent = '';
     try {
-      const rows = await fetch('/api/conversations').then(r => r.json());
+      const rows = await fetch('/api/conversations').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
       summary.textContent = `直近 ${rows.length} 件`;
       if (!rows.length) { results.innerHTML = '<div class="empty"><div class="empty-icon">💬</div><p>会話履歴がありません</p></div>'; return; }
       results.innerHTML = rows.map(c => `
@@ -2665,7 +2665,7 @@ async function runChatSearch() {
   if (to)   qs.set('to', to);
 
   try {
-    const rows = await fetch('/api/conversations/search?' + qs).then(r => r.json());
+    const rows = await fetch('/api/conversations/search?' + qs).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
 
     if (!Array.isArray(rows) || rows.length === 0) {
       results.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div><p>該当する会話がありません</p></div>';

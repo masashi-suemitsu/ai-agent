@@ -3286,9 +3286,22 @@ ${(input.candidate_info || '').slice(0, 3000)}
       } else {
         const text = buf.toString('utf8');
         const lines = text.split(/\r?\n/).filter(l => l.trim());
-        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        const parseCSVLine = line => {
+          const result = []; let inQ = false, cur = '';
+          for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (ch === '"') {
+              if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+              else inQ = !inQ;
+            } else if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+            else cur += ch;
+          }
+          result.push(cur.trim());
+          return result;
+        };
+        const headers = parseCSVLine(lines[0]);
         rows = lines.slice(1).map(line => {
-          const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+          const vals = parseCSVLine(line);
           return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
         });
       }
@@ -3327,7 +3340,8 @@ ${(input.candidate_info || '').slice(0, 3000)}
           headers: { 'X-Cybozu-API-Token': token, 'Content-Type': 'application/json' },
           body: JSON.stringify({ app: input.app_id, records: batch })
         });
-        const data = await resp.json();
+        let data = {};
+        try { data = await resp.json(); } catch { data = {}; }
         if (!resp.ok) {
           errors.push(`バッチ ${Math.floor(i/BATCH)+1}: ${data.message || resp.status}`);
         } else {
@@ -3644,13 +3658,14 @@ app.get('/api/dashboard/trends', (req, res) => {
   const emailClause = scope === 'me' ? "AND email = ?" : '';
   const emailParam = scope === 'me' ? [myEmail] : [];
 
-  // 過去30日の日別チャット数
+  // 過去30日の日別チャット数（JST基準で集計）
+  const thirtyAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   const daily = db.prepare(`
-    SELECT substr(ts, 1, 10) as day, COUNT(*) as chats
+    SELECT substr(datetime(ts, '+9 hours'), 1, 10) as day, COUNT(*) as chats
     FROM audit_logs
-    WHERE action = 'chat' AND ts >= datetime('now', '-30 days') ${emailClause}
+    WHERE action = 'chat' AND ts >= ? ${emailClause}
     GROUP BY day ORDER BY day
-  `).all(...emailParam);
+  `).all(thirtyAgo, ...emailParam);
 
   // ユーザー別今月統計（管理者のみ）
   let userStats = [];
