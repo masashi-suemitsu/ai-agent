@@ -267,6 +267,15 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 .confirm-cancel-btn { background: none; border: 1.5px solid var(--border); border-radius: 8px; padding: 8px 16px; font-size: 13px; color: var(--text-light); cursor: pointer; transition: all .15s; }
 .confirm-cancel-btn:hover { border-color: var(--danger); color: var(--danger); }
 
+/* Refine & feedback bar */
+.msg-actions { display: flex; gap: 4px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #edf0f5; align-items: center; flex-wrap: wrap; }
+.msg-action-btn { background: none; border: 1px solid var(--border); border-radius: 14px; padding: 3px 10px; font-size: 11px; color: var(--text-light); cursor: pointer; transition: all .15s; }
+.msg-action-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+.msg-action-spacer { flex: 1; }
+.msg-fb-btn { background: none; border: 1px solid var(--border); border-radius: 14px; width: 28px; height: 24px; font-size: 12px; cursor: pointer; transition: all .15s; opacity: .6; }
+.msg-fb-btn:hover { opacity: 1; }
+.msg-fb-btn.active { background: var(--primary-light); border-color: var(--primary); opacity: 1; }
+
 /* Run output */
 .run-output {
   background: #1a1d2e;
@@ -320,17 +329,23 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 .model-selector { display: flex; gap: 6px; }
 .model-btn {
   border: 1.5px solid var(--border);
-  border-radius: 20px;
-  padding: 3px 13px;
+  border-radius: 10px;
+  padding: 5px 14px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   background: none;
   color: var(--text-light);
   transition: all .15s;
-  line-height: 1.7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  line-height: 1.4;
 }
+.model-btn .model-hint { font-size: 10px; font-weight: 400; opacity: .75; letter-spacing: .01em; }
 .model-btn.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+.model-btn.active .model-hint { opacity: .8; }
 .model-btn:hover:not(.active) { border-color: #a0aec0; color: var(--text); }
 .input-wrapper { flex: 1; position: relative; }
 textarea {
@@ -608,8 +623,8 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
     <div class="attach-bar" id="attachBar" style="display:none;"></div>
     <div class="input-area">
       <div class="model-selector">
-        <button class="model-btn" id="modelBtnHaiku" onclick="setModel('haiku')">⚡ Haiku　速い</button>
-        <button class="model-btn active" id="modelBtnSonnet" onclick="setModel('sonnet')">✦ Sonnet　じっくり</button>
+        <button class="model-btn" id="modelBtnHaiku" onclick="setModel('haiku')">⚡ Haiku<span class="model-hint">速い・低コスト</span></button>
+        <button class="model-btn active" id="modelBtnSonnet" onclick="setModel('sonnet')">✦ Sonnet<span class="model-hint">高精度・標準コスト</span></button>
       </div>
       <div class="input-row">
         <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" style="display:none;" onchange="onFilesPicked(event)">
@@ -817,13 +832,15 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
 let currentConvId = null;
 let sending = false;
 let driveAttachments = [];  // [{ name, content }]
-let currentModel = 'sonnet';
+let currentModel = localStorage.getItem('preferredModel') || 'sonnet';
 
 function setModel(m) {
   currentModel = m;
+  localStorage.setItem('preferredModel', m);
   document.getElementById('modelBtnHaiku').classList.toggle('active', m === 'haiku');
   document.getElementById('modelBtnSonnet').classList.toggle('active', m === 'sonnet');
 }
+setModel(currentModel);
 let currentUser = null;
 
 // ─ 初期化 ─
@@ -1220,6 +1237,20 @@ async function send() {
               <button class="confirm-cancel-btn" onclick="quickReply('キャンセル')">キャンセル</button>`;
             aiBubble.appendChild(actions);
           }
+          // リファイン＆フィードバックバー
+          if (d.messageId) {
+            const bar = document.createElement('div');
+            bar.className = 'msg-actions';
+            bar.dataset.messageId = d.messageId;
+            bar.innerHTML = `
+              <button class="msg-action-btn" onclick="quickReply('もう少し詳しく説明して')" title="詳しく">🔍 詳しく</button>
+              <button class="msg-action-btn" onclick="quickReply('もっと簡潔にまとめて')" title="簡潔に">📝 簡潔に</button>
+              <button class="msg-action-btn" onclick="quickReply('やり直して。別のアプローチで。')" title="やり直し">🔄 やり直し</button>
+              <span class="msg-action-spacer"></span>
+              <button class="msg-fb-btn" data-rating="1" onclick="rateMessage(this, 1)" title="役立った">👍</button>
+              <button class="msg-fb-btn" data-rating="-1" onclick="rateMessage(this, -1)" title="改善余地あり">👎</button>`;
+            aiBubble.appendChild(bar);
+          }
           msgsEl.scrollTop = msgsEl.scrollHeight;
           await loadSidebar();
         }
@@ -1504,6 +1535,29 @@ function quickReply(text) {
   const input = document.getElementById('input');
   input.value = text;
   send();
+}
+
+async function rateMessage(btn, rating) {
+  const bar = btn.closest('.msg-actions');
+  if (!bar) return;
+  const messageId = bar.dataset.messageId;
+  if (!messageId) return;
+  // 同じ評価を再クリックで取消
+  const current = bar.dataset.rating;
+  const next = String(current) === String(rating) ? 0 : rating;
+  try {
+    const r = await fetch(`/api/messages/${messageId}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rating: next })
+    });
+    if (!r.ok) throw new Error('保存失敗');
+    bar.dataset.rating = next;
+    bar.querySelectorAll('.msg-fb-btn').forEach(b => {
+      const v = b.dataset.rating;
+      b.classList.toggle('active', String(v) === String(next));
+    });
+  } catch (e) { alert('フィードバック保存エラー: ' + e.message); }
 }
 
 
