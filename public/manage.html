@@ -508,40 +508,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 
   <!-- ─ コネクタ ─ -->
   <div class="tab-content" id="tab-connectors">
-    <div style="max-width:680px;display:grid;gap:16px;">
-
-      <!-- GitHub -->
-      <div class="card">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          <div style="width:36px;height:36px;background:#24292e;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">🐙</div>
-          <div>
-            <div style="font-size:15px;font-weight:700;">GitHub</div>
-            <div style="font-size:12px;color:var(--text-light);">Personal Access Token で接続。Issue・PR・リポジトリ操作が可能になります。</div>
-          </div>
-        </div>
-        <div style="background:var(--primary-light);border-left:3px solid var(--primary);border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:var(--text);line-height:1.6;">
-          PAT は <a href="https://github.com/settings/tokens?type=beta" target="_blank" style="color:var(--primary);">github.com/settings/tokens</a> から発行してください。<br>
-          必要なスコープ: <code>repo</code>（プライベートも含む）または <code>public_repo</code>（公開リポジトリのみ）
-        </div>
-        <div id="githubStatus" style="margin-bottom:12px;"></div>
-        <div id="githubInputArea">
-          <input id="githubTokenInput" type="password" placeholder="ghp_xxxx または github_pat_xxxx"
-            style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;font-family:monospace;transition:border-color .15s;box-sizing:border-box;"
-            onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
-          <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
-            <button class="btn btn-primary" onclick="saveGithubToken()" id="saveGithubBtn">接続する</button>
-            <span id="saveGithubMsg" style="font-size:12px;color:var(--success);display:none;"></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 将来追加予定 -->
-      <div style="border:2px dashed var(--border);border-radius:12px;padding:24px;text-align:center;color:var(--text-light);">
-        <div style="font-size:22px;margin-bottom:8px;">＋</div>
-        <div style="font-size:13px;font-weight:600;">今後追加予定</div>
-        <div style="font-size:12px;margin-top:4px;">Slack・Notion・Jira などの連携をここに追加できます</div>
-      </div>
-    </div>
+    <div id="connectorsContent"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
 
   <!-- ─ ダッシュボード（管理者専用） ─ -->
@@ -1984,26 +1951,126 @@ function renderRules(role) {
     </div>`;
 }
 
-async function loadGithubStatus() {
-  try {
-    const data = await apiFetch('/api/settings/github/status');
-    const statusEl = document.getElementById('githubStatus');
-    const inputArea = document.getElementById('githubInputArea');
-    if (!statusEl) return;
-    if (data.connected) {
-      statusEl.innerHTML = `<span style="color:var(--success);font-size:13px;font-weight:600;">✓ GitHub 連携済み</span>`;
-      if (inputArea) inputArea.innerHTML = `<button class="btn btn-danger" onclick="disconnectGithub()" style="font-size:12px;padding:6px 14px;">連携を解除する</button>`;
+// ─ コネクタ ─
+const PERSONAL_CONNECTORS = [
+  { key:'drive',    icon:'📁', name:'Google Drive',    desc:'ファイル参照・スプレッドシート読み書き・ファイル作成', authUrl:'/auth/drive',    discUrl:'/api/drive/disconnect' },
+  { key:'calendar', icon:'📅', name:'Google Calendar', desc:'予定の参照・作成・更新',                               authUrl:'/auth/calendar', discUrl:'/api/calendar/disconnect' },
+  { key:'gmail',    icon:'✉️',  name:'Gmail',           desc:'メール受信トレイの参照・送信',                        authUrl:'/auth/gmail',    discUrl:'/api/gmail/disconnect' },
+  { key:'chatwork', icon:'💬', name:'Chatwork',        desc:'ルーム一覧・メッセージ取得・送信',                    authUrl:'/auth/chatwork', discUrl:'/api/chatwork/disconnect' },
+  { key:'github',   icon:'🐙', name:'GitHub',          desc:'リポジトリ・Issue・PR の参照と作成',                 authUrl:null,             discUrl:'/api/settings/github' },
+];
+const SYSTEM_CONNECTORS = [
+  { key:'zoom',         icon:'🎥', name:'Zoom',              desc:'会議一覧・作成' },
+  { key:'slack',        icon:'💬', name:'Slack',             desc:'チャンネル・メッセージ・送信' },
+  { key:'notion',       icon:'📓', name:'Notion',            desc:'DB一覧・ページ作成・更新' },
+  { key:'wordpress',    icon:'🌐', name:'WordPress',         desc:'投稿一覧・作成' },
+  { key:'kintone',      icon:'🏢', name:'Kintone',           desc:'レコード取得・一括登録' },
+  { key:'freee',        icon:'💹', name:'freee',             desc:'会計・人事データ参照' },
+  { key:'mfcloud',      icon:'💹', name:'MF クラウド',       desc:'請求書・会計データ参照' },
+  { key:'salesforce',   icon:'☁️',  name:'Salesforce',        desc:'商談・顧客データ参照' },
+  { key:'hubspot',      icon:'🟠', name:'HubSpot',           desc:'CRM データ参照' },
+  { key:'lineworks',    icon:'💚', name:'LINE WORKS',        desc:'メッセージ送受信' },
+  { key:'ms365',        icon:'🪟', name:'Microsoft 365',     desc:'Teams・メール・カレンダー' },
+  { key:'ses',          icon:'📧', name:'Amazon SES',        desc:'メール送信（管理者のみ）' },
+  { key:'chatwork_sys', icon:'💬', name:'Chatwork（システム）',desc:'Chatwork 通知・Hook' },
+];
+
+async function loadGithubStatus() { await loadConnectors(); }
+
+async function loadConnectors() {
+  const el = document.getElementById('connectorsContent');
+  if (!el) return;
+  let data;
+  try { data = await apiFetch('/api/connectors/status'); } catch(e) { el.innerHTML = `<p style="color:var(--danger);">読み込みエラー</p>`; return; }
+
+  const badge = (ok) => ok
+    ? `<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:#276749;background:#c6f6d5;padding:3px 10px;border-radius:20px;">● 接続済み</span>`
+    : `<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--text-light);background:var(--muted-bg);border:1px solid var(--border);padding:3px 10px;border-radius:20px;">○ 未接続</span>`;
+
+  const personalCards = PERSONAL_CONNECTORS.map(c => {
+    const connected = data.personal[c.key]?.connected;
+    let action = '';
+    if (c.key === 'github') {
+      if (connected) {
+        action = `<button class="btn btn-danger" onclick="oauthDisconnect('${c.key}','${c.discUrl}')" style="font-size:12px;">連携を解除する</button>`;
+      } else {
+        action = `
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+            <input id="githubTokenInput" type="password" placeholder="ghp_xxxx または github_pat_xxxx"
+              style="flex:1;min-width:200px;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;font-family:monospace;"
+              onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"
+              onkeydown="if(event.key==='Enter')saveGithubToken()">
+            <button class="btn btn-primary" onclick="saveGithubToken()" id="saveGithubBtn" style="white-space:nowrap;">接続する</button>
+          </div>
+          <div style="font-size:11px;color:var(--text-light);margin-top:6px;">
+            PAT は <a href="https://github.com/settings/tokens?type=beta" target="_blank" style="color:var(--primary);">github.com/settings/tokens</a> から発行。スコープ: <code>repo</code> または <code>public_repo</code>
+          </div>`;
+      }
     } else {
-      statusEl.innerHTML = `<span style="color:var(--text-light);font-size:13px;">未連携</span>`;
+      if (connected) {
+        action = `<button class="btn btn-danger" onclick="oauthDisconnect('${c.key}','${c.discUrl}')" style="font-size:12px;">連携を解除する</button>`;
+      } else {
+        action = `<a href="${c.authUrl}" class="btn btn-primary" style="font-size:12px;text-decoration:none;">接続する</a>`;
+      }
     }
-  } catch(e) {}
+    return `
+      <div class="card" style="display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:34px;height:34px;background:var(--muted-bg);border:1px solid var(--border);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">${c.icon}</div>
+            <div>
+              <div style="font-size:14px;font-weight:700;">${c.name}</div>
+              <div style="font-size:11px;color:var(--text-light);">${c.desc}</div>
+            </div>
+          </div>
+          ${badge(connected)}
+        </div>
+        <div>${action}</div>
+      </div>`;
+  }).join('');
+
+  const systemCards = SYSTEM_CONNECTORS.map(c => {
+    const ok = data.system[c.key];
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:var(--panel-bg);border:1px solid var(--border);border-radius:10px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:18px;">${c.icon}</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;">${c.name}</div>
+            <div style="font-size:11px;color:var(--text-light);">${c.desc}</div>
+          </div>
+        </div>
+        ${ok
+          ? `<span style="font-size:11px;font-weight:700;color:#276749;background:#c6f6d5;padding:2px 9px;border-radius:20px;white-space:nowrap;">● 設定済み</span>`
+          : `<span style="font-size:11px;color:var(--text-light);background:var(--muted-bg);border:1px solid var(--border);padding:2px 9px;border-radius:20px;white-space:nowrap;">─ 未設定</span>`
+        }
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="max-width:720px;display:grid;gap:24px;">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.04em;margin-bottom:12px;">👤 個人連携（自分のアカウントで接続）</div>
+        <div style="display:grid;gap:10px;">${personalCards}</div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.04em;margin-bottom:12px;">🔧 システム連携（管理者が設定・全員で共有）</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;">${systemCards}</div>
+      </div>
+    </div>`;
 }
+
+async function oauthDisconnect(key, url) {
+  if (!confirm(`${PERSONAL_CONNECTORS.find(c=>c.key===key)?.name || key} の連携を解除しますか？`)) return;
+  await fetch(url, { method: 'DELETE' });
+  await loadConnectors();
+}
+
 async function saveGithubToken() {
   const input = document.getElementById('githubTokenInput');
   const btn = document.getElementById('saveGithubBtn');
-  const msg = document.getElementById('saveGithubMsg');
   if (!input?.value.trim()) return;
-  btn.disabled = true; btn.textContent = '接続中...';
+  if (btn) { btn.disabled = true; btn.textContent = '接続中...'; }
   try {
     const resp = await fetch('/api/settings/github', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2011,28 +2078,11 @@ async function saveGithubToken() {
     });
     const d = await resp.json();
     if (!resp.ok) throw new Error(d.error || '接続失敗');
-    if (msg) { msg.textContent = `✓ @${d.login} として接続しました`; msg.style.display = 'inline'; }
-    input.value = '';
-    await loadGithubStatus();
+    await loadConnectors();
   } catch(e) {
     alert(e.message);
-  } finally {
-    btn.disabled = false; btn.textContent = '接続する';
+    if (btn) { btn.disabled = false; btn.textContent = '接続する'; }
   }
-}
-async function disconnectGithub() {
-  if (!confirm('GitHub 連携を解除しますか？')) return;
-  await fetch('/api/settings/github', { method: 'DELETE' });
-  await loadGithubStatus();
-  const inputArea = document.getElementById('githubInputArea');
-  if (inputArea) inputArea.innerHTML = `
-    <input id="githubTokenInput" type="password" placeholder="ghp_xxxx または github_pat_xxxx"
-      style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;font-family:monospace;transition:border-color .15s;box-sizing:border-box;"
-      onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
-    <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
-      <button class="btn btn-primary" onclick="saveGithubToken()" id="saveGithubBtn">接続する</button>
-      <span id="saveGithubMsg" style="font-size:12px;color:var(--success);display:none;"></span>
-    </div>`;
 }
 
 async function loadCustomRules() {

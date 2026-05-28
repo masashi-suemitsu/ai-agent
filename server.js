@@ -5297,6 +5297,35 @@ function extractGmailBody(payload) {
   return '';
 }
 
+// GET /api/connectors/status — 全コネクタのステータスを一括返却
+app.get('/api/connectors/status', (req, res) => {
+  const email = req.user.email;
+  const personal = {
+    drive:     { connected: !!db.prepare('SELECT 1 FROM user_drive_tokens WHERE email=?').get(email) },
+    calendar:  { connected: !!db.prepare('SELECT 1 FROM user_calendar_tokens WHERE email=?').get(email) },
+    gmail:     { connected: !!db.prepare('SELECT 1 FROM user_gmail_tokens WHERE email=?').get(email) },
+    chatwork:  { connected: !!db.prepare('SELECT 1 FROM user_chatwork_tokens WHERE email=?').get(email) },
+    github:    { connected: !!(db.prepare('SELECT github_token FROM user_settings WHERE email=?').get(email)?.github_token) },
+  };
+  const e = process.env;
+  const system = {
+    zoom:         !!(e.ZOOM_ACCOUNT_ID && e.ZOOM_CLIENT_ID && e.ZOOM_CLIENT_SECRET),
+    slack:        !!e.SLACK_BOT_TOKEN,
+    notion:       !!e.NOTION_TOKEN,
+    wordpress:    !!e.WP_URL,
+    kintone:      !!(e.KINTONE_DOMAIN && e.KINTONE_API_TOKEN),
+    freee:        !!e.FREEE_TOKEN,
+    mfcloud:      !!e.MFCLOUD_TOKEN,
+    salesforce:   !!(e.SALESFORCE_TOKEN && e.SALESFORCE_INSTANCE_URL),
+    hubspot:      !!e.HUBSPOT_TOKEN,
+    lineworks:    !!e.LINEWORKS_TOKEN,
+    ms365:        !!e.MS_GRAPH_TOKEN,
+    ses:          !!e.SES_FROM,
+    chatwork_sys: !!e.CHATWORK_SYSTEM_TOKEN,
+  };
+  res.json({ personal, system });
+});
+
 // GET /api/gmail/status
 app.get('/api/gmail/status', (req, res) => {
   const row = db.prepare('SELECT refresh_token, updated_at FROM user_gmail_tokens WHERE email=?').get(req.user.email);
