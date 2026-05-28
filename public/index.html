@@ -350,6 +350,38 @@ kbd { background: #f1f3f8; border: 1px solid #cbd5e0; border-radius: 4px; paddin
 .model-btn.active .model-hint { opacity: .8; }
 .model-btn:hover:not(.active) { border-color: #a0aec0; color: var(--text); }
 .input-wrapper { flex: 1; position: relative; }
+/* ─ スラッシュコマンドメニュー ─ */
+.slash-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1.5px solid var(--primary);
+  border-radius: 14px;
+  box-shadow: 0 6px 28px rgba(91,110,255,.18);
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 300;
+}
+[data-theme="dark"] .slash-menu { background: var(--sidebar-section); border-color: var(--primary); }
+.slash-header { padding: 8px 14px 4px; font-size: 10px; font-weight: 700; color: var(--text-light); letter-spacing: .08em; text-transform: uppercase; }
+.slash-item {
+  padding: 9px 12px;
+  cursor: pointer;
+  border-radius: 10px;
+  margin: 2px 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: background .1s;
+}
+.slash-item:hover, .slash-item.s-sel { background: var(--primary-light); }
+.slash-item-icon { font-size: 20px; line-height: 1; flex-shrink: 0; }
+.slash-item-body { min-width: 0; }
+.slash-item-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.slash-item-desc { font-size: 11px; color: var(--text-light); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slash-empty { padding: 16px; text-align: center; font-size: 13px; color: var(--text-light); }
 textarea {
   width: 100%;
   border: 1.5px solid var(--border);
@@ -637,8 +669,9 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
         <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" style="display:none;" onchange="onFilesPicked(event)">
         <button class="attach-btn" type="button" onclick="document.getElementById('fileInput').click()" title="画像・PDFを添付">📎</button>
         <div class="input-wrapper">
-          <textarea id="input" placeholder="どんな仕事を任せますか？（画像・PDFはドラッグ&amp;ドロップ or 📎で添付）" rows="1"
-            onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <textarea id="input" placeholder="どんな仕事を任せますか？（/ でスキル検索）" rows="1"
+            onkeydown="handleKey(event)" oninput="onInputChange(this)"></textarea>
+          <div id="slashMenu" class="slash-menu" style="display:none;"></div>
         </div>
         <button class="send-btn" id="sendBtn" onclick="send()">送信</button>
       </div>
@@ -1209,7 +1242,86 @@ function autoResize(el) {
   el.style.height = Math.min(el.scrollHeight, 140) + 'px';
 }
 
+// ─ スラッシュコマンド ─
+let _slashActive = false;
+let _slashIndex = 0;
+let _slashFiltered = [];
+
+function onInputChange(el) {
+  autoResize(el);
+  handleSlashInput(el.value);
+}
+
+function handleSlashInput(val) {
+  // 先頭が / で改行なし のときのみ起動
+  if (!val.startsWith('/') || val.includes('\n')) { hideSlashMenu(); return; }
+  const query = val.slice(1).toLowerCase().trim();
+  _slashFiltered = (_cachedSkills || []).filter(s =>
+    !query || s.title.toLowerCase().includes(query)
+  ).slice(0, 12);
+  if (_slashFiltered.length === 0) { hideSlashMenu(); return; }
+  _slashIndex = Math.min(_slashIndex, _slashFiltered.length - 1);
+  renderSlashMenu();
+}
+
+function renderSlashMenu() {
+  const menu = document.getElementById('slashMenu');
+  if (!menu || _slashFiltered.length === 0) { hideSlashMenu(); return; }
+  _slashActive = true;
+  menu.style.display = 'block';
+  menu.innerHTML = '<div class="slash-header">⚡ スキル選択 — Enter で実行 / Esc で閉じる</div>' +
+    _slashFiltered.map((s, i) => {
+      const icon = esc(s.icon || '⚡');
+      const desc = (s.prompt || '').replace(/\n/g, ' ').slice(0, 55);
+      return `<div class="slash-item${i === _slashIndex ? ' s-sel' : ''}"
+        onmousedown="selectSlashSkill(${s.id},${JSON.stringify(s.title)})"
+        onmouseover="_slashIndex=${i};renderSlashMenu()">
+        <div class="slash-item-icon">${icon}</div>
+        <div class="slash-item-body">
+          <div class="slash-item-title">${esc(s.title)}</div>
+          ${desc ? `<div class="slash-item-desc">${esc(desc)}${(s.prompt||'').length > 55 ? '…' : ''}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+}
+
+function hideSlashMenu() {
+  _slashActive = false;
+  _slashFiltered = [];
+  _slashIndex = 0;
+  const menu = document.getElementById('slashMenu');
+  if (menu) menu.style.display = 'none';
+}
+
+function selectSlashSkill(id, title) {
+  hideSlashMenu();
+  const input = document.getElementById('input');
+  input.value = '';
+  input.style.height = 'auto';
+  input.focus();
+  runSkill(id, title);
+}
+
 function handleKey(e) {
+  // スラッシュメニューが開いているときはナビゲーション優先
+  if (_slashActive) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      _slashIndex = Math.min(_slashIndex + 1, _slashFiltered.length - 1);
+      renderSlashMenu(); return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _slashIndex = Math.max(_slashIndex - 1, 0);
+      renderSlashMenu(); return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (_slashFiltered[_slashIndex]) selectSlashSkill(_slashFiltered[_slashIndex].id, _slashFiltered[_slashIndex].title);
+      return;
+    }
+    if (e.key === 'Escape') { hideSlashMenu(); return; }
+  }
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 }
 
@@ -1921,6 +2033,9 @@ function showShortcutHelp() {
   wrap.innerHTML = html;
   document.body.appendChild(wrap.firstElementChild);
 }
+
+// スラッシュメニュー: テキストエリアからフォーカスが外れたら閉じる（mousedown との競合を避けるため遅延）
+document.getElementById('input').addEventListener('blur', () => setTimeout(hideSlashMenu, 150));
 
 // ─ キーボードショートカット ─
 document.addEventListener('keydown', (e) => {
