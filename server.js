@@ -2224,8 +2224,12 @@ async function executeTool(name, input, user) {
         }
         return { id: input.file_id, name, mimeType, pdf: { mediaType: 'application/pdf', base64: buf.toString('base64') } };
       }
-      // Excel (.xlsx / .xls)
-      if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || mimeType === 'application/vnd.ms-excel') {
+      // .xls（旧形式）は非対応 — Google Driveで「Googleスプレッドシートとして開く」→再保存して.xlsxにしてください
+      if (mimeType === 'application/vnd.ms-excel') {
+        return { id: input.file_id, name, mimeType, error: '旧形式の .xls ファイルは読み込めません。Google Drive で「Googleスプレッドシートとして開く」→「ダウンロード → .xlsx」に変換してから再試行してください。' };
+      }
+      // Excel (.xlsx)
+      if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
         const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'arraybuffer' });
         const wb = new ExcelJS.Workbook();
         await wb.xlsx.load(Buffer.from(r.data));

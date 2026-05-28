@@ -1143,7 +1143,7 @@ async function runSkillNow(id, title, btn) {
   document.getElementById('skillThinkingBlock').style.display = 'none';
   document.getElementById('skillThinkingPre').textContent = '';
   const thinkBtn = document.getElementById('thinkingToggleSkill');
-  if (thinkBtn) { thinkBtn.textContent = '🧠 拡張思考モード'; thinkBtn.style.cssText = 'font-size:11px;border:1px solid var(--border);color:var(--text-light);background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;'; }
+  if (thinkBtn) { thinkBtn.textContent = '🧠 拡張思考モード'; thinkBtn.style.cssText = 'font-size:11px;border:1px solid var(--border);color:var(--text-light);background:var(--panel-bg);border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;'; }
   // 変数を検出してUIを表示
   const skill = _skillCache[id];
   const varMatches = [...new Set([...(skill?.steps||'').matchAll(/\{\{(\w+)\}\}/g), ...(skill?.description||'').matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]))];
