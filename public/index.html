@@ -26,6 +26,11 @@
   --success: #48bb78;
   --danger: #e53e3e;
   --warn: #ed8936;
+  --panel-bg: #ffffff;
+  --input-bg: #f9fafb;
+  --input-bg-focus: #ffffff;
+  --card-hover: #f4f6fb;
+  --muted-bg: #f7f8fc;
 }
 [data-theme="dark"] {
   --sidebar-bg: #12141f;
@@ -40,12 +45,17 @@
   --border: #2d3748;
   --text: #e2e8f0;
   --text-light: #8a95a8;
+  --panel-bg: #1a1d2e;
+  --input-bg: #252840;
+  --input-bg-focus: #2d3252;
+  --card-hover: #1e2133;
+  --muted-bg: #252840;
 }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; background: var(--chat-bg); color: var(--text); }
 
 /* ─ Header ─ */
 header {
-  background: #fff;
+  background: var(--panel-bg);
   border-bottom: 1px solid var(--border);
   padding: 0 20px;
   height: 52px;
@@ -97,13 +107,13 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
   outline: none; font-family: inherit;
 }
 .sidebar-search input::placeholder { color: var(--sidebar-text); }
-.sidebar-search input:focus { border-color: var(--primary); background: #fff; }
+.sidebar-search input:focus { border-color: var(--primary); background: var(--input-bg-focus); }
 
 .search-snippet { color: var(--sidebar-text); font-size: 10px; margin-top: 3px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .search-snippet mark { background: #fef3c7; color: #92400e; padding: 0 2px; border-radius: 2px; }
 .search-empty { text-align: center; color: var(--sidebar-text); font-size: 11px; padding: 16px 12px; opacity: .7; }
 
-kbd { background: #f1f3f8; border: 1px solid #cbd5e0; border-radius: 4px; padding: 2px 6px; font-family: 'SF Mono', monospace; font-size: 11px; color: #2d3748; }
+kbd { background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-family: 'SF Mono', monospace; font-size: 11px; color: var(--text); }
 
 .sidebar-section { flex: 1; overflow-y: auto; min-height: 0; }
 .sidebar-section-header {
@@ -171,6 +181,11 @@ kbd { background: #f1f3f8; border: 1px solid #cbd5e0; border-radius: 4px; paddin
 .skill-item:hover .skill-share-btn { opacity: .5; }
 .skill-share-btn.shared { opacity: 1 !important; }
 .skill-share-btn:hover { opacity: 1 !important; }
+.skill-pin-btn { background: none; border: none; cursor: pointer; font-size: 13px; padding: 2px 3px; opacity: 0; transition: opacity .12s; line-height: 1; }
+.skill-item:hover .skill-pin-btn { opacity: .4; }
+.skill-pin-btn.pinned { opacity: 1 !important; filter: none; }
+.skill-pin-btn:hover { opacity: 1 !important; }
+.pin-section-label { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--primary); opacity: .7; padding: 6px 18px 2px; text-transform: uppercase; }
 .skill-owner-badge { font-size: 9px; color: var(--primary); background: rgba(102,126,234,0.13); border-radius: 3px; padding: 1px 5px; margin-left: 5px; font-weight: 600; white-space: nowrap; }
 
 .sidebar-empty { color: var(--sidebar-text); font-size: 11px; text-align: center; padding: 14px 12px; line-height: 1.6; opacity: .7; }
@@ -180,7 +195,7 @@ kbd { background: #f1f3f8; border: 1px solid #cbd5e0; border-radius: 4px; paddin
 .messages { flex: 1; overflow-y: auto; padding: 24px 24px 8px; display: flex; flex-direction: column; gap: 14px; }
 
 /* ─ Right Sidebar ─ */
-.sidebar-right { width: 256px; flex-shrink: 0; background: #f7fafc; border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.sidebar-right { width: 256px; flex-shrink: 0; background: var(--sidebar-bg); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
 .rs-header { padding: 14px 14px 8px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #a0aec0; }
 .rs-list { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
 .rs-item { display: flex; align-items: center; gap: 10px; padding: 10px 10px; border-radius: 8px; cursor: pointer; transition: background .15s; margin-bottom: 2px; }
@@ -195,7 +210,7 @@ kbd { background: #f1f3f8; border: 1px solid #cbd5e0; border-radius: 4px; paddin
 .rs-status.expired { color: #c53030; }
 .rs-footer { padding: 8px; border-top: 1px solid var(--border); }
 .rs-footer-btn { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 8px; background: none; border: none; cursor: pointer; color: var(--text); font-size: 13px; font-weight: 500; transition: background .15s; }
-.rs-footer-btn:hover { background: #edf2f7; }
+.rs-footer-btn:hover { background: var(--sidebar-hover); }
 .rs-footer-btn.active { background: var(--primary-light); }
 
 /* Empty state */
@@ -205,7 +220,7 @@ kbd { background: #f1f3f8; border: 1px solid #cbd5e0; border-radius: 4px; paddin
 .empty-state p { font-size: 14px; line-height: 1.7; max-width: 340px; }
 .examples { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; width: 100%; max-width: 400px; }
 .example-btn {
-  background: #fff;
+  background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 11px 16px;
@@ -233,7 +248,7 @@ kbd { background: #f1f3f8; border: 1px solid #cbd5e0; border-radius: 4px; paddin
 .msg.ai .bubble { border-top-left-radius: 4px; }
 .bubble p + p { margin-top: 8px; }
 .bubble strong { font-weight: 600; }
-.bubble code { background: #f1f3f8; border-radius: 4px; padding: 1px 5px; font-size: 12px; font-family: 'SF Mono', monospace; }
+.bubble code { background: var(--input-bg); border-radius: 4px; padding: 1px 5px; font-size: 12px; font-family: 'SF Mono', monospace; }
 .msg.user .bubble code { background: rgba(255,255,255,.2); }
 
 /* Skill card in chat */
@@ -308,9 +323,10 @@ kbd { background: #f1f3f8; border: 1px solid #cbd5e0; border-radius: 4px; paddin
 .tool-calls { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
 .tool-call {
   display: inline-flex; align-items: center; gap: 6px;
-  background: #f0f4ff; border: 1px solid #c3d0ff; border-radius: 6px;
+  background: var(--primary-light); border: 1px solid #c3d0ff; border-radius: 6px;
   padding: 3px 10px; font-size: 11px; color: #3a4fd0;
 }
+[data-theme="dark"] .tool-call { background: #1e2a4a; border-color: #3a4fd0; color: #8fa8ff; }
 .tool-call.running::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; border: 2px solid #5b6eff; border-top-color: transparent; animation: spin .6s linear infinite; }
 .tool-call.done { background: #f0fff4; border-color: #9ae6b4; color: #276749; }
 .tool-call.done::before { content: '✓'; font-size: 10px; }
@@ -320,7 +336,7 @@ kbd { background: #f1f3f8; border: 1px solid #cbd5e0; border-radius: 4px; paddin
 
 /* Input area */
 .input-area {
-  background: #fff;
+  background: var(--panel-bg);
   border-top: 1px solid var(--border);
   padding: 10px 20px 14px;
   display: flex;
@@ -356,7 +372,7 @@ kbd { background: #f1f3f8; border: 1px solid #cbd5e0; border-radius: 4px; paddin
   bottom: calc(100% + 8px);
   left: 0;
   right: 0;
-  background: #fff;
+  background: var(--panel-bg);
   border: 1.5px solid var(--primary);
   border-radius: 14px;
   box-shadow: 0 6px 28px rgba(91,110,255,.18);
@@ -364,7 +380,7 @@ kbd { background: #f1f3f8; border: 1px solid #cbd5e0; border-radius: 4px; paddin
   overflow-y: auto;
   z-index: 300;
 }
-[data-theme="dark"] .slash-menu { background: var(--sidebar-section); border-color: var(--primary); }
+[data-theme="dark"] .slash-menu { border-color: var(--primary); }
 .slash-header { padding: 8px 14px 4px; font-size: 10px; font-weight: 700; color: var(--text-light); letter-spacing: .08em; text-transform: uppercase; }
 .slash-item {
   padding: 9px 12px;
@@ -396,9 +412,9 @@ textarea {
   line-height: 1.5;
   transition: border .15s;
   color: var(--text);
-  background: #f9fafb;
+  background: var(--input-bg);
 }
-textarea:focus { border-color: var(--primary); background: #fff; }
+textarea:focus { border-color: var(--primary); background: var(--input-bg-focus); }
 .send-btn {
   background: var(--primary);
   color: #fff;
@@ -426,7 +442,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
 
 .cw-panel {
   position: fixed; top: 52px; right: -440px; width: 420px; bottom: 0;
-  background: #fff; border-left: 1px solid var(--border); display: flex;
+  background: var(--panel-bg); border-left: 1px solid var(--border); display: flex;
   flex-direction: column; z-index: 101; transition: right .25s ease;
   box-shadow: -4px 0 16px rgba(0,0,0,.08);
 }
@@ -435,7 +451,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
 .cw-panel-header h3 { font-size: 15px; font-weight: 700; }
 .cw-room-list { flex: 1; overflow-y: auto; padding: 8px; }
 .cw-room-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; transition: background .12s; }
-.cw-room-item:hover { background: #f4f6fb; }
+.cw-room-item:hover { background: var(--card-hover); }
 .cw-room-item.active { background: var(--primary-light); }
 .cw-room-icon { width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); display: flex; align-items: center; justify-content: font-size: 16px; justify-content: center; font-size: 16px; flex-shrink: 0; }
 .cw-room-info { flex: 1; min-width: 0; }
@@ -443,13 +459,13 @@ textarea:focus { border-color: var(--primary); background: #fff; }
 .cw-room-last { font-size: 11px; color: var(--text-light); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cw-room-unread { background: var(--danger); color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; font-weight: 700; flex-shrink: 0; }
 .cw-msg-area { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-.cw-msg { padding: 8px 10px; border-radius: 8px; background: #f7f8fc; font-size: 12px; line-height: 1.6; }
+.cw-msg { padding: 8px 10px; border-radius: 8px; background: var(--muted-bg); font-size: 12px; line-height: 1.6; }
 .cw-msg-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .cw-msg-name { font-weight: 600; font-size: 12px; color: var(--primary-dark); }
 .cw-msg-time { font-size: 10px; color: var(--text-light); }
 .cw-msg-body { color: var(--text); white-space: pre-wrap; word-break: break-word; }
 .cw-toolbar { padding: 10px 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
-.cw-toolbar button { flex: 1; padding: 7px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; cursor: pointer; background: #fff; transition: all .12s; }
+.cw-toolbar button { flex: 1; padding: 7px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; cursor: pointer; background: var(--panel-bg); transition: all .12s; }
 .cw-toolbar button:hover { border-color: var(--primary); color: var(--primary); }
 .cw-back-btn { background: none; border: none; font-size: 13px; cursor: pointer; color: var(--primary); padding: 4px 0; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
 .cw-empty { text-align: center; color: var(--text-light); padding: 40px 20px; font-size: 13px; line-height: 1.7; }
@@ -464,7 +480,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
 .attach-badge .remove-attach:hover { color: var(--danger); }
 
 /* ─ File attach button ─ */
-.attach-btn { background: #fff; border: 1.5px solid var(--border); border-radius: 10px; width: 40px; height: 40px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0; }
+.attach-btn { background: var(--panel-bg); border: 1.5px solid var(--border); border-radius: 10px; width: 40px; height: 40px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0; }
 .attach-btn:hover { border-color: var(--primary); color: var(--primary); }
 
 /* ─ Drag-over overlay ─ */
@@ -484,7 +500,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
   right: -440px;
   width: 420px;
   bottom: 0;
-  background: #fff;
+  background: var(--panel-bg);
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -502,7 +518,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
 .drive-folder-input button:hover { background: var(--primary-dark); }
 .drive-file-list { flex: 1; overflow-y: auto; padding: 8px; }
 .drive-file-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; transition: background .12s; cursor: default; }
-.drive-file-item:hover { background: #f4f6fb; }
+.drive-file-item:hover { background: var(--card-hover); }
 .drive-file-icon { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
 .drive-file-info { flex: 1; min-width: 0; }
 .drive-file-name { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -522,7 +538,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
   right: -420px;
   width: 400px;
   bottom: 0;
-  background: #fff;
+  background: var(--panel-bg);
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -540,7 +556,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
 }
 .history-panel-header h3 { font-size: 15px; font-weight: 700; }
 .panel-close-btn { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-light); padding: 2px 6px; border-radius: 5px; }
-.panel-close-btn:hover { background: #f0f2f5; }
+.panel-close-btn:hover { background: var(--card-hover); }
 .history-list { flex: 1; overflow-y: auto; padding: 12px; }
 .run-card {
   border: 1px solid var(--border);
@@ -562,7 +578,7 @@ textarea:focus { border-color: var(--primary); background: #fff; }
 /* ─ Schedule Panel ─ */
 .schedule-panel {
   position: fixed; top: 52px; right: -420px; width: 400px; bottom: 0;
-  background: #fff; border-left: 1px solid var(--border);
+  background: var(--panel-bg); border-left: 1px solid var(--border);
   display: flex; flex-direction: column;
   z-index: 100; transition: right .25s ease;
   box-shadow: -4px 0 16px rgba(0,0,0,.08);
@@ -588,13 +604,13 @@ input:checked + .sched-slider:before { transform: translateX(16px); }
 /* ─ Schedule Modal ─ */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .2s; }
 .modal-overlay.open { opacity: 1; pointer-events: all; }
-.modal-box { background: #fff; border-radius: 16px; padding: 24px; width: 340px; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+.modal-box { background: var(--panel-bg); border-radius: 16px; padding: 24px; width: 340px; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
 #sidebarShareModal .modal-box { width: min(440px, calc(100vw - 32px)); max-height: 90vh; overflow-y: auto; padding: 28px 28px; }
 label.selected { border-color: var(--primary) !important; background: var(--primary-light) !important; }
 .modal-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
 .modal-subtitle { font-size: 13px; color: var(--primary-dark); font-weight: 600; margin-bottom: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .modal-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
-.modal-field select { width: 100%; border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; background: #f9fafb; }
+.modal-field select { width: 100%; border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; background: var(--input-bg); color: var(--text); }
 .modal-field select:focus { border-color: var(--primary); }
 .modal-btns { display: flex; gap: 8px; margin-top: 20px; }
 .modal-btn-cancel { flex: 1; background: none; border: 1px solid var(--border); border-radius: 8px; padding: 9px; font-size: 13px; cursor: pointer; color: var(--text-light); }
@@ -1114,15 +1130,13 @@ async function loadSidebar() {
     return sw ? '👥' : '🌐';
   }
 
-  // マイスキル
-  html += `<div class="sidebar-section-header" style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-    <span>マイスキル</span>
-    <button onclick="toggleParallelMode()" id="parallelModeBtn" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;color:var(--text-light);font-weight:600;">📊 並列実行</button>
-  </div>`;
-  if (mySkills.length === 0) {
-    html += `<div class="sidebar-empty">保存したスキルがここに表示されます</div>`;
-  } else {
-    html += mySkills.map(s => `
+  // マイスキル（ピン止め先頭）
+  const pinnedIds = _pinnedSkills;
+  const pinnedMySkills   = mySkills.filter(s => pinnedIds.has(s.id));
+  const unpinnedMySkills = mySkills.filter(s => !pinnedIds.has(s.id));
+
+  function skillItemHtml(s, pinned) {
+    return `
       <div class="skill-item" id="skill-item-${s.id}">
         <label class="parallel-check" id="parallel-check-${s.id}" style="display:none;align-items:center;padding:2px 4px 2px 0;cursor:pointer;">
           <input type="checkbox" value="${s.id}" onchange="onParallelCheck()" style="accent-color:var(--primary);width:15px;height:15px;margin-right:6px;">
@@ -1132,12 +1146,30 @@ async function loadSidebar() {
           <div class="skill-desc">${esc(s.description || '')}</div>
         </div>
         <div class="skill-actions" id="skill-actions-${s.id}">
+          <button class="skill-pin-btn ${pinned ? 'pinned' : ''}" onclick="togglePin(${s.id})" title="${pinned ? 'ピンを外す' : 'ピン止め'}">${pinned ? '📌' : '📍'}</button>
           <button class="skill-share-btn ${s.shared ? 'shared' : ''}" onclick="openShareModal(${s.id})" title="共有設定">${skillShareIcon(s)}</button>
           <button class="skill-run-btn" style="background:#ed8936;" data-id="${s.id}" data-title="${esc(s.title)}" onclick="openScheduleModal(this.dataset.id, this.dataset.title)" title="定期実行を設定">⏰</button>
           <button class="skill-run-btn" data-id="${s.id}" data-title="${esc(s.title)}" onclick="runSkill(this.dataset.id, this.dataset.title)">実行</button>
           <button class="skill-del-btn" onclick="deleteSkill(${s.id})" title="削除">✕</button>
         </div>
-      </div>`).join('');
+      </div>`;
+  }
+
+  html += `<div class="sidebar-section-header" style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
+    <span>マイスキル</span>
+    <button onclick="toggleParallelMode()" id="parallelModeBtn" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;color:var(--text-light);font-weight:600;">📊 並列実行</button>
+  </div>`;
+  if (mySkills.length === 0) {
+    html += `<div class="sidebar-empty">保存したスキルがここに表示されます</div>`;
+  } else {
+    if (pinnedMySkills.length > 0) {
+      html += `<div class="pin-section-label">📌 ピン止め</div>`;
+      html += pinnedMySkills.map(s => skillItemHtml(s, true)).join('');
+      if (unpinnedMySkills.length > 0) {
+        html += `<div class="pin-section-label" style="margin-top:4px;">その他</div>`;
+      }
+    }
+    html += unpinnedMySkills.map(s => skillItemHtml(s, false)).join('');
   }
 
   // チームのスキル
@@ -1241,6 +1273,17 @@ function setExample(text) {
 function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+// ─ ピン止め ─
+let _pinnedSkills = new Set(JSON.parse(localStorage.getItem('pinnedSkills') || '[]'));
+
+function togglePin(id) {
+  id = Number(id);
+  if (_pinnedSkills.has(id)) _pinnedSkills.delete(id);
+  else _pinnedSkills.add(id);
+  localStorage.setItem('pinnedSkills', JSON.stringify([..._pinnedSkills]));
+  loadSidebar();
 }
 
 // ─ スラッシュコマンド ─
