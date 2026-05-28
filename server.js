@@ -210,6 +210,29 @@ db.exec(`
     finished_at TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS webhook_tokens (
+    token        TEXT PRIMARY KEY,
+    owner_email  TEXT NOT NULL,
+    label        TEXT,
+    skill_name   TEXT,
+    prompt_template TEXT,
+    enabled      INTEGER DEFAULT 1,
+    created_at   TEXT DEFAULT (datetime('now','localtime')),
+    last_used_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_wh_owner ON webhook_tokens(owner_email);
+
+  CREATE TABLE IF NOT EXISTS webhook_logs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    token        TEXT NOT NULL,
+    received_at  TEXT DEFAULT (datetime('now','localtime')),
+    source_ip    TEXT,
+    payload      TEXT,
+    status       TEXT,
+    error        TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_whlog_token ON webhook_logs(token, id DESC);
+
   CREATE TABLE IF NOT EXISTS scheduled_tasks (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     owner_email  TEXT NOT NULL,
@@ -508,6 +531,56 @@ app.get('/auth/google/callback',
 app.get('/logout', (req, res) => {
   if (req.user) audit(req.user.email, req.user.name, 'logout');
   req.logout(() => res.redirect('/login'));
+});
+
+// ── Webhook受信（認証不要・トークンで識別） ──
+// POST /webhooks/:token  ボディJSONを受け取り、所有者のスキル/プロンプトでAI実行
+app.post('/webhooks/:token', express.json({ limit: '5mb' }), async (req, res) => {
+  const token = req.params.token;
+  const wh = db.prepare('SELECT * FROM webhook_tokens WHERE token=? AND enabled=1').get(token);
+  if (!wh) return res.status(404).json({ error: 'webhook token not found or disabled' });
+  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || '';
+  const payloadStr = JSON.stringify(req.body || {}).slice(0, 100000);
+  const logId = db.prepare('INSERT INTO webhook_logs (token, source_ip, payload, status) VALUES (?,?,?,?)').run(token, ip, payloadStr, 'received').lastInsertRowid;
+  db.prepare("UPDATE webhook_tokens SET last_used_at=datetime('now','localtime') WHERE token=?").run(token);
+  res.json({ ok: true, log_id: logId });
+  // 非同期でAIタスク実行
+  (async () => {
+    try {
+      const ownerEmail = wh.owner_email;
+      const promptTpl = wh.prompt_template || 'Webhook受信ペイロードを分析して必要な処理を実行してください:\n\n```json\n{{payload}}\n```';
+      const prompt = promptTpl.replace('{{payload}}', payloadStr);
+      const role = getUserRole(ownerEmail);
+      const allowedToolNames = TOOLS_FOR_ROLE[role];
+      const activeTools = (allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS).filter(t => t.name !== 'register_task');
+      const messages = [{ role: 'user', content: prompt }];
+      let result = '';
+      let round = 0;
+      while (round < 8) {
+        const resp = await anthropic.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 4096, tools: activeTools, messages });
+        for (const block of resp.content) if (block.type === 'text') result += block.text;
+        if (resp.stop_reason !== 'tool_use') break;
+        messages.push({ role: 'assistant', content: resp.content });
+        const toolResults = [];
+        for (const block of resp.content) {
+          if (block.type !== 'tool_use') continue;
+          try {
+            const r = await executeTool(block.name, block.input, { email: ownerEmail, name: '', role });
+            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(r).slice(0, 80000) });
+          } catch(e) {
+            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
+          }
+        }
+        messages.push({ role: 'user', content: toolResults });
+        round++;
+      }
+      db.prepare('UPDATE webhook_logs SET status=? WHERE id=?').run('done', logId);
+      audit(ownerEmail, '', 'webhook.ran', { token, logId, preview: result.slice(0, 200) });
+    } catch(e) {
+      db.prepare('UPDATE webhook_logs SET status=?, error=? WHERE id=?').run('error', e.message, logId);
+      console.error('[webhook] error:', e.message);
+    }
+  })();
 });
 
 // ── Google Calendar 個人OAuth連携 ──
@@ -2482,6 +2555,45 @@ app.get('/api/conversations/search', (req, res) => {
     ORDER BY c.updated_at DESC LIMIT 50
   `).all(q, like, like, req.user.email, like, like);
   audit(req.user.email, req.user.name, 'conversations.search', { q: q.slice(0, 50), results: rows.length });
+  res.json(rows);
+});
+
+// ── Webhook管理API（認証済みユーザー） ──
+app.get('/api/webhooks', (req, res) => {
+  const rows = db.prepare('SELECT token, label, skill_name, prompt_template, enabled, created_at, last_used_at FROM webhook_tokens WHERE owner_email=? ORDER BY created_at DESC').all(req.user.email);
+  res.json(rows);
+});
+app.post('/api/webhooks', (req, res) => {
+  const { label = '', skill_name = '', prompt_template = '' } = req.body || {};
+  const crypto = require('crypto');
+  const token = crypto.randomBytes(20).toString('hex');
+  db.prepare('INSERT INTO webhook_tokens (token, owner_email, label, skill_name, prompt_template) VALUES (?,?,?,?,?)').run(token, req.user.email, label, skill_name, prompt_template);
+  audit(req.user.email, req.user.name, 'webhook.create', { token });
+  res.json({ ok: true, token, url: `https://d2jjp21sq86i80.cloudfront.net/webhooks/${token}` });
+});
+app.patch('/api/webhooks/:token', (req, res) => {
+  const wh = db.prepare('SELECT owner_email FROM webhook_tokens WHERE token=?').get(req.params.token);
+  if (!wh || wh.owner_email !== req.user.email) return res.status(404).json({ error: 'not found' });
+  const { label, skill_name, prompt_template, enabled } = req.body || {};
+  const sets = [], vals = [];
+  if (label != null)           { sets.push('label=?'); vals.push(label); }
+  if (skill_name != null)      { sets.push('skill_name=?'); vals.push(skill_name); }
+  if (prompt_template != null) { sets.push('prompt_template=?'); vals.push(prompt_template); }
+  if (enabled != null)         { sets.push('enabled=?'); vals.push(enabled ? 1 : 0); }
+  if (!sets.length) return res.json({ ok: true });
+  vals.push(req.params.token);
+  db.prepare(`UPDATE webhook_tokens SET ${sets.join(',')} WHERE token=?`).run(...vals);
+  res.json({ ok: true });
+});
+app.delete('/api/webhooks/:token', (req, res) => {
+  db.prepare('DELETE FROM webhook_tokens WHERE token=? AND owner_email=?').run(req.params.token, req.user.email);
+  audit(req.user.email, req.user.name, 'webhook.delete', { token: req.params.token });
+  res.json({ ok: true });
+});
+app.get('/api/webhooks/:token/logs', (req, res) => {
+  const wh = db.prepare('SELECT owner_email FROM webhook_tokens WHERE token=?').get(req.params.token);
+  if (!wh || wh.owner_email !== req.user.email) return res.status(404).json({ error: 'not found' });
+  const rows = db.prepare('SELECT id, received_at, source_ip, status, error, substr(payload,1,500) AS payload_preview FROM webhook_logs WHERE token=? ORDER BY id DESC LIMIT 50').all(req.params.token);
   res.json(rows);
 });
 
