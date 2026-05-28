@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const crypto = require('crypto');
 const session = require('express-session');
 const SqliteStore = require('better-sqlite3-session-store')(session);
 const passport = require('passport');
@@ -13,6 +14,8 @@ const mysql = require('mysql2/promise');
 const nodemailer = require('nodemailer');
 const xlsx = require('xlsx');
 const mammoth = require('mammoth');
+const PptxGenJS = require('pptxgenjs');
+const { Readable } = require('stream');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -381,7 +384,9 @@ app.get('/auth/calendar', requireAuth, (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).send('GOOGLE_CLIENT_IDが未設定です');
   const callbackUrl = (process.env.CALLBACK_URL || '').replace('/auth/google/callback', '/auth/calendar/callback');
   const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, callbackUrl);
-  const state = Buffer.from(req.user.email).toString('base64url');
+  const csrf = crypto.randomBytes(16).toString('hex');
+  req.session.oauth_csrf_calendar = csrf;
+  const state = csrf + '.' + Buffer.from(req.user.email).toString('base64url');
   const authUrl = oauth2.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
@@ -394,9 +399,13 @@ app.get('/auth/calendar', requireAuth, (req, res) => {
 app.get('/auth/calendar/callback', async (req, res) => {
   const { code, error, state } = req.query;
   if (error || !code) return res.redirect('/?calendar_error=1');
+  const [csrfToken, emailB64] = (state || '').split('.');
+  const expectedCsrf = req.session.oauth_csrf_calendar;
+  delete req.session.oauth_csrf_calendar;
+  if (!csrfToken || !expectedCsrf || csrfToken !== expectedCsrf) return res.redirect('/?calendar_error=csrf');
   let userEmail = req.user?.email;
-  if (!userEmail && state) {
-    try { userEmail = Buffer.from(state, 'base64url').toString('utf8'); } catch(e) {}
+  if (!userEmail && emailB64) {
+    try { userEmail = Buffer.from(emailB64, 'base64url').toString('utf8'); } catch(e) {}
   }
   if (!userEmail || !userEmail.endsWith('@' + ALLOWED_DOMAIN)) return res.redirect('/login');
   try {
@@ -424,7 +433,9 @@ app.get('/auth/drive', requireAuth, (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).send('GOOGLE_CLIENT_IDが未設定です');
   const callbackUrl = (process.env.CALLBACK_URL || '').replace('/auth/google/callback', '/auth/drive/callback');
   const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, callbackUrl);
-  const state = Buffer.from(req.user.email).toString('base64url');
+  const csrf = crypto.randomBytes(16).toString('hex');
+  req.session.oauth_csrf_drive = csrf;
+  const state = csrf + '.' + Buffer.from(req.user.email).toString('base64url');
   const authUrl = oauth2.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
@@ -440,9 +451,13 @@ app.get('/auth/drive', requireAuth, (req, res) => {
 app.get('/auth/drive/callback', async (req, res) => {
   const { code, error, state } = req.query;
   if (error || !code) return res.redirect('/?drive_error=1');
+  const [csrfToken, emailB64] = (state || '').split('.');
+  const expectedCsrf = req.session.oauth_csrf_drive;
+  delete req.session.oauth_csrf_drive;
+  if (!csrfToken || !expectedCsrf || csrfToken !== expectedCsrf) return res.redirect('/?drive_error=csrf');
   let userEmail = req.user?.email;
-  if (!userEmail && state) {
-    try { userEmail = Buffer.from(state, 'base64url').toString('utf8'); } catch(e) {}
+  if (!userEmail && emailB64) {
+    try { userEmail = Buffer.from(emailB64, 'base64url').toString('utf8'); } catch(e) {}
   }
   if (!userEmail || !userEmail.endsWith('@' + ALLOWED_DOMAIN)) return res.redirect('/login');
   try {
@@ -470,7 +485,9 @@ app.get('/auth/gmail', requireAuth, (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).send('GOOGLE_CLIENT_IDが未設定です');
   const callbackUrl = (process.env.CALLBACK_URL || '').replace('/auth/google/callback', '/auth/gmail/callback');
   const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, callbackUrl);
-  const state = Buffer.from(req.user.email).toString('base64url');
+  const csrf = crypto.randomBytes(16).toString('hex');
+  req.session.oauth_csrf_gmail = csrf;
+  const state = csrf + '.' + Buffer.from(req.user.email).toString('base64url');
   const authUrl = oauth2.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
@@ -483,9 +500,13 @@ app.get('/auth/gmail', requireAuth, (req, res) => {
 app.get('/auth/gmail/callback', async (req, res) => {
   const { code, error, state } = req.query;
   if (error || !code) return res.redirect('/?gmail_error=1');
+  const [csrfToken, emailB64] = (state || '').split('.');
+  const expectedCsrf = req.session.oauth_csrf_gmail;
+  delete req.session.oauth_csrf_gmail;
+  if (!csrfToken || !expectedCsrf || csrfToken !== expectedCsrf) return res.redirect('/?gmail_error=csrf');
   let userEmail = req.user?.email;
-  if (!userEmail && state) {
-    try { userEmail = Buffer.from(state, 'base64url').toString('utf8'); } catch(e) {}
+  if (!userEmail && emailB64) {
+    try { userEmail = Buffer.from(emailB64, 'base64url').toString('utf8'); } catch(e) {}
   }
   if (!userEmail || !userEmail.endsWith('@' + ALLOWED_DOMAIN)) return res.redirect('/login');
   try {
@@ -610,6 +631,7 @@ function getSystemPrompt(role) {
 - \`send_system_notification\`（システム通知アカウント送信）はユーザー確認不要で送信可能。定期タスクや自動通知に使用する
 - WP公開は必ずユーザーに内容確認してから実行
 - \`update_sheet_range\` / \`append_sheet_rows\`（Sheets書き込み）, \`send_gmail\`（Gmail送信）, \`create_calendar_event\`（予定作成）, \`create_drive_file\`（Driveファイル作成）はすべて2段階フロー必須: ①confirmed なしで呼ぶ → プレビューが返る → ②ユーザーに「○○を○○します。よろしいですか？」と提示 → ③ユーザーが「OK」「実行して」「はい」等で承認 → ④confirmed:true を付けて再呼出 → 実際に実行。スケジュールタスクからの呼出時は confirmed:true で直接呼んでよい
+- 上記の確認を求めるとき、メッセージ末尾に必ず \`<confirm>実行する</confirm>\` を付けること。UIが自動でボタンを表示する（テキスト入力不要になる）
 - \`fetch_url\` は任意のWebページを取得可能。社内/ローカルIPは自動ブロック。HTMLはタグ除去テキストで返される（mode=html で生取得も可）
 - スプレッドシートをファイル名で探したいときは \`search_drive_files\` を使う（mime_type: "application/vnd.google-apps.spreadsheet" を指定すると絞り込める）
 - DBはSELECTのみ。更新系は不可
@@ -1007,6 +1029,37 @@ const TOOLS = [
         confirmed: { type: 'boolean', description: 'true の場合のみ実際に作成' }
       },
       required: ['name', 'type', 'content']
+    }
+  },
+  {
+    name: 'create_pptx',
+    description: 'PowerPoint (.pptx) ファイルを作成してGoogleDriveに保存する。提案書・社内資料・報告書を自動生成。必ず2段階フロー: ①confirmed なしでプレビュー → ②ユーザー承認 → ③confirmed:true で実行。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_name: { type: 'string', description: 'ファイル名（.pptx 拡張子なしで指定）' },
+        title: { type: 'string', description: 'プレゼンテーション全体のタイトル（メタデータ）' },
+        author: { type: 'string', description: '作成者名（任意）' },
+        slides: {
+          type: 'array',
+          description: 'スライド配列。各要素: { layout, title?, subtitle?, bullets?, body?, left?, right? }',
+          items: {
+            type: 'object',
+            properties: {
+              layout: { type: 'string', enum: ['title', 'bullets', 'content', 'two_column', 'section'], description: 'title=タイトル, bullets=箇条書き, content=自由テキスト, two_column=2カラム, section=セクション区切り' },
+              title: { type: 'string' },
+              subtitle: { type: 'string', description: 'titleレイアウトで使用' },
+              bullets: { type: 'array', items: { type: 'string' }, description: 'bulletsレイアウトで使用' },
+              body: { type: 'string', description: 'contentレイアウトで使用' },
+              left: { type: 'string', description: 'two_columnの左カラム' },
+              right: { type: 'string', description: 'two_columnの右カラム' }
+            }
+          }
+        },
+        folder_id: { type: 'string', description: 'Drive保存先フォルダID（任意）' },
+        confirmed: { type: 'boolean' }
+      },
+      required: ['file_name', 'slides']
     }
   }
 ];
@@ -2122,14 +2175,16 @@ app.get('/auth/chatwork', (req, res) => {
   const clientId = process.env.CHATWORK_OAUTH_CLIENT_ID;
   if (!clientId) return res.status(503).send('CHATWORK_OAUTH_CLIENT_IDが未設定です。環境変数を確認してください。');
   const callbackUrl = process.env.CHATWORK_CALLBACK_URL;
-  const state = Buffer.from(req.user.email).toString('base64url');
+  const csrf = crypto.randomBytes(16).toString('hex');
+  req.session.oauth_csrf_chatwork = csrf;
+  const state = csrf + '.' + Buffer.from(req.user.email).toString('base64url');
   const scopes = 'offline_access rooms.all:read rooms.messages:write users.profile.me:read';
   const authUrl = `${CW_OAUTH_BASE}/packages/oauth2/login.php`
     + `?client_id=${encodeURIComponent(clientId)}`
     + `&redirect_uri=${encodeURIComponent(callbackUrl)}`
     + `&response_type=code`
     + `&scope=${encodeURIComponent(scopes)}`
-    + `&state=${state}`;
+    + `&state=${encodeURIComponent(state)}`;
   console.log('[auth/chatwork] redirecting to:', authUrl);
   res.redirect(authUrl);
 });
@@ -2138,9 +2193,13 @@ app.get('/auth/chatwork/callback', async (req, res) => {
   const { code, error, state } = req.query;
   console.log('[chatwork/callback] called', { code: !!code, error, state: !!state, auth: req.isAuthenticated() });
   if (error || !code) return res.redirect('/?chatwork_error=1');
+  const [csrfToken, emailB64] = (state || '').split('.');
+  const expectedCsrf = req.session.oauth_csrf_chatwork;
+  delete req.session.oauth_csrf_chatwork;
+  if (!csrfToken || !expectedCsrf || csrfToken !== expectedCsrf) return res.redirect('/?chatwork_error=csrf');
   let userEmail = req.user?.email;
-  if (!userEmail && state) {
-    try { userEmail = Buffer.from(state, 'base64url').toString('utf8'); } catch(e) {}
+  if (!userEmail && emailB64) {
+    try { userEmail = Buffer.from(emailB64, 'base64url').toString('utf8'); } catch(e) {}
   }
   if (!userEmail || !userEmail.endsWith('@acrovision.co.jp')) return res.redirect('/login');
   const callbackUrl = process.env.CHATWORK_CALLBACK_URL;
@@ -2496,6 +2555,7 @@ app.delete('/api/drive/disconnect', (req, res) => {
 app.get('/api/drive/list', async (req, res) => {
   const { folderId } = req.query;
   if (!folderId) return res.status(400).json({ error: 'folderId is required' });
+  if (!/^[a-zA-Z0-9_-]+$/.test(folderId)) return res.status(400).json({ error: '無効なフォルダIDです' });
   audit(req.user.email, req.user.name, 'drive.list', { folderId });
   try {
     const drive = getDriveClientForUser(req.user);

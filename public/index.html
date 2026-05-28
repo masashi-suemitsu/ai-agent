@@ -261,6 +261,11 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 .save-btn:hover { background: var(--primary-dark); }
 .save-btn:disabled { background: #a0aec0; cursor: default; }
 .saved-badge { display: inline-flex; align-items: center; gap: 5px; background: var(--success); color: #fff; border-radius: 7px; padding: 6px 14px; font-size: 12px; font-weight: 600; }
+.confirm-actions { display: flex; gap: 8px; margin-top: 12px; }
+.confirm-ok-btn { background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 8px 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s; }
+.confirm-ok-btn:hover { background: var(--primary-dark); }
+.confirm-cancel-btn { background: none; border: 1.5px solid var(--border); border-radius: 8px; padding: 8px 16px; font-size: 13px; color: var(--text-light); cursor: pointer; transition: all .15s; }
+.confirm-cancel-btn:hover { border-color: var(--danger); color: var(--danger); }
 
 /* Run output */
 .run-output {
@@ -1146,7 +1151,8 @@ async function send() {
         if (d.done) {
           // tool-calls要素を最後に移動
           const toolCallsEl = aiBubble.querySelector('.tool-calls');
-          const { clean, skill } = extractSkill(fullText);
+          const { clean: cleanAfterSkill, skill } = extractSkill(fullText);
+          const { clean, confirmLabel } = extractConfirm(cleanAfterSkill);
           let textNode = aiBubble.querySelector('.ai-text');
           if (textNode) textNode.innerHTML = formatText(clean);
           else if (!toolCallsEl) aiBubble.innerHTML = formatText(clean);
@@ -1161,6 +1167,14 @@ async function send() {
                 <button class="save-btn" onclick="saveSkill(this)">このスキルを保存</button>
               </div>`;
             aiBubble.appendChild(card);
+          }
+          if (confirmLabel) {
+            const actions = document.createElement('div');
+            actions.className = 'confirm-actions';
+            actions.innerHTML = `
+              <button class="confirm-ok-btn" onclick="quickReply('${confirmLabel.replace(/'/g, "&#39;")}')">${esc(confirmLabel)}</button>
+              <button class="confirm-cancel-btn" onclick="quickReply('キャンセル')">キャンセル</button>`;
+            aiBubble.appendChild(actions);
           }
           msgsEl.scrollTop = msgsEl.scrollHeight;
           await loadSidebar();
@@ -1356,6 +1370,20 @@ function extractSkill(text) {
     const clean = text.replace(/<skill>[\s\S]*?<\/skill>/, '').trim();
     return { clean, skill };
   } catch { return { clean: text, skill: null }; }
+}
+
+function extractConfirm(text) {
+  const m = text.match(/<confirm>([\s\S]*?)<\/confirm>/);
+  if (!m) return { clean: text, confirmLabel: null };
+  const confirmLabel = m[1].trim();
+  const clean = text.replace(/<confirm>[\s\S]*?<\/confirm>/, '').trim();
+  return { clean, confirmLabel };
+}
+
+function quickReply(text) {
+  const input = document.getElementById('input');
+  input.value = text;
+  send();
 }
 
 
