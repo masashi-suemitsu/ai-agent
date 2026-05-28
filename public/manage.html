@@ -695,9 +695,20 @@ const _skillCache = {};
 let _usdJpy = 150;
 let _usdJpyUpdatedAt = null;
 
+async function apiFetch(url, opts) {
+  const r = await fetch(url, opts);
+  const ct = r.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    throw new Error(`サーバーエラー (${r.status})`);
+  }
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || `エラー (${r.status})`);
+  return data;
+}
+
 // ─ 初期化 ─
 (async () => {
-  currentUser = await fetch('/api/me').then(r => r.json());
+  currentUser = await apiFetch('/api/me').catch(() => null);
   if (!currentUser) { location.href = '/login'; return; }
   renderUserBadge(currentUser);
   if (currentUser.role === 'admin') {
@@ -771,7 +782,7 @@ window.addEventListener('hashchange', () => {
 // ─ 定期タスク ─
 async function loadTasks() {
   try {
-    allTasks = await fetch('/api/scheduled-tasks').then(r => r.json());
+    allTasks = await apiFetch('/api/scheduled-tasks');
     renderTasks(allTasks);
   } catch(e) {
     document.getElementById('myTaskList').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>${esc(e.message)}</p></div>`;
@@ -966,7 +977,7 @@ function toggleShareTask(id) {
 // ─ スキル ─
 async function loadSkills() {
   try {
-    allSkills = await fetch('/api/skills').then(r => r.json());
+    allSkills = await apiFetch('/api/skills');
     renderSkills(allSkills);
   } catch(e) {
     document.getElementById('skillList').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>${esc(e.message)}</p></div>`;
@@ -1523,7 +1534,7 @@ function renderRules(role) {
 
 async function loadCustomRules() {
   try {
-    const data = await fetch('/api/user-settings').then(r => r.json());
+    const data = await apiFetch('/api/user-settings');
     const el = document.getElementById('customRulesInput');
     if (el) el.value = data.custom_rules || '';
   } catch(e) {}
@@ -1638,7 +1649,7 @@ let allHistory = [];
 
 async function loadHistory() {
   try {
-    allHistory = await fetch('/api/task-runs').then(r => r.json());
+    allHistory = await apiFetch('/api/task-runs');
     renderHistory(allHistory);
   } catch(e) {
     document.getElementById('historyList').innerHTML = `<div class="empty"><p>${esc(e.message)}</p></div>`;
@@ -1871,7 +1882,7 @@ function statusColor(s) {
 // ─ ユーザー管理 ─
 async function loadUsers() {
   try {
-    const users = await fetch('/api/admin/users').then(r => r.json());
+    const users = await apiFetch('/api/admin/users');
     renderUsers(users);
   } catch(e) {
     document.getElementById('userMgmtContent').innerHTML = `<div class="empty"><p>${esc(e.message)}</p></div>`;
@@ -2055,7 +2066,7 @@ async function loadUsage() {
 let _dashScope = 'me';
 
 async function loadDashStats() {
-  const d = await fetch('/api/dashboard?scope=' + _dashScope).then(r => r.json()).catch(() => ({}));
+  const d = await apiFetch('/api/dashboard?scope=' + _dashScope).catch(() => ({}));
   if (!d.today_chats && d.today_chats !== 0) return;
   document.getElementById('dashStatsGrid').innerHTML = `
     <div class="stat-card"><div class="stat-label">今日のチャット</div><div class="stat-value">${d.today_chats}</div><div class="stat-sub">${_dashScope==='me'?'自分':'全社'}</div></div>
@@ -2087,7 +2098,7 @@ async function loadDashAudit() {
   if (email)  qs.set('email', email);
   if (action) qs.set('action', action);
   if (since)  qs.set('since', since + ' 00:00:00');
-  const d = await fetch('/api/audit-logs?' + qs).then(r => r.json()).catch(() => ({ rows: [] }));
+  const d = await apiFetch('/api/audit-logs?' + qs).catch(() => ({ rows: [] }));
   document.getElementById('dashAuditTable').innerHTML = d.rows.length === 0
     ? '<div style="color:#a0aec0;font-size:12px;padding:8px;">該当ログなし</div>'
     : `<table class="dash-ptable"><tr><th>時刻</th><th>ユーザー</th><th>アクション</th><th>詳細</th></tr>${d.rows.map(r=>`<tr><td>${esc(r.ts)}</td><td>${esc(r.name||r.email)}</td><td><code style="font-size:11px;">${esc(r.action)}</code></td><td style="font-size:11px;color:#718096;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.details||'')}</td></tr>`).join('')}</table>`;
