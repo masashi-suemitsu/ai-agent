@@ -10,11 +10,23 @@
   --primary: #5b6eff; --primary-dark: #4a5ce8; --primary-light: #edf2ff;
   --border: #e2e8f0; --text: #2d3748; --text-light: #718096;
   --success: #48bb78; --danger: #e53e3e; --warn: #ed8936; --bg: #f4f6fb;
+  --panel-bg: #ffffff;
+  --input-bg: #f9fafb;
+  --muted-bg: #f7f8fc;
+  --card-hover: #f4f6fb;
+}
+[data-theme="dark"] {
+  --border: #2d3748; --text: #e2e8f0; --text-light: #8a95a8; --bg: #1a1d2e;
+  --primary-light: rgba(91,110,255,.15);
+  --panel-bg: #1a1d2e;
+  --input-bg: #252840;
+  --muted-bg: #252840;
+  --card-hover: #1e2133;
 }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
 header {
-  background: #fff; border-bottom: 1px solid var(--border);
+  background: var(--panel-bg); border-bottom: 1px solid var(--border);
   padding: 0 24px; height: 52px; display: flex; align-items: center;
   justify-content: space-between; position: sticky; top: 0; z-index: 10;
   box-shadow: 0 1px 4px rgba(0,0,0,.05);
@@ -31,7 +43,7 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 
 .page { max-width: 1372px; margin: 0 auto; padding: 24px 20px; }
 
-.tab-nav { display: flex; gap: 4px; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 24px; width: fit-content; }
+.tab-nav { display: flex; gap: 4px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 24px; width: fit-content; }
 .tab-btn { padding: 8px 22px; border: none; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; background: none; color: var(--text-light); transition: all .15s; }
 .tab-btn.active { background: var(--primary); color: #fff; }
 .tab-btn:hover:not(.active) { background: var(--bg); color: var(--text); }
@@ -39,10 +51,10 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 .tab-content.active { display: block; }
 
 .filter-bar { display: flex; gap: 6px; margin-bottom: 16px; }
-.filter-btn { background: #fff; border: 1px solid var(--border); border-radius: 7px; padding: 5px 14px; font-size: 12px; cursor: pointer; color: var(--text-light); transition: all .12s; }
+.filter-btn { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 7px; padding: 5px 14px; font-size: 12px; cursor: pointer; color: var(--text-light); transition: all .12s; }
 .filter-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
 
-.card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; transition: box-shadow .15s; }
+.card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; transition: box-shadow .15s; }
 .card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.06); }
 .card-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
 .card-title { font-size: 15px; font-weight: 700; flex: 1; }
@@ -57,12 +69,12 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 .card-meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-light); margin-bottom: 12px; }
 .card-meta span { display: flex; align-items: center; gap: 4px; }
 
-.linked-skill { background: #f7f8fc; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12px; color: var(--text); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.linked-skill { background: var(--muted-bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12px; color: var(--text); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
 .linked-skill-label { font-weight: 600; color: var(--text-light); font-size: 11px; margin-right: 2px; }
 
 .steps-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--primary); cursor: pointer; background: var(--primary-light); border: none; border-radius: 6px; padding: 5px 12px; transition: background .12s; }
 .steps-btn:hover { background: #dde8ff; }
-.steps-body { margin-top: 10px; background: #f7f8fc; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 12px; line-height: 1.85; color: var(--text); white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow-y: auto; display: none; }
+.steps-body { margin-top: 10px; background: var(--muted-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 12px; line-height: 1.85; color: var(--text); white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow-y: auto; display: none; }
 .steps-body.open { display: block; }
 
 .card-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); flex-wrap: wrap; }
@@ -86,9 +98,9 @@ input:checked + .toggle-slider { background: var(--primary); }
 input:checked + .toggle-slider:before { transform: translateX(18px); }
 .toggle-label { font-size: 12px; color: var(--text-light); min-width: 40px; }
 
-.interval-row { display: none; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 10px; background: #f7f8fc; border-radius: 8px; }
+.interval-row { display: none; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 10px; background: var(--muted-bg); border-radius: 8px; }
 .interval-row.open { display: flex; }
-.interval-row select { border: 1.5px solid var(--primary); border-radius: 7px; padding: 5px 10px; font-size: 12px; outline: none; background: #fff; }
+.interval-row select { border: 1.5px solid var(--primary); border-radius: 7px; padding: 5px 10px; font-size: 12px; outline: none; background: var(--input-bg); color: var(--text); }
 .interval-row .btn { padding: 5px 12px; }
 
 .empty { text-align: center; padding: 56px 20px; color: var(--text-light); }
@@ -97,13 +109,13 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 .empty p { font-size: 13px; line-height: 1.7; }
 .empty a { color: var(--primary); font-weight: 600; text-decoration: none; }
 
-.rules-block { background: #fff; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
-.rules-block-title { padding: 13px 18px; font-size: 13px; font-weight: 700; background: #f7f8fc; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.rules-block { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+.rules-block-title { padding: 13px 18px; font-size: 13px; font-weight: 700; background: var(--muted-bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
 .rules-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .rules-table th { padding: 8px 16px; text-align: left; border-bottom: 1px solid var(--border); font-weight: 600; color: var(--text-light); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
-.rules-table td { padding: 9px 16px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
+.rules-table td { padding: 9px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .rules-table tr:last-child td { border-bottom: none; }
-.rules-table tr:hover td { background: #fafbff; }
+.rules-table tr:hover td { background: var(--card-hover); }
 .check { color: var(--success); font-size: 14px; font-weight: 700; }
 .cross { color: #cbd5e0; font-size: 14px; }
 .tool-name { font-weight: 600; font-family: 'SF Mono', monospace; font-size: 11px; color: var(--primary-dark); }
@@ -112,11 +124,11 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 .role-card { background: var(--primary-light); border: 1px solid #c3d0ff; border-radius: 12px; padding: 18px 22px; margin-bottom: 20px; display: flex; align-items: center; gap: 18px; }
 .role-icon { font-size: 36px; }
 .role-info h2 { font-size: 17px; font-weight: 700; color: var(--primary-dark); }
-.role-info p { font-size: 13px; color: #4a5568; margin-top: 5px; line-height: 1.65; }
+.role-info p { font-size: 13px; color: var(--text-light); margin-top: 5px; line-height: 1.65; }
 
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .2s; padding: 16px; }
 .modal-overlay.open { opacity: 1; pointer-events: all; }
-.modal-box { background: #fff; border-radius: 16px; padding: 28px 32px; width: min(480px, 100%); max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+.modal-box { background: var(--panel-bg); border-radius: 16px; padding: 28px 32px; width: min(480px, 100%); max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
 .modal-box.modal-lg { width: min(720px, 100%); }
 /* 共有設定モーダル */
 .share-option-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
@@ -136,7 +148,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 .modal-subtitle { font-size: 13px; color: var(--primary-dark); font-weight: 600; margin-bottom: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .modal-field { margin-bottom: 16px; }
 .modal-field label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--text-light); letter-spacing: .03em; }
-.modal-field select { width: 100%; border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; }
+.modal-field select { width: 100%; border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; background: var(--input-bg); color: var(--text); }
 .modal-field select:focus { border-color: var(--primary); }
 .modal-btns { display: flex; gap: 8px; margin-top: 24px; }
 .modal-btn-cancel { flex: 1; background: none; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 13px; cursor: pointer; }
@@ -146,22 +158,22 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 
 /* ─ ダッシュボードタブ ─ */
 .dash-scope-toggle { display: flex; gap: 8px; margin-bottom: 20px; }
-.dash-scope-toggle button { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; transition: all .15s; }
+.dash-scope-toggle button { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; transition: all .15s; color: var(--text); }
 .dash-scope-toggle button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 .dash-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 16px; }
-.stat-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; }
+.stat-card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; }
 .stat-label { font-size: 11px; color: var(--text-light); font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
 .stat-value { font-size: 30px; font-weight: 800; color: var(--primary); margin-top: 4px; }
 .stat-sub { font-size: 12px; color: var(--text-light); margin-top: 2px; }
-.dash-panel { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; }
+.dash-panel { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; }
 .dash-panel h2 { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
 .dash-ptable { width: 100%; border-collapse: collapse; font-size: 12px; }
-.dash-ptable th { text-align: left; padding: 6px 10px; background: #f7f8fc; color: var(--text-light); font-weight: 600; border-bottom: 1px solid var(--border); }
-.dash-ptable td { padding: 6px 10px; border-bottom: 1px solid #edf0f5; }
+.dash-ptable th { text-align: left; padding: 6px 10px; background: var(--muted-bg); color: var(--text-light); font-weight: 600; border-bottom: 1px solid var(--border); }
+.dash-ptable td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
 .dash-bar { height: 6px; background: var(--primary-light); border-radius: 3px; overflow: hidden; }
 .dash-bar-fill { height: 100%; background: var(--primary); }
 .dash-audit-filter { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-.dash-audit-filter input, .dash-audit-filter select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; outline: none; }
+.dash-audit-filter input, .dash-audit-filter select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; outline: none; background: var(--input-bg); color: var(--text); }
 .dash-audit-filter input:focus, .dash-audit-filter select:focus { border-color: var(--primary); }
 .dash-audit-filter button { background: var(--primary); color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .dtag { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600; }
@@ -185,7 +197,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 .model-provider-chip { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 5px; background: rgba(91,110,255,.18); color: var(--primary-dark); }
 .model-cost-chip { font-size: 13px; font-weight: 700; color: #276749; }
 .model-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
-.model-tag { font-size: 10px; padding: 2px 7px; background: #fff; border: 1px solid #c3d0ff; border-radius: 4px; color: var(--primary-dark); font-weight: 500; }
+.model-tag { font-size: 10px; padding: 2px 7px; background: var(--panel-bg); border: 1px solid #c3d0ff; border-radius: 4px; color: var(--primary-dark); font-weight: 500; }
 .model-bars { display: grid; grid-template-columns: 36px 1fr; gap: 3px 8px; align-items: center; margin-bottom: 8px; }
 .model-bar-label { font-size: 10px; color: var(--text-light); text-align: right; }
 .model-bar-track { height: 5px; background: #dde5ff; border-radius: 3px; overflow: hidden; }
@@ -197,6 +209,9 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 .recommend-btn:disabled { opacity: .6; cursor: default; }
 .recommend-result { margin-top: 8px; background: #f0fff4; border: 1px solid #9ae6b4; border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.7; color: var(--text); }
 </style>
+<script>
+(function(){const t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
+</script>
 </head>
 <body>
 
@@ -210,6 +225,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     <a href="/feedback" class="back-link" title="不具合・改善要望を報告">💡 改善提案</a>
     <span class="user-badge" id="userBadge"></span>
     <span class="role-chip" id="roleBadge" style="display:none;"></span>
+    <button class="back-link" id="themeToggleBtn" type="button" onclick="toggleTheme()" title="テーマ切替" style="border-color:var(--border);color:var(--text-light);cursor:pointer;background:none;">🌙</button>
   </div>
 </header>
 
@@ -556,6 +572,11 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   <div class="modal-box" style="max-width:460px;">
     <div class="modal-title">▶ 今すぐ実行</div>
     <div class="modal-subtitle" id="runConfirmTitle" style="margin-bottom:12px;"></div>
+    <!-- 変数入力エリア -->
+    <div id="runVariablesArea" style="display:none;margin-bottom:12px;background:#f0f4ff;border:1px solid #c3d0ff;border-radius:8px;padding:12px 14px;">
+      <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:8px;">📝 変数の入力</div>
+      <div id="runVariablesList"></div>
+    </div>
     <!-- Plan Mode: 実行計画プレビュー -->
     <div id="planModeArea" style="margin-bottom:12px;display:none;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
@@ -716,6 +737,22 @@ async function apiFetch(url, opts) {
   if (!r.ok) throw new Error(data.error || `エラー (${r.status})`);
   return data;
 }
+
+// ─ テーマ ─
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = next === 'dark' ? '☀' : '🌙';
+}
+(function() {
+  const theme = localStorage.getItem('theme') || 'light';
+  if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = theme === 'dark' ? '☀' : '🌙';
+})();
 
 // ─ 初期化 ─
 (async () => {
@@ -1077,6 +1114,17 @@ async function runSkillNow(id, title, btn) {
   document.getElementById('skillThinkingPre').textContent = '';
   const thinkBtn = document.getElementById('thinkingToggleSkill');
   if (thinkBtn) { thinkBtn.textContent = '🧠 拡張思考モード'; thinkBtn.style.cssText = 'font-size:11px;border:1px solid var(--border);color:var(--text-light);background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;'; }
+  // 変数を検出してUIを表示
+  const skill = _skillCache[id];
+  const varMatches = [...new Set([...(skill?.steps||'').matchAll(/\{\{(\w+)\}\}/g), ...(skill?.description||'').matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]))];
+  const varArea = document.getElementById('runVariablesArea');
+  const varList = document.getElementById('runVariablesList');
+  if (varMatches.length > 0) {
+    varList.innerHTML = varMatches.map(v => `<div style="margin-bottom:8px;"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">${esc(v)}</label><input id="var_${esc(v)}" type="text" placeholder="${esc(v)} の値を入力" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;"></div>`).join('');
+    varArea.style.display = '';
+  } else {
+    varArea.style.display = 'none';
+  }
   document.getElementById('runConfirmModal').classList.add('open');
 
   try {
@@ -1150,6 +1198,10 @@ const TOOL_LABELS = {
 async function doRunSkillNow() {
   const id = _runConfirmSkillId;
   const btn = _runConfirmBtn;
+  // 変数を収集してからモーダルを閉じる
+  const varInputs = document.querySelectorAll('#runVariablesList input');
+  const variables = {};
+  varInputs.forEach(inp => { const k = inp.id.replace(/^var_/, ''); if (k) variables[k] = inp.value; });
   closeRunConfirmModal();
   if (!id) return;
   if (btn) { btn.disabled = true; btn.textContent = '実行中...'; }
@@ -1165,7 +1217,7 @@ async function doRunSkillNow() {
     const resp = await fetch(`/api/skills/${id}/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ thinking: _skillThinkingOn })
+      body: JSON.stringify({ thinking: _skillThinkingOn, variables })
     });
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
@@ -1738,6 +1790,7 @@ function renderHistory(runs) {
         <span>🕐 開始: ${started}</span>
         <span>🏁 完了: ${finished}</span>
         <span>⏱ 所要: ${duration}</span>
+        ${(r.input_tokens || r.output_tokens) ? `<span>🔢 ${(r.input_tokens||0).toLocaleString()}入 / ${(r.output_tokens||0).toLocaleString()}出 tok</span>` : ''}
         <span style="font-size:11px;color:#a0aec0;">スキル: ${esc(r.skill_name)}</span>
       </div>
       ${r.result ? (() => {
