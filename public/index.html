@@ -669,11 +669,11 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
     <a href="/" style="display:contents;text-decoration:none;cursor:pointer;" title="ホームに戻る"><div class="header-logo"><img src="/assets/logo.png" alt="タスクAIエージェント"></div>
     <h1 style="color:inherit;">タスクAIエージェント<small>仕事を任せる</small></h1></a>
   </div>
-  <div style="position:relative;display:flex;align-items:center;margin-left:4px;">
-    <button class="feature-btn" id="featureBtn" type="button" onclick="toggleFeatureMenu(event)" title="機能を選ぶ">🎯 機能を選ぶ</button>
-    <div class="feature-menu-popup" id="featureMenuPopup"></div>
-  </div>
   <div class="header-right">
+    <div style="position:relative;display:flex;align-items:center;">
+      <button class="feature-btn" id="featureBtn" type="button" onclick="toggleFeatureMenu(event)" title="機能を選ぶ">🎯 機能を選ぶ</button>
+      <div class="feature-menu-popup" id="featureMenuPopup"></div>
+    </div>
     <span id="userBadge" style="font-size:12px;color:#718096;"></span>
     <span id="roleBadge" style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;display:none;"></span>
     <button class="header-btn" id="themeToggleBtn" type="button" onclick="toggleTheme()" title="テーマ切替 (Ctrl+Shift+L)">🌙</button>
