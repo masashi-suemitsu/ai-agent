@@ -424,6 +424,17 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   </div>
 </div>
 
+<!-- ─ バージョン履歴 Modal ─ -->
+<div class="modal-overlay" id="versionModal" onclick="if(event.target===this)closeVersionModal()">
+  <div class="modal-box" style="max-width:560px;">
+    <div class="modal-title">🕓 バージョン履歴: <span id="versionModalTitle"></span></div>
+    <div id="versionList" style="max-height:55vh;overflow-y:auto;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeVersionModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─ 共有設定 Modal ─ -->
 <div class="modal-overlay" id="shareModal" onclick="if(event.target===this)closeShareModal()">
   <div class="modal-box">
@@ -1008,6 +1019,8 @@ function renderSkills(skills) {
       ${s.description ? `<div style="font-size:13px;color:var(--text-light);margin-bottom:10px;line-height:1.6;">${esc(s.description)}</div>` : ''}
       <div class="card-meta">
         <span>📊 実行 ${s.run_count || 0} 回</span>
+        ${s.stat_total > 0 ? `<span>✅ 成功率 ${Math.round((s.stat_success||0) / s.stat_total * 100)}%</span>` : ''}
+        ${s.stat_avg_sec != null ? `<span>⏱ 平均 ${s.stat_avg_sec}s</span>` : ''}
         <span>🕐 作成: ${fmtDt(s.created_at)}</span>
         <span>⚙️ ID: ${s.id}</span>
       </div>
@@ -1019,6 +1032,7 @@ function renderSkills(skills) {
         <button class="btn btn-orange" onclick="openModal(${s.id}, _skillCache[${s.id}].title)">⏰ 定期実行を設定</button>
         <button class="btn btn-outline" onclick="runSkillNow(${s.id}, _skillCache[${s.id}].title, this)">▶ 今すぐ実行</button>
         <button class="btn btn-outline" onclick="openEditSkill(${s.id})">✏️ 編集</button>
+        ${(s.version_count||0) > 0 ? `<button class="btn btn-outline" onclick="openVersionHistory(${s.id}, '${esc(s.title).replace(/'/g,"\\'")}')">🕓 履歴 ${s.version_count}</button>` : ''}
         <button class="btn btn-danger" onclick="deleteSkill(${s.id})">削除</button>
         ` : `
         <button class="btn btn-orange" onclick="openModal(${s.id}, _skillCache[${s.id}].title)">⏰ 定期実行を設定</button>
@@ -1319,6 +1333,42 @@ async function deleteSkill(id) {
   if (!confirm('このスキルを削除しますか？')) return;
   await fetch(`/api/skills/${id}`, { method: 'DELETE' });
   await loadSkills();
+}
+
+let _versionSkillId = null;
+async function openVersionHistory(id, title) {
+  _versionSkillId = id;
+  document.getElementById('versionModalTitle').textContent = title;
+  document.getElementById('versionList').innerHTML = '<div style="padding:16px;color:var(--text-light);">読み込み中...</div>';
+  document.getElementById('versionModal').classList.add('open');
+  try {
+    const versions = await apiFetch(`/api/skills/${id}/versions`);
+    if (!versions.length) {
+      document.getElementById('versionList').innerHTML = '<div style="padding:16px;color:var(--text-light);">保存済みバージョンはありません。<br>次回編集時から自動保存されます。</div>';
+      return;
+    }
+    document.getElementById('versionList').innerHTML = versions.map(v => `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-weight:700;font-size:13px;">v${v.version_num}: ${esc(v.title)}</span>
+          <span style="font-size:11px;color:var(--text-light);">${fmtDt(v.saved_at)}</span>
+        </div>
+        ${v.description ? `<div style="font-size:12px;color:var(--text-light);margin-bottom:6px;">${esc(v.description)}</div>` : ''}
+        ${v.steps_preview ? `<pre style="font-size:11px;color:var(--text-light);background:#f7f8fc;border-radius:6px;padding:6px 8px;margin:0 0 8px;white-space:pre-wrap;max-height:80px;overflow:hidden;">${esc(v.steps_preview)}${v.steps_preview.length >= 200 ? '...' : ''}</pre>` : ''}
+        <button class="btn btn-outline" style="font-size:12px;padding:4px 12px;" onclick="restoreVersion(${id}, ${v.version_num})">⏮ この内容に復元</button>
+      </div>`).join('');
+  } catch(e) {
+    document.getElementById('versionList').innerHTML = `<div style="padding:16px;color:var(--danger);">${esc(e.message)}</div>`;
+  }
+}
+function closeVersionModal() { document.getElementById('versionModal').classList.remove('open'); }
+async function restoreVersion(skillId, vnum) {
+  if (!confirm(`v${vnum} の内容に復元しますか？（現在の内容はバージョンとして保存されます）`)) return;
+  try {
+    await apiFetch(`/api/skills/${skillId}/versions/${vnum}/restore`, { method: 'POST' });
+    closeVersionModal();
+    await loadSkills();
+  } catch(e) { alert(e.message); }
 }
 
 function shareBtn(type, id, shared, shared_with) {

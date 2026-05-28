@@ -462,11 +462,29 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_batch_owner ON skill_batch_jobs(owner_email, id DESC);
 `);
 
+// スキルバージョン管理テーブル
+db.exec(`
+  CREATE TABLE IF NOT EXISTS skill_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    skill_id INTEGER NOT NULL,
+    version_num INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    steps TEXT,
+    saved_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE(skill_id, version_num)
+  );
+  CREATE INDEX IF NOT EXISTS idx_versions_skill ON skill_versions(skill_id, version_num DESC);
+`);
+
 // ループ・プランモード用カラム追加
 ['ALTER TABLE scheduled_tasks ADD COLUMN loop_enabled INTEGER DEFAULT 0',
  'ALTER TABLE scheduled_tasks ADD COLUMN loop_count INTEGER DEFAULT 0',
  'ALTER TABLE scheduled_tasks ADD COLUMN loop_interval_min INTEGER DEFAULT 60',
  'ALTER TABLE scheduled_tasks ADD COLUMN loop_remaining INTEGER',
+ 'ALTER TABLE task_runs ADD COLUMN input_tokens INTEGER DEFAULT 0',
+ 'ALTER TABLE task_runs ADD COLUMN output_tokens INTEGER DEFAULT 0',
+ 'ALTER TABLE task_runs ADD COLUMN skill_id INTEGER',
 ].forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
 function audit(email, name, action, details = {}) {
@@ -1821,6 +1839,65 @@ const TOOLS = [
         include: { type: 'array', description: '含める項目（anken/geppo/seikyu/customer）省略時は全て', items: { type: 'string' } },
         notify_room_id: { type: 'string', description: '完成後にChatwork通知するルームID（任意）' }
       }
+    }
+  },
+  {
+    name: 'generate_presentation',
+    description: 'テーマや要件を渡すだけでAIがスライド構成を設計し、PowerPointファイルを自動生成してGoogle Driveに保存する。スライドの内容・構成・デザインをAIが全て決定する。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string', description: 'プレゼンのテーマ・タイトル（例：「2025年度事業計画」「新サービス紹介」）' },
+        purpose: { type: 'string', description: 'プレゼンの目的・用途（例：社内報告/顧客提案/採用説明会）' },
+        audience: { type: 'string', description: '対象聴衆（例：経営陣/営業チーム/新入社員）' },
+        slide_count: { type: 'number', description: 'スライド枚数（5〜15推奨、省略時は8枚）' },
+        key_points: { type: 'array', description: '必ず含めたいポイントや情報', items: { type: 'string' } },
+        folder_id: { type: 'string', description: '保存先Google DriveフォルダID（省略時はマイドライブ）' }
+      },
+      required: ['topic']
+    }
+  },
+  {
+    name: 'summarize_document',
+    description: 'Google Drive上のWord・PDF・Googleドキュメント・テキストファイルを読み込み、内容を要約する。議事録・報告書・仕様書・マニュアルなど幅広い文書に対応。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_id: { type: 'string', description: 'Google DriveのファイルID' },
+        focus: { type: 'string', description: '要約の観点・重点（例：「結論と課題のみ」「数値と日程を重点的に」、省略時は全体要約）' },
+        output_format: { type: 'string', description: '出力形式（bullets=箇条書き / prose=文章形式、省略時はbullets）' },
+        max_length: { type: 'number', description: '要約の最大文字数（省略時は500文字）' }
+      },
+      required: ['file_id']
+    }
+  },
+  {
+    name: 'draft_email_reply',
+    description: '受信メールや文章を渡すと、適切な返信メールの下書きを自動生成する。件名・本文・署名の構成で出力。トーン（丁寧/通常/簡潔）を指定可能。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        original_email: { type: 'string', description: '返信元のメール本文または要約（必須）' },
+        reply_intent: { type: 'string', description: '返信の意図・内容（例：「承諾」「日程調整を依頼」「断る」「問い合わせへの回答」）' },
+        tone: { type: 'string', description: 'トーン（formal=丁寧/standard=通常/brief=簡潔、省略時はstandard）' },
+        sender_name: { type: 'string', description: '差出人名（署名に使用、省略時はユーザー名）' },
+        additional_info: { type: 'string', description: '返信に含めたい追加情報（日程候補・補足説明など）' }
+      },
+      required: ['original_email']
+    }
+  },
+  {
+    name: 'screen_candidate',
+    description: '候補者の情報（履歴書・職務経歴書テキストや詳細）と求人要件を照合し、適合度をスコアリングして採用判断の参考情報を提供する。採用担当者の一次スクリーニングを支援。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        candidate_info: { type: 'string', description: '候補者の情報（履歴書・職務経歴書のテキスト、または氏名・経歴・スキルの要約）' },
+        job_requirements: { type: 'string', description: '求人要件（職種・必須スキル・歓迎スキル・経験年数・資格など）' },
+        evaluation_criteria: { type: 'array', description: '重視する評価軸（例：technical_skill/communication/leadership/cultural_fit）省略時は総合評価', items: { type: 'string' } },
+        job_type: { type: 'string', description: '雇用形態（正社員/派遣/契約社員など、省略時は正社員）' }
+      },
+      required: ['candidate_info', 'job_requirements']
     }
   }
 ];
@@ -3319,7 +3396,12 @@ app.delete('/api/conversations/:id', (req, res) => {
 app.get('/api/skills', (req, res) => {
   const rows = db.prepare(`
     SELECT us.*,
-      (SELECT al.name FROM audit_logs al WHERE al.email = us.owner_email AND al.name != '' ORDER BY al.ts DESC LIMIT 1) as owner_name
+      (SELECT al.name FROM audit_logs al WHERE al.email = us.owner_email AND al.name != '' ORDER BY al.ts DESC LIMIT 1) as owner_name,
+      (SELECT COUNT(*) FROM task_runs tr WHERE tr.skill_name = us.name AND tr.status != 'running') as stat_total,
+      (SELECT COUNT(*) FROM task_runs tr WHERE tr.skill_name = us.name AND tr.status = 'done') as stat_success,
+      (SELECT CAST(ROUND(AVG((julianday(tr.finished_at) - julianday(tr.started_at)) * 86400)) AS INTEGER)
+        FROM task_runs tr WHERE tr.skill_name = us.name AND tr.finished_at IS NOT NULL AND tr.status = 'done') as stat_avg_sec,
+      (SELECT COUNT(*) FROM skill_versions sv WHERE sv.skill_id = us.id) as version_count
     FROM user_skills us
     WHERE us.owner_email=?
       OR (us.shared=1 AND us.shared_with IS NULL)
@@ -3377,6 +3459,12 @@ app.put('/api/skills/:id', (req, res) => {
   }
 
   if (!title?.trim()) return res.status(400).json({ error: 'title は必須' });
+  // 更新前の内容をバージョンとして自動保存
+  const maxVer = db.prepare('SELECT MAX(version_num) as v FROM skill_versions WHERE skill_id=?').get(req.params.id);
+  const nextVer = (maxVer?.v || 0) + 1;
+  db.prepare('INSERT OR IGNORE INTO skill_versions (skill_id, version_num, title, description, steps) VALUES (?,?,?,?,?)')
+    .run(req.params.id, nextVer, skill.title, skill.description, skill.steps);
+  db.prepare('DELETE FROM skill_versions WHERE skill_id=? AND version_num <= ?').run(req.params.id, nextVer - 10);
   db.prepare(`UPDATE user_skills SET title=?, description=?, steps=?, shared=?, updated_at=datetime('now','localtime') WHERE id=?`)
     .run(title.trim(), description ?? skill.description, steps ?? skill.steps,
       shared !== undefined ? (shared ? 1 : 0) : skill.shared, req.params.id);
@@ -3390,6 +3478,33 @@ app.delete('/api/skills/:id', (req, res) => {
   if (!skill) return res.status(403).json({ error: '見つかりません' });
   db.prepare('DELETE FROM user_skills WHERE id=?').run(req.params.id);
   audit(req.user.email, req.user.name, 'skill.delete', { id: req.params.id, name: skill.name });
+  res.json({ ok: true });
+});
+
+// GET /api/skills/:id/versions
+app.get('/api/skills/:id/versions', (req, res) => {
+  const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
+  if (!skill) return res.status(403).json({ error: '見つかりません' });
+  const versions = db.prepare(
+    'SELECT id, version_num, title, description, saved_at, substr(steps,1,200) as steps_preview FROM skill_versions WHERE skill_id=? ORDER BY version_num DESC'
+  ).all(req.params.id);
+  res.json(versions);
+});
+
+// POST /api/skills/:id/versions/:vnum/restore
+app.post('/api/skills/:id/versions/:vnum/restore', (req, res) => {
+  const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
+  if (!skill) return res.status(403).json({ error: '見つかりません' });
+  const ver = db.prepare('SELECT * FROM skill_versions WHERE skill_id=? AND version_num=?').get(req.params.id, req.params.vnum);
+  if (!ver) return res.status(404).json({ error: 'バージョンが見つかりません' });
+  // 復元前に現在の内容を保存
+  const maxVer = db.prepare('SELECT MAX(version_num) as v FROM skill_versions WHERE skill_id=?').get(req.params.id);
+  const nextVer = (maxVer?.v || 0) + 1;
+  db.prepare('INSERT OR IGNORE INTO skill_versions (skill_id, version_num, title, description, steps) VALUES (?,?,?,?,?)')
+    .run(req.params.id, nextVer, skill.title, skill.description, skill.steps);
+  db.prepare(`UPDATE user_skills SET title=?, description=?, steps=?, updated_at=datetime('now','localtime') WHERE id=?`)
+    .run(ver.title, ver.description, ver.steps, req.params.id);
+  audit(req.user.email, req.user.name, 'skill.restore', { id: req.params.id, version_num: ver.version_num });
   res.json({ ok: true });
 });
 
@@ -3607,8 +3722,8 @@ app.post('/api/skills/:id/run', async (req, res) => {
       }
     }
 
-    db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
-      .run('done', resultBuffer.slice(0, 2000), runId);
+    db.prepare(`UPDATE task_runs SET status=?, result=?, input_tokens=?, output_tokens=?, finished_at=datetime('now','localtime') WHERE id=?`)
+      .run('done', resultBuffer.slice(0, 2000), totalInputTokens, totalOutputTokens, runId);
     recordUsage(req.user.email, req.user.name, totalInputTokens, totalOutputTokens, 'claude-sonnet-4-6', 'skill_run');
     // Hooks: post_run
     executeHooks('post_run', skill, req.user.email, resultBuffer).catch(() => {});
