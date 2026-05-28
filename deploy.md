@@ -37,11 +37,14 @@ git add <files>
 git commit -m "feat/fix/ops: 変更内容"
 git push origin main
 
-# 2. EC2 に反映
-ssh claude-agent "cd ~/claude-agent-web && git pull && pm2 restart all"
+# 2. EC2 に反映（server.js 変更あり）
+ssh claude-agent "cd ~/claude-agent-web && git pull && npm install && pm2 restart all"
+
+# HTML/CSS のみ変更の場合（pm2 restart 不要）
+ssh claude-agent "cd ~/claude-agent-web && git pull"
 ```
 
-> HTML/CSS のみ変更の場合は `pm2 restart` 不要（静的ファイルは即反映）。
+> `npm install` は package.json に変化がなくても冪等なので毎回実行して問題なし。
 
 ---
 
