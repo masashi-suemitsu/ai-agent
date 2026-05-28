@@ -1096,6 +1096,39 @@ const TOOLS = [
     }, required: ['method','path'] }
   },
   {
+    name: 'extract_receipt',
+    description: '領収書/レシート/請求書の画像（またはDrive画像/PDFファイル）から金額・日付・店名等を構造化JSONで抽出する。Claudeビジョンで解析。',
+    input_schema: { type: 'object', properties: {
+      file_id: { type: 'string', description: 'Driveの画像/PDFファイルID' },
+      extra_fields: { type: 'array', description: '追加抽出フィールド名', items: { type: 'string' } }
+    }, required: ['file_id'] }
+  },
+  {
+    name: 'mask_pii',
+    description: 'テキスト中の個人情報（メール/電話/クレカ/マイナンバー/郵便番号）をマスクして返す。外部送信前のサニタイズに。',
+    input_schema: { type: 'object', properties: {
+      text: { type: 'string' },
+      keep: { type: 'array', description: 'マスクしない種別 (email/phone/credit_card/mynumber/postal_code)', items: { type: 'string' } }
+    }, required: ['text'] }
+  },
+  {
+    name: 'review_contract',
+    description: '契約書（PDF/Docx/テキスト）を法務観点でレビューし、リスク・確認ポイントを抽出する。LLMによる参考意見のため最終確認は法務担当へ。',
+    input_schema: { type: 'object', properties: {
+      file_id: { type: 'string', description: 'DriveのPDF/Docxファイルid' },
+      focus: { type: 'array', description: '重点観点 (liability/term/cancellation/payment/confidentiality/ip 等)', items: { type: 'string' } },
+      counterparty: { type: 'string', description: '相手方の立場で見るか自社視点か（default: 自社）' }
+    }, required: ['file_id'] }
+  },
+  {
+    name: 'transcribe_audio',
+    description: '音声/動画ファイルを文字起こしする。Whisper API (OpenAI) 経由。MP3/M4A/WAV/MP4等対応。',
+    input_schema: { type: 'object', properties: {
+      file_id: { type: 'string', description: 'Driveの音声/動画ファイルID' },
+      language: { type: 'string', description: 'ja / en など（既定: ja）' }
+    }, required: ['file_id'] }
+  },
+  {
     name: 'compare_models',
     description: '同じプロンプトを複数のClaudeモデル（Sonnet/Haiku）に並列実行して回答を比較する。各モデルの違いを見たいときに使う。',
     input_schema: {
