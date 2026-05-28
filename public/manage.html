@@ -2723,8 +2723,16 @@ async function loadUsage() {
       if (!allResp.ok) { const t = await allResp.text(); throw new Error(`/api/usage/all: HTTP ${allResp.status} — ${t.slice(0, 200)}`); }
       const allData = await allResp.json();
 
-      html += `<h3 style="font-size:14px;font-weight:700;margin-bottom:4px;">全ユーザー利用状況（${allData.month}）</h3>
-        <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">管理者のみ表示</p>`;
+      html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px 14px;background:#fff5f5;border:1px solid #feb2b2;border-radius:8px;">
+        <span style="font-size:18px;line-height:1;">🔐</span>
+        <div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:14px;font-weight:700;">全ユーザー利用状況（${allData.month}）</span>
+            <span style="display:inline-block;background:#e53e3e;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;letter-spacing:.04em;line-height:1.6;">ADMIN</span>
+          </div>
+          <div style="font-size:11px;color:#742a2a;margin-top:2px;">管理者ロールのユーザーのみ表示されます</div>
+        </div>
+      </div>`;
 
       if (!allData.users.length) {
         html += '<div class="empty"><div class="empty-icon">📊</div><p>今月のデータはまだありません</p></div>';
