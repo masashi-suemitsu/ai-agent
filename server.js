@@ -3032,6 +3032,9 @@ async function executeTool(name, input, user) {
       if (include.has('seikyu'))   report.sections.seikyu   = await safeQuery('SELECT COUNT(*) as count FROM kintone_seikyu WHERE created_at >= ?', [firstDay]);
       if (include.has('customer')) report.sections.customer = await safeQuery('SELECT COUNT(*) as new_customers FROM kintone_customers WHERE created_at >= ?', [firstDay]);
       report.sections.employees = await safeQuery('SELECT COUNT(*) as total FROM kintone_employees');
+      if (input.notify_room_id && !process.env.SYSTEM_CHATWORK_TOKEN) {
+        report.notify_warning = 'SYSTEM_CHATWORK_TOKEN が未設定のため、Chatwork通知をスキップしました';
+      }
       if (input.notify_room_id && process.env.SYSTEM_CHATWORK_TOKEN) {
         const s = report.sections;
         const body = '[info][title]📊 週次レポート（' + firstDay + '月）[/title]' +
@@ -3185,7 +3188,7 @@ ${textContent ? `文書テキスト:\n${textContent.slice(0, 60000)}` : '（上�
 差出人名: ${senderName}${intentNote}${addInfo}
 
 --- 元メール ---
-${input.original_email.slice(0, 3000)}
+${(input.original_email || '').slice(0, 3000)}
 --- ここまで ---
 
 返信メールをJSON形式で出力してください（説明文不要）:
@@ -3216,10 +3219,10 @@ ${input.original_email.slice(0, 3000)}
 評価軸: ${criteria}
 
 --- 求人要件 ---
-${input.job_requirements.slice(0, 2000)}
+${(input.job_requirements || '').slice(0, 2000)}
 
 --- 候補者情報 ---
-${input.candidate_info.slice(0, 3000)}
+${(input.candidate_info || '').slice(0, 3000)}
 
 下記JSON形式で回答してください（説明文不要）:
 {
