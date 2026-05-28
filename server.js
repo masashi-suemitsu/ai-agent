@@ -701,7 +701,6 @@ app.get('/login', (req, res) => {
 });
 
 app.get('/auth/google', (req, res, next) => {
-  console.log('[auth/google] sessionID:', req.sessionID, 'session keys:', Object.keys(req.session || {}));
   next();
 }, passport.authenticate('google', {
   scope: [
@@ -719,7 +718,7 @@ app.get('/auth/google', (req, res, next) => {
 
 app.get('/auth/google/callback',
   (req, res, next) => {
-    console.log('[callback] code:', !!req.query.code, 'state:', req.query.state, 'error:', req.query.error);
+    console.log('[callback] code:', !!req.query.code, 'error:', req.query.error);
     next();
   },
   passport.authenticate('google', { failureRedirect: '/login?error=1' }),
@@ -4773,6 +4772,7 @@ app.post('/api/files/upload', apiRateLimit, async (req, res) => {
   if (!supportedTypes.includes(mediaType)) return res.status(400).json({ error: '未対応ファイル形式' });
   try {
     const buffer = Buffer.from(base64, 'base64');
+    if (buffer.length > 4 * 1024 * 1024) return res.status(400).json({ error: 'ファイルサイズは4MB以下にしてください' });
     const { Blob } = require('buffer');
     const fileObj = new File([new Blob([buffer], { type: mediaType })], filename, { type: mediaType });
     const fileResponse = await anthropic.beta.files.upload({ file: fileObj });
