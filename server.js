@@ -452,6 +452,7 @@ function recordUsage(email, name, inputTokens, outputTokens, model, context) {
  'ALTER TABLE scheduled_tasks ADD COLUMN shared_with TEXT',
  'ALTER TABLE user_skills ADD COLUMN shared_with TEXT',
  'ALTER TABLE user_skills ADD COLUMN chain_skill_id INTEGER',
+ 'ALTER TABLE user_skills ADD COLUMN model TEXT DEFAULT \'sonnet\'',
  'ALTER TABLE token_usage ADD COLUMN cost_usd REAL DEFAULT 0',
 ].forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
@@ -947,7 +948,9 @@ app.get('/auth/drive', requireAuth, (req, res) => {
       'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/documents',
       'https://www.googleapis.com/auth/forms.body.readonly',
-      'https://www.googleapis.com/auth/forms.responses.readonly'
+      'https://www.googleapis.com/auth/forms.responses.readonly',
+      'https://www.googleapis.com/auth/webmasters.readonly',
+      'https://www.googleapis.com/auth/analytics.readonly'
     ],
     state
   });
@@ -1278,6 +1281,16 @@ function getSystemPrompt(role) {
 
 ## あなたの権限: 管理者（全機能）
 利用可能ツール: 全ツール（DB照会・Chatwork・Drive・WP・メール等）
+
+## computer ツール（ブラウザ操作）
+ヘッドレスブラウザ（サーバー上のChromium）を操作できる。以下のアクションが使える:
+- \`screenshot\` — 現在の画面を取得
+- \`navigate\` (text=URL) — URLに直接移動する（最初はこれを使うこと。アドレスバーは存在しないため）
+- \`left_click\` / \`right_click\` / \`double_click\` — 座標クリック
+- \`type\` (text=入力文字列) — テキスト入力
+- \`key\` (text=キー名) — キー押下（例: Enter, Tab, ctrl+a）
+- \`scroll\` — スクロール
+**URLを開くときは必ず最初に \`navigate\` を使うこと。**
 
 ### query_corp_db で照会可能なテーブル（この6つのみ・絶対に他のテーブル名を回答に含めないこと）
 1. kintone_employees - 社員マスタ
@@ -1883,6 +1896,37 @@ const TOOLS = [
         limit: { type: 'number', description: '取得件数（最大100、既定50）' }
       },
       required: ['form_id']
+    }
+  },
+  {
+    name: 'get_search_console',
+    description: 'Google Search Consoleの検索パフォーマンスデータを取得する（クエリ・URL・クリック数・表示回数・CTR・掲載順位）。Drive連携が必要。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        site_url: { type: 'string', description: 'サイトURL（例: https://example.com/ または sc-domain:example.com）' },
+        start_date: { type: 'string', description: '開始日 YYYY-MM-DD（省略時: 28日前）' },
+        end_date: { type: 'string', description: '終了日 YYYY-MM-DD（省略時: 昨日）' },
+        dimensions: { type: 'array', items: { type: 'string' }, description: '集計軸: query/page/country/device/date（省略時: ["query"]）' },
+        row_limit: { type: 'number', description: '取得件数（最大100、既定25）' }
+      },
+      required: ['site_url']
+    }
+  },
+  {
+    name: 'get_analytics',
+    description: 'Google Analytics 4（GA4）のレポートデータを取得する（セッション・PV・ユーザー数・流入元・ページ別など）。Drive連携が必要。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        property_id: { type: 'string', description: 'GA4プロパティID（数字のみ。例: 123456789）' },
+        metrics: { type: 'array', items: { type: 'string' }, description: '指標: sessions/screenPageViews/activeUsers/newUsers/bounceRate など（省略時: ["sessions","screenPageViews","activeUsers"]）' },
+        dimensions: { type: 'array', items: { type: 'string' }, description: '軸: date/pagePath/sessionSource/sessionMedium/country など（省略時: []）' },
+        start_date: { type: 'string', description: '開始日 YYYY-MM-DD または "7daysAgo"/"30daysAgo"（省略時: 28daysAgo）' },
+        end_date: { type: 'string', description: '終了日 YYYY-MM-DD または "today"（省略時: today）' },
+        limit: { type: 'number', description: '取得件数（最大100、既定25）' }
+      },
+      required: ['property_id']
     }
   },
   {
@@ -3053,6 +3097,59 @@ async function executeTool(name, input, user) {
       }));
       return { total: r.data.responses?.length || 0, responses };
     }
+    case 'get_search_console': {
+      const auth = getDriveAuthForUser(user);
+      const sc = google.searchconsole({ version: 'v1', auth });
+      const today = new Date();
+      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+      const before28 = new Date(today); before28.setDate(today.getDate() - 28);
+      const fmt = d => d.toISOString().slice(0, 10);
+      const startDate = input.start_date || fmt(before28);
+      const endDate = input.end_date || fmt(yesterday);
+      const dimensions = input.dimensions || ['query'];
+      const rowLimit = Math.min(input.row_limit || 25, 100);
+      audit(user.email, user.name, 'tool.get_search_console', { site_url: input.site_url, startDate, endDate });
+      const r = await sc.searchanalytics.query({
+        siteUrl: input.site_url,
+        requestBody: { startDate, endDate, dimensions, rowLimit }
+      });
+      const rows = (r.data.rows || []).map(row => ({
+        keys: row.keys,
+        clicks: row.clicks,
+        impressions: row.impressions,
+        ctr: row.ctr ? Math.round(row.ctr * 10000) / 100 : 0,
+        position: row.position ? Math.round(row.position * 10) / 10 : null
+      }));
+      return { site_url: input.site_url, start_date: startDate, end_date: endDate, dimensions, row_count: rows.length, rows };
+    }
+    case 'get_analytics': {
+      const auth = getDriveAuthForUser(user);
+      const ga = google.analyticsdata({ version: 'v1beta', auth });
+      const metrics = (input.metrics || ['sessions', 'screenPageViews', 'activeUsers']).map(n => ({ name: n }));
+      const dimensions = (input.dimensions || []).map(n => ({ name: n }));
+      const startDate = input.start_date || '28daysAgo';
+      const endDate = input.end_date || 'today';
+      const limit = Math.min(input.limit || 25, 100);
+      audit(user.email, user.name, 'tool.get_analytics', { property_id: input.property_id, startDate, endDate });
+      const r = await ga.properties.runReport({
+        property: `properties/${input.property_id}`,
+        requestBody: {
+          dateRanges: [{ startDate, endDate }],
+          metrics,
+          dimensions,
+          limit
+        }
+      });
+      const metricHeaders = r.data.metricHeaders?.map(h => h.name) || [];
+      const dimensionHeaders = r.data.dimensionHeaders?.map(h => h.name) || [];
+      const rows = (r.data.rows || []).map(row => {
+        const obj = {};
+        (row.dimensionValues || []).forEach((v, i) => { obj[dimensionHeaders[i]] = v.value; });
+        (row.metricValues || []).forEach((v, i) => { obj[metricHeaders[i]] = v.value; });
+        return obj;
+      });
+      return { property_id: input.property_id, start_date: startDate, end_date: endDate, row_count: rows.length, metrics: metricHeaders, dimensions: dimensionHeaders, rows };
+    }
     case 'call_ms_graph': {
       const msToken = await getMsGraphToken();
       const method = (input.method || 'GET').toUpperCase();
@@ -3927,6 +4024,10 @@ ${(input.candidate_info || '').slice(0, 3000)}
           return cwScreenshot(page);
         case 'cursor_position':
           return { x: coordinate?.[0] || 0, y: coordinate?.[1] || 0 };
+        case 'navigate':
+          await page.goto(text, { waitUntil: 'domcontentloaded', timeout: 30000 });
+          await page.waitForTimeout(1000);
+          return cwScreenshot(page);
         default:
           throw new Error(`computer: 不明なアクション ${action}`);
       }
@@ -6617,7 +6718,7 @@ function toOpenAITools(anthropicTools) {
 }
 
 // ── Background Skill Runner ──
-async function runSkillBackground(task, ownerEmail) {
+async function runSkillBackground(task, ownerEmail, _chainDepth = 0) {
   const role = getUserRole(ownerEmail);
   const user = { email: ownerEmail, role };
   const prompt = `# ${task.skill_title || task.title}\n\n${task.description || ''}\n\n## 実行手順\n\n${task.steps || ''}`;
@@ -6790,19 +6891,20 @@ async function runSkillBackground(task, ownerEmail) {
     executeHooks('post_run', skillInfo, ownerEmail, resultBuffer).catch(() => {});
     notifyTaskResult(ownerEmail, task.skill_title || task.skill_name, 'done', resultBuffer).catch(() => {});
     if (usedFallback) notifyFallback(ownerEmail, task.skill_title || task.skill_name).catch(() => {});
-    // パイプライン自動連鎖: chain_skill_id があれば前の結果を渡して次のスキルを実行
-    if (task.chain_skill_id) {
+    // パイプライン自動連鎖: chain_skill_id があれば前の結果を渡して次のスキルを実行（最大5段階）
+    if (task.chain_skill_id && _chainDepth < 5) {
       const chainSkill = db.prepare('SELECT * FROM user_skills WHERE id=?').get(task.chain_skill_id);
-      if (chainSkill) {
+      if (chainSkill && chainSkill.id !== task.skill_id) {
         const chainContext = `\n\n## 前のスキル「${task.skill_title || task.skill_name}」の実行結果\n\n${resultBuffer.slice(0, 3000)}`;
         runSkillBackground({
+          skill_id: chainSkill.id,
           skill_name: chainSkill.name,
           skill_title: chainSkill.title,
           description: chainSkill.description,
           steps: (chainSkill.steps || '') + chainContext,
           model: chainSkill.model || task.model,
           chain_skill_id: chainSkill.chain_skill_id
-        }, ownerEmail).catch(e => console.error('[chain] 連鎖実行エラー:', e.message));
+        }, ownerEmail, _chainDepth + 1).catch(e => console.error('[chain] 連鎖実行エラー:', e.message));
       }
     }
     return { ok: true, runId, resultBuffer };
