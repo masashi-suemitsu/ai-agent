@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ダッシュボード — タスクAIエージェント</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #5b6eff; --primary-dark: #4a5ce8; --primary-light: #edf2ff;
+  --bg: #f4f6fb; --card: #fff; --border: #e2e8f0; --text: #2d3748; --text-light: #718096;
+  --success: #48bb78; --danger: #e53e3e; --warn: #ed8936;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
+header { background: #fff; border-bottom: 1px solid var(--border); padding: 0 20px; height: 52px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+.header-left { display: flex; align-items: center; gap: 10px; }
+.header-logo { width: 28px; height: 28px; border-radius: 8px; }
+.header-logo img { width: 100%; height: 100%; border-radius: 8px; }
+header h1 { font-size: 15px; font-weight: 700; }
+.back-btn { background: var(--primary); color: #fff; border: none; border-radius: 7px; padding: 6px 14px; font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; }
+
+main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+.scope-toggle { display: flex; gap: 8px; margin-bottom: 20px; }
+.scope-toggle button { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; transition: all .15s; }
+.scope-toggle button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-bottom: 16px; }
+.stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; }
+.stat-label { font-size: 11px; color: var(--text-light); font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
+.stat-value { font-size: 32px; font-weight: 800; color: var(--primary); margin-top: 4px; }
+.stat-sub { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+
+.panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; margin-bottom: 16px; }
+.panel h2 { font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.panel-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.panel-table th { text-align: left; padding: 6px 10px; background: #f7f8fc; color: var(--text-light); font-weight: 600; border-bottom: 1px solid var(--border); }
+.panel-table td { padding: 6px 10px; border-bottom: 1px solid #edf0f5; }
+.bar { height: 6px; background: var(--primary-light); border-radius: 3px; overflow: hidden; }
+.bar-fill { height: 100%; background: var(--primary); }
+
+.tag { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+.tag.ok { background: #c6f6d5; color: #22543d; }
+.tag.ng { background: #fed7d7; color: #742a2a; }
+.tag.warn { background: #feebc8; color: #7b341e; }
+.tag.info { background: var(--primary-light); color: var(--primary-dark); }
+
+.audit-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; }
+.audit-filter { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.audit-filter input, .audit-filter select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; outline: none; }
+.audit-filter input:focus, .audit-filter select:focus { border-color: var(--primary); }
+.audit-filter button { background: var(--primary); color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <div class="header-logo"><img src="/assets/logo.png" alt=""></div>
+    <h1>📊 ダッシュボード</h1>
+  </div>
+  <a href="/" class="back-btn">← チャットへ</a>
+</header>
+
+<main>
+  <div class="scope-toggle" id="scopeToggle">
+    <button class="active" data-scope="me" onclick="switchScope('me')">👤 自分</button>
+    <button data-scope="all" id="scopeAllBtn" onclick="switchScope('all')" style="display:none;">🌐 全社（admin）</button>
+  </div>
+
+  <div class="grid" id="statsGrid"></div>
+
+  <div class="panel">
+    <h2>🔧 よく使うツール（今月）</h2>
+    <div id="topTools"></div>
+  </div>
+
+  <div class="panel">
+    <h2>⏰ 最近のタスク実行</h2>
+    <div id="recentTasks"></div>
+  </div>
+
+  <div class="panel" id="activeUsersPanel" style="display:none;">
+    <h2>🏃 直近アクティブユーザー（今日・全社）</h2>
+    <div id="activeUsers"></div>
+  </div>
+
+  <div class="audit-section">
+    <h2 style="font-size:14px;font-weight:700;margin-bottom:12px;">📋 監査ログ</h2>
+    <div class="audit-filter">
+      <input type="text" id="auditEmail" placeholder="email 絞り込み (admin)" />
+      <input type="text" id="auditAction" placeholder="action 接頭辞 (例: tool.)" />
+      <input type="date" id="auditSince" />
+      <select id="auditLimit">
+        <option value="50">50件</option>
+        <option value="100" selected>100件</option>
+        <option value="500">500件</option>
+      </select>
+      <button onclick="loadAudit()">適用</button>
+    </div>
+    <div id="auditTable"></div>
+  </div>
+</main>
+
+<script>
+function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let currentScope = 'me';
+
+async function loadDashboard() {
+  const d = await fetch('/api/dashboard?scope=' + currentScope).then(r => r.json());
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">今日のチャット数</div><div class="stat-value">${d.today_chats}</div><div class="stat-sub">${currentScope==='me'?'自分':'全社'}</div></div>
+    <div class="stat-card"><div class="stat-label">今月のチャット数</div><div class="stat-value">${d.month_chats}</div></div>
+    <div class="stat-card"><div class="stat-label">連携サービス</div>
+      <div style="margin-top:8px;">
+        ${Object.entries(d.integrations).map(([k,v]) => `<span class="tag ${v?'ok':'ng'}" style="margin-right:4px;">${k} ${v?'✓':'-'}</span>`).join('')}
+      </div>
+    </div>
+  `;
+
+  // よく使うツール（棒グラフ風）
+  const maxC = Math.max(...d.top_tools.map(t => t.c), 1);
+  document.getElementById('topTools').innerHTML = d.top_tools.length === 0
+    ? '<div style="color:#a0aec0;font-size:12px;padding:12px;">データなし</div>'
+    : '<table class="panel-table"><tr><th>ツール</th><th style="width:60%;">実行回数</th></tr>' +
+      d.top_tools.map(t => `<tr><td>${esc(t.action)}</td><td><div style="display:flex;align-items:center;gap:8px;"><div class="bar" style="flex:1;"><div class="bar-fill" style="width:${(t.c/maxC)*100}%;"></div></div><span style="min-width:30px;text-align:right;font-weight:600;">${t.c}</span></div></td></tr>`).join('') +
+      '</table>';
+
+  // 最近のタスク
+  document.getElementById('recentTasks').innerHTML = d.recent_tasks.length === 0
+    ? '<div style="color:#a0aec0;font-size:12px;padding:12px;">タスク実行なし</div>'
+    : '<table class="panel-table"><tr><th>ID</th><th>タスク</th><th>状態</th><th>実行者</th><th>開始時刻</th></tr>' +
+      d.recent_tasks.map(t => {
+        const statusTag = t.status === 'done' ? '<span class="tag ok">完了</span>'
+          : t.status === 'error' ? '<span class="tag ng">エラー</span>'
+          : '<span class="tag warn">実行中</span>';
+        return `<tr><td>${t.id}</td><td>${esc(t.skill_title || '')}</td><td>${statusTag}</td><td>${esc(t.user_email)}</td><td>${esc(t.started_at || '')}</td></tr>`;
+      }).join('') + '</table>';
+
+  // アクティブユーザー
+  if (d.active_users && d.active_users.length > 0) {
+    document.getElementById('activeUsersPanel').style.display = '';
+    document.getElementById('scopeAllBtn').style.display = ''; // adminならボタン出す
+    document.getElementById('activeUsers').innerHTML = '<table class="panel-table"><tr><th>ユーザー</th><th>アクション数</th><th>最終アクション</th></tr>' +
+      d.active_users.map(u => `<tr><td>${esc(u.name || u.email)}</td><td>${u.actions}</td><td>${esc(u.last_action)}</td></tr>`).join('') + '</table>';
+  } else {
+    document.getElementById('activeUsersPanel').style.display = 'none';
+  }
+}
+
+async function loadAudit() {
+  const email = document.getElementById('auditEmail').value.trim();
+  const action = document.getElementById('auditAction').value.trim();
+  const since = document.getElementById('auditSince').value;
+  const limit = document.getElementById('auditLimit').value;
+  const qs = new URLSearchParams({ limit });
+  if (email) qs.set('email', email);
+  if (action) qs.set('action', action);
+  if (since) qs.set('since', since + ' 00:00:00');
+  const d = await fetch('/api/audit-logs?' + qs).then(r => r.json());
+  if (d.admin_view) document.getElementById('scopeAllBtn').style.display = '';
+  document.getElementById('auditTable').innerHTML = d.rows.length === 0
+    ? '<div style="color:#a0aec0;font-size:12px;padding:12px;">該当ログなし</div>'
+    : '<table class="panel-table"><tr><th>時刻</th><th>ユーザー</th><th>アクション</th><th>詳細</th></tr>' +
+      d.rows.map(r => `<tr><td>${esc(r.ts)}</td><td>${esc(r.name || r.email)}</td><td><code style="font-size:11px;">${esc(r.action)}</code></td><td style="font-size:11px;color:#718096;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.details || '')}</td></tr>`).join('') + '</table>';
+}
+
+function switchScope(s) {
+  currentScope = s;
+  document.querySelectorAll('.scope-toggle button').forEach(b => b.classList.toggle('active', b.dataset.scope === s));
+  loadDashboard();
+}
+
+loadDashboard();
+loadAudit();
+</script>
+</body>
+</html>
