@@ -2905,7 +2905,7 @@ async function executeTool(name, input, user) {
       return { ok: true, id: r.data.id, name: r.data.name, mimeType: r.data.mimeType, webViewLink: r.data.webViewLink };
     }
     case 'call_ms_graph': {
-      if (!process.env.MS_GRAPH_TOKEN) throw new Error('MS_GRAPH_TOKEN 未設定。Microsoft 365 Graph API トークンを管理者に依頼してください');
+      const msToken = await getMsGraphToken();
       const method = (input.method || 'GET').toUpperCase();
       const isWrite = method !== 'GET';
       if (isWrite && !input.confirmed) {
@@ -2916,11 +2916,13 @@ async function executeTool(name, input, user) {
           method, path: input.path, body: input.body
         };
       }
-      audit(user.email, user.name, isWrite ? 'tool.ms_graph.execute' : 'tool.ms_graph', { method, path: input.path });
+      // Client Credentials は /me/ 非対応のため、自動的にログインユーザーのアドレスに変換
+      const resolvedPath = input.path.replace(/^\/me\b/, `/users/${encodeURIComponent(user.email)}`);
+      audit(user.email, user.name, isWrite ? 'tool.ms_graph.execute' : 'tool.ms_graph', { method, path: resolvedPath });
       const qs = input.query ? '?' + new URLSearchParams(input.query).toString() : '';
-      const r = await fetch(`https://graph.microsoft.com/v1.0${input.path}${qs}`, {
+      const r = await fetch(`https://graph.microsoft.com/v1.0${resolvedPath}${qs}`, {
         method,
-        headers: { 'Authorization': `Bearer ${process.env.MS_GRAPH_TOKEN}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${msToken}`, 'Content-Type': 'application/json' },
         body: input.body ? JSON.stringify(input.body) : undefined
       });
       const text = await r.text();
