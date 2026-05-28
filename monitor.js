@@ -3,7 +3,7 @@
 // Health checker: hit local nginx, alert on consecutive failures via SES.
 const http = require('http');
 const fs = require('fs');
-const nodemailer = require('nodemailer');
+const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
 
 // Load .env manually (no dotenv dependency)
 const ENV_PATH = '/home/ec2-user/claude-agent-web/.env';
@@ -40,16 +40,18 @@ function readState() { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8
 function writeState(s) { fs.writeFileSync(STATE_FILE, JSON.stringify(s)); }
 
 async function sendMail(subject, text) {
-  const transporter = nodemailer.createTransport({
-    host: process.env.SES_HOST || 'email-smtp.us-west-2.amazonaws.com',
-    port: parseInt(process.env.SES_PORT || '587'),
-    secure: false,
-    auth: { user: process.env.SES_USER, pass: process.env.SES_SECRET }
-  });
-  await transporter.sendMail({
-    from: process.env.SES_FROM || 'info@acrovision.co.jp',
-    to: NOTIFY_TO, subject, text
-  });
+  const region = process.env.SES_REGION
+    || (process.env.SES_HOST || 'email-smtp.us-west-2.amazonaws.com').match(/email-smtp\.([^.]+)/)?.[1]
+    || 'us-west-2';
+  const client = new SESClient({ region });
+  await client.send(new SendEmailCommand({
+    Source: process.env.SES_FROM || 'info@acrovision.co.jp',
+    Destination: { ToAddresses: [NOTIFY_TO] },
+    Message: {
+      Subject: { Data: subject, Charset: 'UTF-8' },
+      Body: { Text: { Data: text, Charset: 'UTF-8' } }
+    }
+  }));
 }
 
 (async () => {
