@@ -318,6 +318,20 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 
   <!-- ─ スキル ─ -->
   <div class="tab-content" id="tab-skills">
+    <!-- Anthropic 公式スキルカタログ -->
+    <div style="margin-bottom:24px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;">🏛️ Anthropic 公式スキル</div>
+          <span id="anthropicSkillsFetchedAt" style="font-size:10px;color:var(--text-light);"></span>
+        </div>
+        <button class="btn btn-outline" style="font-size:11px;padding:3px 10px;" onclick="loadAnthropicSkills(true)">🔄 更新</button>
+      </div>
+      <div id="anthropicSkillsGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">
+        <div class="empty" style="grid-column:1/-1;padding:16px;"><p>読み込み中...</p></div>
+      </div>
+    </div>
+
     <div style="margin-bottom:20px;">
       <div style="font-size:13px;font-weight:700;color:var(--text-light);margin-bottom:10px;letter-spacing:.03em;">📋 テンプレートから作成</div>
       <div id="skillTemplateGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;"></div>
@@ -977,6 +991,7 @@ function switchTab(name) {
   document.getElementById('tab-' + name)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   if (name === 'history')    loadHistory();
+  if (name === 'skills')     loadAnthropicSkills();
   if (name === 'connectors') loadGithubStatus();
   if (name === 'rules')      loadCustomRules();
   if (name === 'users')      { loadUsers(); loadWebhookToggle(); loadPushToggle(); }
@@ -1187,6 +1202,73 @@ async function deleteTask(id) {
 
 function toggleShareTask(id) {
   openShareModal('task', id);
+}
+
+// ─ Anthropic 公式スキルカタログ ─
+let _anthropicSkillsLoaded = false;
+async function loadAnthropicSkills(force = false) {
+  if (_anthropicSkillsLoaded && !force) return;
+  _anthropicSkillsLoaded = true;
+  const gallery = document.getElementById('anthropicSkillsGallery');
+  if (!gallery) return;
+  try {
+    const data = await apiFetch('/api/anthropic-skills');
+    const skills = data.skills || [];
+    const ts = data.fetched_at ? new Date(data.fetched_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    const el = document.getElementById('anthropicSkillsFetchedAt');
+    if (el && ts) el.textContent = `最終取得: ${ts}`;
+    if (!skills.length) {
+      gallery.innerHTML = `<div class="empty" style="grid-column:1/-1;padding:16px;"><p>取得中またはデータなし</p></div>`;
+      return;
+    }
+    gallery.innerHTML = skills.map(s => `
+      <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--card-bg);cursor:pointer;transition:all .15s;"
+           onclick="openAnthropicSkillDetail('${esc(s.name)}')"
+           onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px;">${esc(s.name)}</div>
+        <div style="font-size:11px;color:var(--text-light);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc(s.description || '説明なし')}</div>
+      </div>`).join('');
+  } catch(e) {
+    if (gallery) gallery.innerHTML = `<div class="empty" style="grid-column:1/-1;"><p>取得失敗: ${esc(e.message)}</p></div>`;
+  }
+}
+
+async function openAnthropicSkillDetail(name) {
+  const data = await apiFetch(`/api/anthropic-skills/${encodeURIComponent(name)}`).catch(e => { alert(e.message); return null; });
+  if (!data) return;
+  document.getElementById('resultModalTitle').textContent = `📦 ${data.name}`;
+  document.getElementById('resultModalBody').textContent = data.content || '内容なし';
+  document.getElementById('resultModal').classList.add('open');
+  // インポートボタンを追加
+  const footer = document.getElementById('resultModalFooter') || (() => {
+    const f = document.createElement('div');
+    f.id = 'resultModalFooter';
+    f.style.cssText = 'margin-top:12px;text-align:right;';
+    document.querySelector('#resultModal .result-modal-inner')?.appendChild(f);
+    return f;
+  })();
+  if (footer) footer.innerHTML = `<button class="btn btn-primary" onclick="importAnthropicSkill('${esc(name)}')">📥 マイスキルにインポート</button>`;
+}
+
+async function importAnthropicSkill(name) {
+  const data = await apiFetch(`/api/anthropic-skills/${encodeURIComponent(name)}`).catch(() => null);
+  if (!data) return;
+  try {
+    await apiFetch('/api/skills', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `anthropic-${data.name}`,
+        title: data.name,
+        description: data.description || `Anthropic 公式スキル: ${data.name}`,
+        steps: data.content || '',
+        shared: 0
+      })
+    });
+    document.getElementById('resultModal').classList.remove('open');
+    await loadSkills();
+    alert(`✅「${data.name}」をマイスキルにインポートしました`);
+  } catch(e) { alert('インポート失敗: ' + e.message); }
 }
 
 // ─ スキル ─
