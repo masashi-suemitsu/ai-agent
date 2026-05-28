@@ -3054,7 +3054,14 @@ app.post('/api/skills/:id/run', async (req, res) => {
   // run_count 更新
   db.prepare("UPDATE user_skills SET run_count=run_count+1, updated_at=datetime('now','localtime') WHERE id=?").run(skill.id);
 
-  const prompt = `# ${skill.title}\n\n${skill.description}\n\n## 実行手順\n\n${skill.steps}`;
+  // {{変数名}} テンプレート置換
+  let prompt = `# ${skill.title}\n\n${skill.description}\n\n## 実行手順\n\n${skill.steps}`;
+  const variables = req.body?.variables || {};
+  if (Object.keys(variables).length > 0) {
+    for (const [k, v] of Object.entries(variables)) {
+      prompt = prompt.split(`{{${k}}}`).join(String(v));
+    }
+  }
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');

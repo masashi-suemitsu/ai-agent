@@ -808,6 +808,8 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
   <div class="modal-box">
     <div class="modal-title">▶ スキルを実行</div>
     <div class="modal-subtitle" id="runConfirmTitle" style="margin-bottom:16px;"></div>
+    <!-- 変数入力エリア（{{変数名}} がある場合のみ表示） -->
+    <div id="runVarsArea"></div>
     <div id="runEstimateArea" style="background:#f7f8fc;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:4px;font-size:13px;line-height:1.9;color:var(--text);">
       <span style="color:var(--text-light);">コスト算出中...</span>
     </div>
@@ -1646,6 +1648,7 @@ async function saveSidebarShareSettings() {
 // ─ スキル実行（コスト確認モーダル付き） ─
 let _runConfirmId = null;
 let _runConfirmTitle = null;
+let _runVarNames = [];   // 検出した {{変数名}} のリスト
 
 async function runSkill(id, title) {
   _runConfirmId = Number(id);
@@ -1653,6 +1656,27 @@ async function runSkill(id, title) {
   document.getElementById('runConfirmTitle').textContent = title;
   document.getElementById('runConfirmBtn').disabled = true;
   document.getElementById('runEstimateArea').innerHTML = '<span style="color:var(--text-light);">コスト算出中...</span>';
+
+  // {{変数名}} を検出してフォームを生成
+  const skill = (_cachedSkills || []).find(s => s.id === Number(id));
+  const fullText = `${skill?.description || ''}\n${skill?.steps || ''}`;
+  const matches = [...fullText.matchAll(/\{\{([^}]+)\}\}/g)];
+  _runVarNames = [...new Set(matches.map(m => m[1].trim()))];
+  const varsArea = document.getElementById('runVarsArea');
+  if (_runVarNames.length > 0) {
+    varsArea.innerHTML = `<div style="background:var(--primary-light);border:1.5px solid var(--primary);border-radius:10px;padding:14px 16px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--primary);letter-spacing:.05em;margin-bottom:10px;">📝 変数を入力してください</div>
+      ${_runVarNames.map(v => `
+        <div style="margin-bottom:8px;">
+          <label style="font-size:12px;font-weight:600;color:var(--text);">{{${esc(v)}}}</label>
+          <input type="text" id="runvar_${esc(v)}" placeholder="${esc(v)}を入力..."
+            style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;">
+        </div>`).join('')}
+    </div>`;
+  } else {
+    varsArea.innerHTML = '';
+  }
+
   document.getElementById('runConfirmModal').classList.add('open');
 
   try {
@@ -1684,20 +1708,35 @@ function closeRunConfirmModal() {
 async function doRunSkill() {
   const id = _runConfirmId;
   const title = _runConfirmTitle;
+
+  // 変数値を収集
+  const variables = {};
+  for (const v of _runVarNames) {
+    variables[v] = document.getElementById(`runvar_${v}`)?.value?.trim() || '';
+  }
+
   closeRunConfirmModal();
   if (!id) return;
+
+  // ラベル生成（変数あれば最初の値を添える）
+  const varLabel = Object.values(variables).filter(Boolean).slice(0, 2).join(' / ');
+  const displayTitle = varLabel ? `${title}（${varLabel}）` : title;
 
   removeEmptyState();
   const msgsEl = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = 'msg ai';
   const runId = `run-${id}-${Date.now()}`;
-  div.innerHTML = `<div class="avatar">AI</div><div class="bubble"><strong>▶ ${esc(title)} を実行中...</strong><div class="run-output" id="${runId}"></div></div>`;
+  div.innerHTML = `<div class="avatar">AI</div><div class="bubble"><strong>▶ ${esc(displayTitle)} を実行中...</strong><div class="run-output" id="${runId}"></div></div>`;
   msgsEl.appendChild(div);
   msgsEl.scrollTop = msgsEl.scrollHeight;
 
   const out = document.getElementById(runId);
-  const resp = await fetch(`/api/skills/${id}/run`, { method: 'POST' });
+  const resp = await fetch(`/api/skills/${id}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ variables })
+  });
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
