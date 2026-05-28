@@ -6,28 +6,36 @@
 <title>⚙ 改善提案 管理画面</title>
 <style>
 * { box-sizing: border-box; }
-body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans',sans-serif; background:#f4f6fb; color:#2d3748; }
-header { background:#fff; border-bottom:1px solid #e2e8f0; padding:0 20px; height:52px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+:root {
+  --primary:#5b6eff; --bg:#f4f6fb; --border:#e2e8f0; --text:#2d3748; --text-light:#718096;
+  --panel-bg:#ffffff; --input-bg:#f9fafb; --muted-bg:#f7f8fc; --card-hover:#f9fafb;
+}
+[data-theme="dark"] {
+  --bg:#1a1d2e; --border:#2d3748; --text:#e2e8f0; --text-light:#8a95a8;
+  --panel-bg:#1a1d2e; --input-bg:#252840; --muted-bg:#252840; --card-hover:#1e2133;
+}
+body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans',sans-serif; background:var(--bg); color:var(--text); }
+header { background:var(--panel-bg); border-bottom:1px solid var(--border); padding:0 20px; height:52px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 4px rgba(0,0,0,.05); }
 header h1 { font-size:15px; font-weight:700; margin:0; }
-header .h-right a { color:#718096; text-decoration:none; font-size:12px; border:1px solid #e2e8f0; border-radius:7px; padding:5px 12px; margin-left:6px; transition:all .15s; }
-header .h-right a:hover { border-color:#5b6eff; color:#5b6eff; }
+header .h-right a, header .h-right button { color:var(--text-light); text-decoration:none; font-size:12px; border:1px solid var(--border); border-radius:7px; padding:5px 12px; margin-left:6px; transition:all .15s; background:none; cursor:pointer; }
+header .h-right a:hover, header .h-right button:hover { border-color:#5b6eff; color:#5b6eff; }
 
 .wrap { max-width:1200px; margin:0 auto; padding:18px; }
-.toolbar { background:#fff; border-radius:10px; padding:12px 16px; box-shadow:0 1px 3px rgba(0,0,0,.05); margin-bottom:14px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-.toolbar label { font-size:12px; color:#718096; font-weight:600; }
-.toolbar select { padding:6px 12px; border:1px solid #e2e8f0; border-radius:7px; font-size:13px; background:#fff; }
+.toolbar { background:var(--panel-bg); border-radius:10px; padding:12px 16px; box-shadow:0 1px 3px rgba(0,0,0,.05); margin-bottom:14px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+.toolbar label { font-size:12px; color:var(--text-light); font-weight:600; }
+.toolbar select { padding:6px 12px; border:1px solid var(--border); border-radius:7px; font-size:13px; background:var(--input-bg); color:var(--text); }
 .kpis { display:grid; grid-template-columns:repeat(5, 1fr); gap:10px; margin-bottom:14px; }
 @media (max-width:780px) { .kpis { grid-template-columns:repeat(2, 1fr); } }
-.kpi { background:#fff; border-radius:10px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,.05); }
-.kpi .lbl { font-size:11px; color:#a0aec0; font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
+.kpi { background:var(--panel-bg); border-radius:10px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+.kpi .lbl { font-size:11px; color:var(--text-light); font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
 .kpi .val { font-size:22px; font-weight:700; color:#5b6eff; margin-top:4px; }
-.kpi .sub { font-size:10.5px; color:#a0aec0; margin-top:2px; }
+.kpi .sub { font-size:10.5px; color:var(--text-light); margin-top:2px; }
 
-.list { background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.05); overflow:hidden; }
+.list { background:var(--panel-bg); border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.05); overflow:hidden; }
 table { width:100%; border-collapse:collapse; font-size:13px; }
-th { background:#f9fafb; color:#718096; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:10px 12px; text-align:left; border-bottom:1px solid #edf0f5; }
-td { padding:11px 12px; border-bottom:1px solid #f4f6fb; vertical-align:middle; }
-tr:hover { background:#f9fafb; }
+th { background:var(--muted-bg); color:var(--text-light); font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:10px 12px; text-align:left; border-bottom:1px solid var(--border); }
+td { padding:11px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
+tr:hover { background:var(--card-hover); }
 tr { cursor:pointer; }
 .chip { display:inline-block; padding:2px 9px; border-radius:11px; color:#fff; font-size:11px; font-weight:700; }
 .title-cell { font-weight:600; color:#2d3748; max-width:480px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -35,6 +43,7 @@ tr { cursor:pointer; }
 .empty { padding:40px; text-align:center; color:#a0aec0; font-size:13px; }
 .loader { padding:40px; text-align:center; color:#a0aec0; font-size:13px; }
 </style>
+<script>(function(){const t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();</script>
 </head>
 <body>
 <header>
@@ -42,6 +51,7 @@ tr { cursor:pointer; }
     <div class="h-right">
         <a href="/feedback">💬 報告画面</a>
         <a href="/">トップ</a>
+        <button id="themeBtn" onclick="toggleTheme()">🌙</button>
     </div>
 </header>
 <div class="wrap">
@@ -137,7 +147,17 @@ document.getElementById('filterStatus').addEventListener('change', loadList);
 (async () => {
     await loadLabels();
     await loadList();
+    const t = localStorage.getItem('theme') || 'light';
+    document.getElementById('themeBtn').textContent = t === 'dark' ? '☀' : '🌙';
 })();
+
+function toggleTheme() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    document.getElementById('themeBtn').textContent = next === 'dark' ? '☀' : '🌙';
+}
 </script>
 </body>
 </html>
