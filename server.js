@@ -2664,6 +2664,12 @@ function calcCost(inputTokens, outputTokens) {
   return { usd: Number(usd.toFixed(4)), jpy: Math.ceil(usd * _usdJpy) };
 }
 
+function rowToCost(r) {
+  // cost_usd_sum > 0 ならモデル別実績コストを使い、古いレコード(=0)はSonnet料金でフォールバック
+  const usd = r.cost_usd_sum > 0 ? r.cost_usd_sum : calcCost(r.input_tokens, r.output_tokens).usd;
+  return { usd: Number(usd.toFixed(4)), jpy: Math.ceil(usd * _usdJpy) };
+}
+
 // GET /api/usage/me  — 本人の月次サマリー（直近3ヶ月）
 app.get('/api/usage/me', (req, res) => {
   const rows = db.prepare(`
@@ -2671,7 +2677,8 @@ app.get('/api/usage/me', (req, res) => {
       strftime('%Y-%m', ts) AS month,
       SUM(input_tokens)  AS input_tokens,
       SUM(output_tokens) AS output_tokens,
-      COUNT(*)           AS requests
+      COUNT(*)           AS requests,
+      SUM(cost_usd)      AS cost_usd_sum
     FROM token_usage
     WHERE email = ?
       AND ts >= date('now', '-3 months')
@@ -2679,7 +2686,7 @@ app.get('/api/usage/me', (req, res) => {
     ORDER BY month DESC
   `).all(req.user.email);
 
-  res.json(rows.map(r => ({ ...r, ...calcCost(r.input_tokens, r.output_tokens) })));
+  res.json(rows.map(r => ({ ...r, ...rowToCost(r) })));
 });
 
 // GET /api/usage/all  — 全ユーザー当月サマリー（admin専用）
@@ -2694,24 +2701,26 @@ app.get('/api/usage/all', (req, res) => {
       MAX(name) AS name,
       SUM(input_tokens)  AS input_tokens,
       SUM(output_tokens) AS output_tokens,
-      COUNT(*)           AS requests
+      COUNT(*)           AS requests,
+      SUM(cost_usd)      AS cost_usd_sum
     FROM token_usage
     WHERE strftime('%Y-%m', ts) = ?
     GROUP BY email
-    ORDER BY (input_tokens + output_tokens) DESC
+    ORDER BY cost_usd_sum DESC
   `).all(month);
 
   const total = rows.reduce((acc, r) => {
     acc.input_tokens  += r.input_tokens;
     acc.output_tokens += r.output_tokens;
     acc.requests      += r.requests;
+    acc.cost_usd_sum  += r.cost_usd_sum || 0;
     return acc;
-  }, { input_tokens: 0, output_tokens: 0, requests: 0 });
+  }, { input_tokens: 0, output_tokens: 0, requests: 0, cost_usd_sum: 0 });
 
   res.json({
     month,
-    users: rows.map(r => ({ ...r, ...calcCost(r.input_tokens, r.output_tokens) })),
-    total: { ...total, ...calcCost(total.input_tokens, total.output_tokens) }
+    users: rows.map(r => ({ ...r, ...rowToCost(r) })),
+    total: { ...total, ...rowToCost(total) }
   });
 });
 
