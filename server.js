@@ -905,7 +905,7 @@ app.post('/webhooks/:token', webhookRateLimit, express.json({ limit: '5mb' }), a
         for (const block of resp.content) {
           if (block.type !== 'tool_use') continue;
           try {
-            const r = await executeTool(block.name, block.input, { email: ownerEmail, name: '', role });
+            const r = await withTimeout(executeTool(block.name, block.input, { email: ownerEmail, name: '', role }), 60000, block.name);
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(r).slice(0, 80000) });
           } catch(e) {
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
@@ -4919,7 +4919,7 @@ app.post('/api/skills/:id/run', async (req, res) => {
 
         const toolResults = await Promise.all(skillToolBlocks.map(async block => {
           try {
-            const result = await executeTool(block.name, block.input, req.user);
+            const result = await withTimeout(executeTool(block.name, block.input, req.user), 60000, block.name);
             let toolContent;
             if (result?.image?.base64) {
               const meta = { ...result, image: undefined, image_attached: true };
