@@ -20,6 +20,46 @@ const PptxGenJS = require('pptxgenjs');
 const PDFDocument = require('pdfkit');
 const { Readable } = require('stream');
 
+// Zoom Server-to-Server OAuth: アクセストークン取得（簡易メモリキャッシュ）
+let __zoomTokCache = { token: null, expires: 0 };
+async function getZoomToken() {
+  if (!process.env.ZOOM_ACCOUNT_ID || !process.env.ZOOM_CLIENT_ID || !process.env.ZOOM_CLIENT_SECRET) {
+    throw new Error('Zoom 未設定。ZOOM_ACCOUNT_ID/ZOOM_CLIENT_ID/ZOOM_CLIENT_SECRET を環境変数に設定してください');
+  }
+  if (__zoomTokCache.token && Date.now() < __zoomTokCache.expires - 60000) return __zoomTokCache.token;
+  const basic = Buffer.from(`${process.env.ZOOM_CLIENT_ID}:${process.env.ZOOM_CLIENT_SECRET}`).toString('base64');
+  const r = await fetch(`https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${process.env.ZOOM_ACCOUNT_ID}`, {
+    method: 'POST', headers: { Authorization: 'Basic ' + basic }
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(`Zoom OAuth error: ${d.reason || r.status}`);
+  __zoomTokCache = { token: d.access_token, expires: Date.now() + (d.expires_in || 3600) * 1000 };
+  return d.access_token;
+}
+
+// 汎用API呼び出し（freee/MF/Salesforce/HubSpot/LINE WORKS 共通）
+async function callGenericApi(user, input, label, baseUrl, token, envName) {
+  if (!token) throw new Error(`${envName} 未設定。${label} APIトークンを管理者に依頼してください`);
+  if (!baseUrl) throw new Error(`${label}: ベースURL未設定（インスタンスURLが必要な場合あり）`);
+  const method = (input.method || 'GET').toUpperCase();
+  const isWrite = method !== 'GET';
+  if (isWrite && !input.confirmed) {
+    audit(user.email, user.name, `tool.${label}.preview`, { method, path: input.path });
+    return { preview: true, message: `${label} 書込プレビュー。承認後 confirmed:true で再呼出。`, method, path: input.path, body: input.body };
+  }
+  audit(user.email, user.name, isWrite ? `tool.${label}.execute` : `tool.${label}`, { method, path: input.path });
+  const qs = input.query ? '?' + new URLSearchParams(input.query).toString() : '';
+  const r = await fetch(`${baseUrl}${input.path}${qs}`, {
+    method,
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: input.body ? JSON.stringify(input.body) : undefined
+  });
+  const text = await r.text();
+  const data = text ? (() => { try { return JSON.parse(text); } catch { return text; } })() : null;
+  if (!r.ok) throw new Error(`${label} error ${r.status}: ${data?.message || data?.error?.message || text}`);
+  return data;
+}
+
 // MCP（Model Context Protocol）サーバー設定を環境変数から取得
 // 形式: MCP_SERVERS_JSON='[{"type":"url","url":"https://...","name":"srv","authorization_token":"..."}]'
 function getMcpServers() {
@@ -81,10 +121,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','compare_models','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  recruit: new Set(['query_corp_db','call_oss_ai','compare_models','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  user:    new Set(['call_oss_ai','compare_models','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','compare_models','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  recruit: new Set(['query_corp_db','call_oss_ai','compare_models','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  user:    new Set(['call_oss_ai','compare_models','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
 };
 
 app.set('trust proxy', 1);
@@ -910,6 +950,78 @@ const TOOLS = [
     }
   },
   {
+    name: 'list_zoom_meetings',
+    description: 'Zoom: 自分の予定/過去の会議一覧を取得',
+    input_schema: { type: 'object', properties: {
+      type: { type: 'string', enum: ['scheduled','live','upcoming','previous_meetings'], description: '既定: upcoming' },
+      page_size: { type: 'number', description: '既定30、最大300' }
+    } }
+  },
+  {
+    name: 'create_zoom_meeting',
+    description: 'Zoom: 新規会議を作成。2段階承認必須（confirmedなしでプレビュー→承認→confirmed:true）',
+    input_schema: { type: 'object', properties: {
+      topic: { type: 'string' },
+      start_time: { type: 'string', description: 'ISO 8601 (例: 2026-06-01T09:00:00+09:00)' },
+      duration: { type: 'number', description: '分。既定60' },
+      agenda: { type: 'string' },
+      confirmed: { type: 'boolean' }
+    }, required: ['topic','start_time'] }
+  },
+  {
+    name: 'call_freee_api',
+    description: 'freee 会計のAPIを呼び出す。GET以外は2段階承認必須。https://accounts.secure.freee.co.jp/api/docs',
+    input_schema: { type: 'object', properties: {
+      method: { type: 'string', enum: ['GET','POST','PUT','DELETE'] },
+      path: { type: 'string', description: '/api/1/deals など' },
+      query: { type: 'object' },
+      body: { type: 'object' },
+      confirmed: { type: 'boolean' }
+    }, required: ['method','path'] }
+  },
+  {
+    name: 'call_mfcloud_api',
+    description: 'マネーフォワード クラウドのAPIを呼び出す。GET以外は2段階承認必須。',
+    input_schema: { type: 'object', properties: {
+      method: { type: 'string', enum: ['GET','POST','PUT','DELETE'] },
+      path: { type: 'string' },
+      query: { type: 'object' },
+      body: { type: 'object' },
+      confirmed: { type: 'boolean' }
+    }, required: ['method','path'] }
+  },
+  {
+    name: 'call_salesforce_api',
+    description: 'Salesforce REST APIを呼び出す。SOQL検索やオブジェクトCRUD。GET以外は2段階承認必須。',
+    input_schema: { type: 'object', properties: {
+      method: { type: 'string', enum: ['GET','POST','PATCH','DELETE'] },
+      path: { type: 'string', description: '/services/data/v60.0/query?q=SELECT... など' },
+      body: { type: 'object' },
+      confirmed: { type: 'boolean' }
+    }, required: ['method','path'] }
+  },
+  {
+    name: 'call_hubspot_api',
+    description: 'HubSpot CRM APIを呼び出す。コンタクト/会社/取引の参照・操作。GET以外は2段階承認必須。',
+    input_schema: { type: 'object', properties: {
+      method: { type: 'string', enum: ['GET','POST','PATCH','DELETE'] },
+      path: { type: 'string', description: '/crm/v3/objects/contacts など' },
+      query: { type: 'object' },
+      body: { type: 'object' },
+      confirmed: { type: 'boolean' }
+    }, required: ['method','path'] }
+  },
+  {
+    name: 'call_lineworks_api',
+    description: 'LINE WORKS APIを呼び出す（Bot/Channels等）。GET以外は2段階承認必須。',
+    input_schema: { type: 'object', properties: {
+      method: { type: 'string', enum: ['GET','POST','PUT','DELETE'] },
+      path: { type: 'string', description: '/v1.0/bots/{botId}/channels/{channelId}/messages など' },
+      body: { type: 'object' },
+      confirmed: { type: 'boolean' }
+    }, required: ['method','path'] }
+  },
+  {
     name: 'compare_models',
     description: '同じプロンプトを複数のClaudeモデル（Sonnet/Haiku）に並列実行して回答を比較する。各モデルの違いを見たいときに使う。',
     input_schema: {
@@ -1394,6 +1506,42 @@ async function executeTool(name, input, user) {
       const info = await getSesTransport().sendMail({ from: process.env.SES_FROM || 'info@acrovision.co.jp', to: input.to, subject: input.subject, text: input.text, html: input.html });
       return { ok: true, messageId: info.messageId };
     }
+    case 'list_zoom_meetings': {
+      const tok = await getZoomToken();
+      const type = input.type || 'upcoming';
+      const ps = Math.min(input.page_size || 30, 300);
+      audit(user.email, user.name, 'tool.zoom_list', { type });
+      const r = await fetch(`https://api.zoom.us/v2/users/me/meetings?type=${type}&page_size=${ps}`, { headers: { Authorization: 'Bearer ' + tok } });
+      const d = await r.json();
+      if (!r.ok) throw new Error(`Zoom error: ${d.message || r.status}`);
+      return (d.meetings || []).map(m => ({ id: m.id, topic: m.topic, start_time: m.start_time, duration: m.duration, join_url: m.join_url }));
+    }
+    case 'create_zoom_meeting': {
+      if (!input.confirmed) {
+        audit(user.email, user.name, 'tool.zoom_create.preview', { topic: input.topic });
+        return { preview: true, message: 'Zoom会議作成プレビュー。承認後 confirmed:true で再呼出。', topic: input.topic, start_time: input.start_time, duration: input.duration || 60, agenda: input.agenda };
+      }
+      const tok = await getZoomToken();
+      audit(user.email, user.name, 'tool.zoom_create.execute', { topic: input.topic });
+      const r = await fetch('https://api.zoom.us/v2/users/me/meetings', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: input.topic, type: 2, start_time: input.start_time, duration: input.duration || 60, agenda: input.agenda })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(`Zoom error: ${d.message || r.status}`);
+      return { ok: true, id: d.id, topic: d.topic, start_time: d.start_time, join_url: d.join_url, start_url: d.start_url };
+    }
+    case 'call_freee_api':
+      return await callGenericApi(user, input, 'freee', 'https://api.freee.co.jp', process.env.FREEE_TOKEN, 'FREEE_TOKEN');
+    case 'call_mfcloud_api':
+      return await callGenericApi(user, input, 'mfcloud', 'https://invoice.moneyforward.com', process.env.MFCLOUD_TOKEN, 'MFCLOUD_TOKEN');
+    case 'call_salesforce_api':
+      return await callGenericApi(user, input, 'salesforce', process.env.SALESFORCE_INSTANCE_URL || '', process.env.SALESFORCE_TOKEN, 'SALESFORCE_TOKEN');
+    case 'call_hubspot_api':
+      return await callGenericApi(user, input, 'hubspot', 'https://api.hubapi.com', process.env.HUBSPOT_TOKEN, 'HUBSPOT_TOKEN');
+    case 'call_lineworks_api':
+      return await callGenericApi(user, input, 'lineworks', 'https://www.worksapis.com', process.env.LINEWORKS_TOKEN, 'LINEWORKS_TOKEN');
     case 'compare_models': {
       const MODEL_MAP = { haiku: 'claude-haiku-4-5-20251001', sonnet: 'claude-sonnet-4-6' };
       const models = (input.models && input.models.length > 0) ? input.models : ['haiku', 'sonnet'];
