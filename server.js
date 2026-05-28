@@ -14,7 +14,7 @@ const Database = require('better-sqlite3');
 const { google } = require('googleapis');
 const mysql = require('mysql2/promise');
 const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
-const xlsx = require('xlsx');
+const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
 const PptxGenJS = require('pptxgenjs');
 const PDFDocument = require('pdfkit');
@@ -2227,13 +2227,36 @@ async function executeTool(name, input, user) {
       // Excel (.xlsx / .xls)
       if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || mimeType === 'application/vnd.ms-excel') {
         const r = await drive.files.get({ fileId: input.file_id, alt: 'media' }, { responseType: 'arraybuffer' });
-        const wb = xlsx.read(Buffer.from(r.data), { type: 'buffer' });
-        const sheetNames = wb.SheetNames;
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(Buffer.from(r.data));
+        const sheetNames = wb.worksheets.map(s => s.name);
         const targetSheet = (input.sheet_name && sheetNames.includes(input.sheet_name)) ? input.sheet_name : sheetNames[0];
         if (input.sheet_name && !sheetNames.includes(input.sheet_name)) {
           return { id: input.file_id, name, mimeType, sheets: sheetNames, error: `シート「${input.sheet_name}」が見つかりません。利用可能: ${sheetNames.join(', ')}` };
         }
-        const csv = xlsx.utils.sheet_to_csv(wb.Sheets[targetSheet]);
+        const ws = wb.getWorksheet(targetSheet);
+        const csvLines = [];
+        ws.eachRow({ includeEmpty: false }, (row) => {
+          const vals = [];
+          row.eachCell({ includeEmpty: true }, (cell) => {
+            let v = '';
+            const cv = cell.value;
+            if (cv !== null && cv !== undefined) {
+              if (typeof cv === 'object') {
+                if (cv.text !== undefined) v = String(cv.text);
+                else if (cv.result !== undefined) v = String(cv.result);
+                else if (cv instanceof Date) v = cv.toISOString();
+                else v = String(cv);
+              } else {
+                v = String(cv);
+              }
+            }
+            if (v.includes(',') || v.includes('"') || v.includes('\n')) v = '"' + v.replace(/"/g, '""') + '"';
+            vals.push(v);
+          });
+          csvLines.push(vals.join(','));
+        });
+        const csv = csvLines.join('\n');
         return { id: input.file_id, name, mimeType, sheets: sheetNames, sheet_name: targetSheet, content: csv.slice(0, 60000) };
       }
       // Word (.docx)
@@ -2737,12 +2760,17 @@ async function executeTool(name, input, user) {
     }
     case 'export_data_excel': {
       audit(user.email, user.name, 'tool.export_excel', { name: input.file_name });
-      const wb = xlsx.utils.book_new();
+      const wb = new ExcelJS.Workbook();
       for (const [sheetName, rows] of Object.entries(input.sheets || {})) {
-        const ws = xlsx.utils.json_to_sheet(Array.isArray(rows) ? rows : []);
-        xlsx.utils.book_append_sheet(wb, ws, String(sheetName).slice(0, 31));
+        const ws = wb.addWorksheet(String(sheetName).slice(0, 31));
+        const dataRows = Array.isArray(rows) ? rows : [];
+        if (dataRows.length > 0) {
+          const headers = Object.keys(dataRows[0]);
+          ws.addRow(headers);
+          for (const row of dataRows) ws.addRow(headers.map(h => row[h] ?? ''));
+        }
       }
-      const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      const buf = Buffer.from(await wb.xlsx.writeBuffer());
       const drive = getDriveClientForUser(user);
       const meta = { name: input.file_name + '.xlsx' };
       if (input.folder_id) meta.parents = [input.folder_id];
