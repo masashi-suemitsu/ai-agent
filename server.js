@@ -505,20 +505,26 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_push_email ON push_subscriptions(email);
 `);
 
-// VAPID鍵の初期化（初回起動時に自動生成・DB保存）
-let VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY;
+// VAPID鍵の初期化
+//   優先順位: 環境変数 VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY → SQLite app_settings → 新規生成
+//   ※ DB 平文保存は最後の手段（鍵漏洩リスクが高いので、本番では環境変数化を推奨）
+let VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+let VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
 try {
-  const pub = db.prepare("SELECT value FROM app_settings WHERE key='vapid_public_key'").get();
-  if (pub) {
-    VAPID_PUBLIC_KEY = pub.value;
-    VAPID_PRIVATE_KEY = db.prepare("SELECT value FROM app_settings WHERE key='vapid_private_key'").get().value;
-  } else {
-    const keys = webpush.generateVAPIDKeys();
-    VAPID_PUBLIC_KEY = keys.publicKey;
-    VAPID_PRIVATE_KEY = keys.privateKey;
-    db.prepare("INSERT INTO app_settings (key,value) VALUES ('vapid_public_key',?)").run(VAPID_PUBLIC_KEY);
-    db.prepare("INSERT INTO app_settings (key,value) VALUES ('vapid_private_key',?)").run(VAPID_PRIVATE_KEY);
-    console.log('[push] VAPID keys generated');
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+    const pub = db.prepare("SELECT value FROM app_settings WHERE key='vapid_public_key'").get();
+    if (pub) {
+      VAPID_PUBLIC_KEY = pub.value;
+      VAPID_PRIVATE_KEY = db.prepare("SELECT value FROM app_settings WHERE key='vapid_private_key'").get().value;
+      console.warn('[push] VAPID 秘密鍵が SQLite に平文保存されています。VAPID_PRIVATE_KEY 環境変数化を推奨');
+    } else {
+      const keys = webpush.generateVAPIDKeys();
+      VAPID_PUBLIC_KEY = keys.publicKey;
+      VAPID_PRIVATE_KEY = keys.privateKey;
+      db.prepare("INSERT INTO app_settings (key,value) VALUES ('vapid_public_key',?)").run(VAPID_PUBLIC_KEY);
+      db.prepare("INSERT INTO app_settings (key,value) VALUES ('vapid_private_key',?)").run(VAPID_PRIVATE_KEY);
+      console.log('[push] VAPID keys generated (推奨: VAPID_PRIVATE_KEY 環境変数化)');
+    }
   }
   webpush.setVapidDetails('mailto:info@acrovision.co.jp', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 } catch(e) { console.error('[push] VAPID init failed:', e.message); }
@@ -4694,7 +4700,7 @@ function getCorpDb() {
 //   対応箇所: corp-dev-ec2/home/acrovision/www/corp.acrovision.jp/api/agent.php
 //             の case 'query': 内 $ALLOWED_TABLES（同じ8テーブル）
 //   テーブルを追加・削除する場合は必ず両方を更新してください。
-const DB_BLOCKED_KEYWORDS = /\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE|DESCRIBE|SHOW)\b/i;
+const DB_BLOCKED_KEYWORDS = /\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE|DESCRIBE|SHOW|UNION|INTO\s+OUTFILE|INTO\s+DUMPFILE|LOAD_FILE)\b/i;
 const DB_ALLOWED_TABLES = new Set([
   'kintone_employees',
   'kintone_contract',
@@ -6154,13 +6160,20 @@ app.get('/api/push/status', (req, res) => {
 app.get('/api/skills/:id/export', (req, res) => {
   const skill = db.prepare('SELECT * FROM user_skills WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
   if (!skill) return res.status(403).json({ error: '見つかりません' });
-  res.setHeader('Content-Disposition', `attachment; filename="skill_${skill.name}.json"`);
+  // filename ヘッダインジェクション防止: 英数字とハイフン/アンダースコアのみ許可
+  const safeName = String(skill.name || 'skill').replace(/[^a-z0-9_-]/gi, '_').slice(0, 50) || 'skill';
+  res.setHeader('Content-Disposition', `attachment; filename="skill_${safeName}.json"`);
   res.json({ _v: 1, name: skill.name, title: skill.title, description: skill.description, steps: skill.steps });
 });
 
 app.post('/api/skills/import', (req, res) => {
   const { title, name, description, steps } = req.body || {};
   if (!title?.trim() || !name || !/^[a-z0-9-]+$/.test(name)) return res.status(400).json({ error: 'title/name が不正です' });
+  // 長さ制限（prompt injection の持続化と DB 膨張を防ぐ）
+  if (title.length > 200) return res.status(400).json({ error: 'title が長すぎます (最大 200 文字)' });
+  if (name.length > 80) return res.status(400).json({ error: 'name が長すぎます (最大 80 文字)' });
+  if ((description || '').length > 2000) return res.status(400).json({ error: 'description が長すぎます (最大 2000 文字)' });
+  if ((steps || '').length > 50000) return res.status(400).json({ error: 'steps が長すぎます (最大 50000 文字)' });
   let finalName = name;
   let suffix = 1;
   while (db.prepare('SELECT id FROM user_skills WHERE owner_email=? AND name=?').get(req.user.email, finalName)) {
