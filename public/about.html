@@ -284,9 +284,9 @@ td.muted { color: var(--text-light); }
       <table>
         <tr><th>サービス</th><th>できること</th><th>連携方式</th></tr>
         <tr><td>💬 Chatwork</td><td>メッセージ送信、ルーム一覧、メッセージ取得</td><td>個人OAuth</td></tr>
-        <tr><td>📁 Google Drive</td><td>フォルダ内ファイル一覧、ファイル内容の読み取り</td><td>個人OAuth</td></tr>
-        <tr><td>📅 Google カレンダー</td><td>予定の確認</td><td>個人OAuth</td></tr>
-        <tr><td>✉️ Gmail</td><td>メッセージ取得（送信は非対応）</td><td>個人OAuth</td></tr>
+        <tr><td>📁 Google Drive</td><td>ファイル一覧・内容読み取り、スプレッドシート書き込み、ファイル作成</td><td>個人OAuth</td></tr>
+        <tr><td>📅 Google カレンダー</td><td>予定の確認・作成</td><td>個人OAuth</td></tr>
+        <tr><td>✉️ Gmail</td><td>メール取得・送信</td><td>個人OAuth</td></tr>
       </table>
     </div>
     <p style="margin-top:8px;">それぞれ <strong>自分のアカウントの権限内</strong>でしか動作しません。他の人のデータが見えることはありません。</p>
@@ -331,6 +331,13 @@ td.muted { color: var(--text-light); }
         <tr><td><span class="tag">一般</span></td><td>Chatwork・Drive・Calendar・Gmail 閲覧、自動実行</td></tr>
       </table>
     </div>
+  </div>
+
+  <!-- 承認フロー -->
+  <div class="section">
+    <h3><span class="icon">✅</span>承認ボタンについて</h3>
+    <p>スプレッドシート書き込み・Gmail 送信・カレンダー作成など、<strong>外部に影響する操作</strong>は AI が必ず事前に内容をプレビューします。</p>
+    <p>確認画面には「<strong>実行する</strong>」「<strong>キャンセル</strong>」ボタンが表示されるので、クリックするだけで承認・中止できます（テキスト入力不要）。</p>
   </div>
 
   <!-- 注意事項 -->
