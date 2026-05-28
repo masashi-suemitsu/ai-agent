@@ -33,14 +33,16 @@ CLAUDE.md の「リリース手順」を実行する。
 ### 4. EC2 へ反映
 まず alias を試す:
 ```bash
-ssh claude-agent "cd ~/claude-agent-web && git pull && npm install && pm2 restart all"
+ssh claude-agent "cd ~/claude-agent-web && git pull && npm install && ./scripts/preflight.sh && pm2 restart all"
 ```
 
 ホスト名が解決できない場合のフォールバック（key パスはユーザー環境に合わせて調整）:
 ```bash
 ssh -i "<SSH key path>" -o StrictHostKeyChecking=no ec2-user@52.68.18.9 \
-  "cd ~/claude-agent-web && git pull && npm install && pm2 restart all"
+  "cd ~/claude-agent-web && git pull && npm install && ./scripts/preflight.sh && pm2 restart all"
 ```
+
+> `preflight.sh` は node 構文チェック + 全 require 解決確認を行う。失敗すると `&&` により `pm2 restart` が走らず、壊れたままデプロイされない（2026-05-28 設置）。
 
 既知の key パス候補:
 - `/c/Users/masashi suemitsu/OneDrive/AWS/claude-agent-key.pem`（masashi のローカル）
