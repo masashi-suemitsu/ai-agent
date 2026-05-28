@@ -81,10 +81,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  recruit: new Set(['query_corp_db','call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
-  user:    new Set(['call_oss_ai','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  eigyo:   new Set(['query_corp_db','list_wp_posts','create_wp_post','call_oss_ai','compare_models','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  recruit: new Set(['query_corp_db','call_oss_ai','compare_models','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task']),
+  user:    new Set(['call_oss_ai','compare_models','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task'])
 };
 
 app.set('trust proxy', 1);
@@ -305,10 +305,39 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_tu_ts    ON token_usage(ts DESC);
 `);
 
+// モデルごとの料金テーブル（USD per 1M tokens）
+// key は scheduled_tasks.model / chat で使われるキー
+const MODEL_PRICE_MAP = {
+  'sonnet':  { in: 3.00, out: 15.00 },
+  'haiku':   { in: 0.80, out:  4.00 },
+  'claude-sonnet-4-6':         { in: 3.00, out: 15.00 },
+  'claude-haiku-4-5-20251001': { in: 0.80, out:  4.00 },
+  'openrouter:deepseek/deepseek-chat':                  { in: 0.14, out:  0.28 },
+  'openrouter:deepseek/deepseek-r1':                    { in: 0.55, out:  2.19 },
+  'deepinfra:deepseek-ai/DeepSeek-V3':                  { in: 0.35, out:  0.89 },
+  'deepinfra:deepseek-ai/DeepSeek-R1':                  { in: 0.55, out:  2.19 },
+  'openrouter:qwen/qwen3-235b-a22b':                    { in: 0.22, out:  0.88 },
+  'openrouter:qwen/qwen3-30b-a3b':                      { in: 0.03, out:  0.09 },
+  'deepinfra:Qwen/Qwen3-235B-A22B':                     { in: 0.22, out:  0.88 },
+  'openrouter:meta-llama/llama-4-maverick':              { in: 0.19, out:  0.85 },
+  'openrouter:meta-llama/llama-4-scout':                 { in: 0.18, out:  0.59 },
+  'deepinfra:meta-llama/Llama-3.3-70B-Instruct':        { in: 0.13, out:  0.40 },
+  'openrouter:mistralai/mistral-small-3.1-24b-instruct': { in: 0.10, out:  0.30 },
+};
+
+function calcTokenCostUsd(modelKey, inputTokens, outputTokens) {
+  const p = MODEL_PRICE_MAP[modelKey];
+  if (p) return (p.in * inputTokens + p.out * outputTokens) / 1e6;
+  if (!modelKey || modelKey.includes('sonnet')) return (3.00 * inputTokens + 15.00 * outputTokens) / 1e6;
+  if (modelKey.includes('haiku'))  return (0.80 * inputTokens +  4.00 * outputTokens) / 1e6;
+  return (3.00 * inputTokens + 15.00 * outputTokens) / 1e6; // 不明モデルはSonnet料金で保守的に
+}
+
 function recordUsage(email, name, inputTokens, outputTokens, model, context) {
   try {
-    db.prepare('INSERT INTO token_usage (email,name,input_tokens,output_tokens,model,context) VALUES (?,?,?,?,?,?)')
-      .run(email, name || '', inputTokens || 0, outputTokens || 0, model || 'claude-sonnet-4-6', context || 'chat');
+    const costUsd = calcTokenCostUsd(model, inputTokens || 0, outputTokens || 0);
+    db.prepare('INSERT INTO token_usage (email,name,input_tokens,output_tokens,model,context,cost_usd) VALUES (?,?,?,?,?,?,?)')
+      .run(email, name || '', inputTokens || 0, outputTokens || 0, model || 'claude-sonnet-4-6', context || 'chat', costUsd);
   } catch(e) { console.error('usage record err:', e.message); }
 }
 
@@ -320,7 +349,8 @@ function recordUsage(email, name, inputTokens, outputTokens, model, context) {
  'ALTER TABLE scheduled_tasks ADD COLUMN model TEXT DEFAULT \'sonnet\'',
  'ALTER TABLE scheduled_tasks ADD COLUMN shared INTEGER DEFAULT 0',
  'ALTER TABLE scheduled_tasks ADD COLUMN shared_with TEXT',
- 'ALTER TABLE user_skills ADD COLUMN shared_with TEXT'
+ 'ALTER TABLE user_skills ADD COLUMN shared_with TEXT',
+ 'ALTER TABLE token_usage ADD COLUMN cost_usd REAL DEFAULT 0',
 ].forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
 function audit(email, name, action, details = {}) {
@@ -389,6 +419,7 @@ function requireAuth(req, res, next) {
   if (req.path === '/auth/calendar/callback') return next();
   if (req.path === '/auth/gmail/callback') return next();
   if (req.path === '/auth/drive/callback') return next();
+  if (req.path === '/api/exchange-rate') return next(); // 為替レートは公開情報
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'ログインが必要です' });
   res.redirect('/login');
 }
@@ -879,6 +910,19 @@ const TOOLS = [
     }
   },
   {
+    name: 'compare_models',
+    description: '同じプロンプトを複数のClaudeモデル（Sonnet/Haiku）に並列実行して回答を比較する。各モデルの違いを見たいときに使う。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string' },
+        models: { type: 'array', description: '使うモデルキー配列（haiku/sonnet）。省略時は両方', items: { type: 'string', enum: ['haiku', 'sonnet'] } },
+        max_tokens: { type: 'number', description: '各モデルの最大トークン（既定 800）' }
+      },
+      required: ['prompt']
+    }
+  },
+  {
     name: 'call_oss_ai',
     description: 'OpenRouter / DeepInfra のOSSモデル（Qwen等）を呼び出す。',
     input_schema: {
@@ -1349,6 +1393,40 @@ async function executeTool(name, input, user) {
       audit(user.email, user.name, 'tool.email', { to: input.to, subject: input.subject?.slice(0, 50) });
       const info = await getSesTransport().sendMail({ from: process.env.SES_FROM || 'info@acrovision.co.jp', to: input.to, subject: input.subject, text: input.text, html: input.html });
       return { ok: true, messageId: info.messageId };
+    }
+    case 'compare_models': {
+      const MODEL_MAP = { haiku: 'claude-haiku-4-5-20251001', sonnet: 'claude-sonnet-4-6' };
+      const models = (input.models && input.models.length > 0) ? input.models : ['haiku', 'sonnet'];
+      const maxTokens = input.max_tokens || 800;
+      audit(user.email, user.name, 'tool.compare_models', { models, preview: input.prompt?.slice(0, 50) });
+      const results = await Promise.all(models.map(async key => {
+        const mid = MODEL_MAP[key];
+        if (!mid) return { model: key, error: 'unknown model' };
+        const t0 = Date.now();
+        try {
+          const r = await anthropic.messages.create({
+            model: mid,
+            max_tokens: maxTokens,
+            messages: [{ role: 'user', content: input.prompt }]
+          });
+          const text = (r.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+          return {
+            model: key,
+            model_id: mid,
+            elapsed_ms: Date.now() - t0,
+            input_tokens: r.usage?.input_tokens,
+            output_tokens: r.usage?.output_tokens,
+            response: text
+          };
+        } catch (e) {
+          return { model: key, model_id: mid, error: e.message };
+        }
+      }));
+      // 使用量も合算で記録
+      let totIn = 0, totOut = 0;
+      for (const x of results) { totIn += x.input_tokens || 0; totOut += x.output_tokens || 0; }
+      if (totIn || totOut) recordUsage(user.email, user.name, totIn, totOut, 'compare', 'tool.compare');
+      return { models: results };
     }
     case 'call_oss_ai': {
       const provider = input.provider || 'openrouter';
@@ -3950,6 +4028,8 @@ async function runSkillBackground(task, ownerEmail) {
 - 実行が完了したら結果のみ返してください`;
 
   let resultBuffer = '';
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
   try {
     const allowedToolNames = TOOLS_FOR_ROLE[role];
     const activeTools = (allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS)
@@ -3970,6 +4050,9 @@ async function runSkillBackground(task, ownerEmail) {
           tools: activeTools,
           messages
         });
+
+        totalInputTokens  += response.usage?.input_tokens  || 0;
+        totalOutputTokens += response.usage?.output_tokens || 0;
 
         for (const block of response.content) {
           if (block.type === 'text') resultBuffer += block.text;
@@ -4031,6 +4114,10 @@ async function runSkillBackground(task, ownerEmail) {
         });
         if (!r.ok) throw new Error(`${provider} API error: ${r.status} ${await r.text()}`);
         const data = await r.json();
+
+        totalInputTokens  += data.usage?.prompt_tokens     || 0;
+        totalOutputTokens += data.usage?.completion_tokens || 0;
+
         const choice = data.choices?.[0];
         if (!choice) break;
 
@@ -4052,6 +4139,11 @@ async function runSkillBackground(task, ownerEmail) {
         }
         toolRound++;
       }
+    }
+
+    // コスト計上（モデル別料金で計算）
+    if (totalInputTokens > 0 || totalOutputTokens > 0) {
+      recordUsage(ownerEmail, '', totalInputTokens, totalOutputTokens, task.model || 'sonnet', 'scheduled_task');
     }
 
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
