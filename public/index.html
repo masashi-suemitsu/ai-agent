@@ -103,6 +103,8 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 .search-snippet mark { background: #fef3c7; color: #92400e; padding: 0 2px; border-radius: 2px; }
 .search-empty { text-align: center; color: var(--sidebar-text); font-size: 11px; padding: 16px 12px; opacity: .7; }
 
+kbd { background: #f1f3f8; border: 1px solid #cbd5e0; border-radius: 4px; padding: 2px 6px; font-family: 'SF Mono', monospace; font-size: 11px; color: #2d3748; }
+
 .sidebar-section { flex: 1; overflow-y: auto; min-height: 0; }
 .sidebar-section-header {
   padding: 10px 14px 6px;
@@ -578,6 +580,8 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
   <div class="header-right">
     <span id="userBadge" style="font-size:12px;color:#718096;"></span>
     <span id="roleBadge" style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;display:none;"></span>
+    <button class="header-btn" id="themeToggleBtn" type="button" onclick="toggleTheme()" title="テーマ切替 (Ctrl+Shift+L)">🌙</button>
+    <button class="header-btn" type="button" onclick="showShortcutHelp()" title="キーボードショートカット (?)">⌨</button>
     <a href="/about" class="header-btn" style="text-decoration:none;" title="サービス概要・使い方">❔ ヘルプ</a>
     <a href="/feedback" class="header-btn" style="text-decoration:none;" title="不具合・改善要望を報告">💡 改善提案</a>
     <a href="/manage" class="header-btn" style="text-decoration:none;">⚙️ 管理</a>
@@ -1725,9 +1729,61 @@ function syncBackdrop() {
   document.getElementById('panelBackdrop')?.classList.toggle('open', anyOpen);
 }
 
-// ESCキーで開いているパネルを全部閉じる
+// ─ テーマ切替（ライト/ダーク） ─
+function applyTheme(theme) {
+  if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = theme === 'dark' ? '☀' : '🌙';
+}
+function toggleTheme() {
+  const cur = localStorage.getItem('theme') || 'light';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('theme', next);
+  applyTheme(next);
+}
+// 初期適用
+applyTheme(localStorage.getItem('theme') || 'light');
+
+// ─ ショートカットヘルプモーダル ─
+function showShortcutHelp() {
+  const html = `
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;" onclick="if(event.target===this)this.remove()">
+      <div style="background:#fff;border-radius:12px;padding:24px;max-width:480px;width:90%;color:#2d3748;">
+        <h3 style="margin-bottom:14px;font-size:16px;">⌨ キーボードショートカット</h3>
+        <table style="width:100%;font-size:13px;">
+          <tr><td style="padding:6px 0;"><kbd>Enter</kbd></td><td>送信</td></tr>
+          <tr><td style="padding:6px 0;"><kbd>Shift+Enter</kbd></td><td>改行</td></tr>
+          <tr><td style="padding:6px 0;"><kbd>Ctrl/Cmd+K</kbd></td><td>履歴検索にフォーカス</td></tr>
+          <tr><td style="padding:6px 0;"><kbd>Ctrl/Cmd+N</kbd></td><td>新しい依頼</td></tr>
+          <tr><td style="padding:6px 0;"><kbd>Ctrl/Cmd+L</kbd></td><td>入力欄にフォーカス</td></tr>
+          <tr><td style="padding:6px 0;"><kbd>Ctrl+Shift+L</kbd></td><td>ライト/ダーク切替</td></tr>
+          <tr><td style="padding:6px 0;"><kbd>Esc</kbd></td><td>パネルを閉じる</td></tr>
+          <tr><td style="padding:6px 0;"><kbd>?</kbd></td><td>このヘルプ</td></tr>
+        </table>
+        <div style="text-align:right;margin-top:14px;">
+          <button onclick="this.closest('div[style*=fixed]').remove()" style="background:#5b6eff;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;">閉じる</button>
+        </div>
+      </div>
+    </div>`;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  document.body.appendChild(wrap.firstElementChild);
+}
+
+// ─ キーボードショートカット ─
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeAllPanels();
+  const isInput = ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);
+  if (e.key === 'Escape') { closeAllPanels(); return; }
+  // ? でヘルプ（入力中は除く）
+  if (e.key === '?' && !isInput && !e.ctrlKey && !e.metaKey) { e.preventDefault(); showShortcutHelp(); return; }
+  const mod = e.ctrlKey || e.metaKey;
+  if (!mod) return;
+  const k = e.key.toLowerCase();
+  if (k === 'k') { e.preventDefault(); document.getElementById('sidebarSearch')?.focus(); }
+  else if (k === 'n') { e.preventDefault(); newTask(); }
+  else if (k === 'l' && e.shiftKey) { e.preventDefault(); toggleTheme(); }
+  else if (k === 'l') { e.preventDefault(); document.getElementById('input')?.focus(); }
 });
 
 // ─ 右サイドバー ステータス読み込み ─
