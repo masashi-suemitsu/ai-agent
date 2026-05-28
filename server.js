@@ -134,8 +134,9 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc:  ["'self'"],
-      scriptSrc:   ["'self'", "'unsafe-inline'"],   // 静的HTMLにインラインスクリプトあり
-      styleSrc:    ["'self'", "'unsafe-inline'"],
+      scriptSrc:     ["'self'", "'unsafe-inline'"],   // 静的HTMLにインラインスクリプトあり
+      scriptSrcAttr: ["'unsafe-inline'"],             // onclick等インライン属性を許可（Helmetデフォルトの'none'を上書き）
+      styleSrc:      ["'self'", "'unsafe-inline'"],
       imgSrc:      ["'self'", "data:"],              // data: はサムネイル表示に必要
       connectSrc:  ["'self'"],
       fontSrc:     ["'self'"],
