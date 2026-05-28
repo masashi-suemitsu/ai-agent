@@ -188,7 +188,7 @@ td.muted { color: var(--text-light); }
 <main>
   <div class="hero">
     <h2>仕事を任せる、AIエージェント。</h2>
-    <p>チャットで依頼するだけで、社内データの集計・名刺検索・カレンダー確認・メール下書きまで、業務を自動で実行します。</p>
+    <p>チャットで依頼するだけで、社内データの集計・名刺検索・カレンダー確認・メール送信・GitHub操作まで、業務を自動で実行します。</p>
   </div>
 
   <!-- 概要 -->
@@ -216,12 +216,12 @@ td.muted { color: var(--text-light); }
       <div class="feature-card">
         <div class="ficon">🔗</div>
         <div class="ftitle">サービス連携</div>
-        <div class="fdesc">Chatwork / Google Drive / カレンダー / Gmail を AI から操作可能。</div>
+        <div class="fdesc">Chatwork / Google / GitHub など外部サービスを AI から操作可能。</div>
       </div>
       <div class="feature-card">
         <div class="ficon">⚙️</div>
-        <div class="ftitle">スキル保存</div>
-        <div class="fdesc">よく使う手順を「スキル」として保存。次回からワンクリック実行。</div>
+        <div class="ftitle">スキル保存・共有</div>
+        <div class="fdesc">よく使う手順を「スキル」として保存。チームへの公開や連鎖実行もできます。</div>
       </div>
       <div class="feature-card">
         <div class="ficon">⏰</div>
@@ -229,9 +229,19 @@ td.muted { color: var(--text-light); }
         <div class="fdesc">「毎朝9時に○○して」「来週月曜の朝に○○して」も登録できます。</div>
       </div>
       <div class="feature-card">
+        <div class="ficon">💰</div>
+        <div class="ftitle">利用状況の確認</div>
+        <div class="fdesc">自分の AI 利用量とコストを月別に確認できます。管理者は全員分を閲覧可。</div>
+      </div>
+      <div class="feature-card">
         <div class="ficon">🔒</div>
         <div class="ftitle">権限管理</div>
         <div class="fdesc">担当部門に応じて、使えるツール・参照できるデータ範囲が決まります。</div>
+      </div>
+      <div class="feature-card">
+        <div class="ficon">🛡️</div>
+        <div class="ftitle">障害時フォールバック</div>
+        <div class="fdesc">Claude API が過負荷の際は自動でOSS AIに切り替えてタスクを継続します。</div>
       </div>
     </div>
   </div>
@@ -296,14 +306,15 @@ td.muted { color: var(--text-light); }
   <!-- 連携サービス -->
   <div class="section">
     <h3><span class="icon">🔌</span>連携サービス</h3>
-    <p>画面右側の「連携サービス」一覧から、自分のアカウントで個別に連携できます：</p>
+    <p>画面右側のサイドバーから、自分のアカウントで個別に連携できます。ログインはGoogleアカウントの選択のみで、各サービスの権限は個別に付与します：</p>
     <div class="table-wrap">
       <table>
         <tr><th>サービス</th><th>できること</th><th>連携方式</th></tr>
-        <tr><td>💬 Chatwork</td><td>メッセージ送信、ルーム一覧、メッセージ取得</td><td>個人OAuth</td></tr>
-        <tr><td>📁 Google Drive</td><td>ファイル一覧・内容読み取り、スプレッドシート書き込み、ファイル作成</td><td>個人OAuth</td></tr>
+        <tr><td>💬 Chatwork</td><td>メッセージ送信・取得、ルーム一覧</td><td>個人OAuth</td></tr>
+        <tr><td>📁 Google Drive</td><td>ファイル一覧・読み取り、スプレッドシート書き込み、Google Docs作成、Google Formsの構造・回答取得</td><td>個人OAuth</td></tr>
         <tr><td>📅 Google カレンダー</td><td>予定の確認・作成</td><td>個人OAuth</td></tr>
         <tr><td>✉️ Gmail</td><td>メール取得・送信</td><td>個人OAuth</td></tr>
+        <tr><td>🐙 GitHub</td><td>Issue・PR・リポジトリの参照・操作</td><td>Personal Access Token</td></tr>
       </table>
     </div>
     <p style="margin-top:8px;">それぞれ <strong>自分のアカウントの権限内</strong>でしか動作しません。他の人のデータが見えることはありません。</p>
@@ -311,9 +322,15 @@ td.muted { color: var(--text-light); }
 
   <!-- スキル -->
   <div class="section">
-    <h3><span class="icon">💾</span>スキルとして保存</h3>
+    <h3><span class="icon">💾</span>スキルとして保存・活用</h3>
     <p>AI とのやりとりで手順が固まったら、AI が <strong>「保存しておけば次回からすぐ実行できます」</strong>と案内してきます。保存ボタンを押すと、左側「マイスキル」に登録されます。</p>
     <p>登録後はクリック1つで再実行できます。よく繰り返す業務は積極的にスキル化してください。</p>
+    <h4>変数（パラメータ化）</h4>
+    <p>スキルの手順に <code>{{顧客名}}</code> のように書いておくと、実行時に値を入力するフォームが自動表示されます。汎用的なスキルを作るのに便利です。</p>
+    <h4>スキルチェーン</h4>
+    <p>スキルAの完了後に自動でスキルBを実行する「チェーン」を設定できます。前のスキルの結果を次のスキルに引き継いで、複数ステップの業務を一気に自動化できます。</p>
+    <h4>チームへの共有</h4>
+    <p>作成したスキルは「チームに公開」することで他のメンバーも利用できます。部門共通の手順はチームスキルとして共有してください。</p>
   </div>
 
   <!-- 自動実行 -->
@@ -325,6 +342,10 @@ td.muted { color: var(--text-light); }
       <li><strong>単発タスク</strong>：指定日時に1回だけ実行</li>
     </ul>
     <p>登録したタスクは <code>/manage</code> ページから一覧・編集・停止できます。実行結果はメールでも通知されます。</p>
+    <div class="callout">
+      <div class="label">🛡️ 障害時フォールバック</div>
+      Claude API が混雑・停止した場合、自動でリトライし、それでも失敗した場合は OSS AI（Qwen3-235B）に切り替えて実行を継続します。無人実行タスクが黙って失敗することを防ぎます。
+    </div>
   </div>
 
   <!-- 個人ルール -->
