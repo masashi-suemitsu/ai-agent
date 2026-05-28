@@ -221,7 +221,7 @@ td.muted { color: var(--text-light); }
       <div class="feature-card">
         <div class="ficon">⚙️</div>
         <div class="ftitle">スキル保存・共有</div>
-        <div class="fdesc">よく使う手順を「スキル」として保存。チームへの公開や連鎖実行もできます。</div>
+        <div class="fdesc">よく使う手順を「ジョブ」として保存。チームへの公開・連鎖実行・複数ジョブの並列実行もできます。</div>
       </div>
       <div class="feature-card">
         <div class="ficon">⏰</div>
@@ -315,9 +315,12 @@ td.muted { color: var(--text-light); }
         <tr><td>📅 Google カレンダー</td><td>予定の確認・作成</td><td>個人OAuth</td></tr>
         <tr><td>✉️ Gmail</td><td>メール取得・送信</td><td>個人OAuth</td></tr>
         <tr><td>🐙 GitHub</td><td>Issue・PR・リポジトリの参照・操作</td><td>Personal Access Token</td></tr>
+        <tr><td>📝 Notion</td><td>データベース検索・ページ作成・更新</td><td>Integration Token（管理者設定）</td></tr>
+        <tr><td>💬 Slack</td><td>チャンネル一覧・メッセージ取得・送信</td><td>Bot Token（管理者設定）</td></tr>
       </table>
     </div>
     <p style="margin-top:8px;">それぞれ <strong>自分のアカウントの権限内</strong>でしか動作しません。他の人のデータが見えることはありません。</p>
+    <p style="margin-top:4px;font-size:13px;color:var(--text-light);">Notion・Slack は MCP（Model Context Protocol）経由で接続。管理者による API トークン設定後に利用可能になります。</p>
   </div>
 
   <!-- スキル -->
@@ -327,8 +330,10 @@ td.muted { color: var(--text-light); }
     <p>登録後はクリック1つで再実行できます。よく繰り返す業務は積極的にスキル化してください。</p>
     <h4>変数（パラメータ化）</h4>
     <p>スキルの手順に <code>{{顧客名}}</code> のように書いておくと、実行時に値を入力するフォームが自動表示されます。汎用的なスキルを作るのに便利です。</p>
-    <h4>スキルチェーン</h4>
-    <p>スキルAの完了後に自動でスキルBを実行する「チェーン」を設定できます。前のスキルの結果を次のスキルに引き継いで、複数ステップの業務を一気に自動化できます。</p>
+    <h4>ジョブチェーン</h4>
+    <p>ジョブAの完了後に自動でジョブBを実行する「チェーン」を設定できます。前のジョブの結果を次のジョブに引き継いで、複数ステップの業務を一気に自動化できます。最大5段階まで連鎖できます。</p>
+    <h4>並列実行</h4>
+    <p>複数のジョブを同時に並列実行できます（最大5件）。それぞれの結果がリアルタイムで届きます。</p>
     <h4>チームへの共有</h4>
     <p>作成したスキルは「チームに公開」することで他のメンバーも利用できます。部門共通の手順はチームスキルとして共有してください。</p>
   </div>
