@@ -259,7 +259,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   <div class="header-left">
     <a href="/" class="back-link">← チャット</a>
     <div class="header-logo">A</div>
-    <h1>タスク管理<small>定期タスク・スキル・権限の確認</small></h1>
+    <h1>タスク管理<small>定期タスク・ジョブ・権限の確認</small></h1>
   </div>
   <div class="header-right">
     <a href="/feedback" class="back-link" title="不具合・改善要望を報告">💡 改善提案</a>
@@ -274,7 +274,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   <nav class="tab-nav" id="tabNav">
     <button class="tab-btn active" data-tab="tasks"      onclick="switchTab('tasks')"><span class="nav-icon">⏰</span><span class="nav-label">タスク</span></button>
     <button class="tab-btn" data-tab="history"           onclick="switchTab('history')"><span class="nav-icon">📊</span><span class="nav-label">実行履歴</span></button>
-    <button class="tab-btn" data-tab="skills"            onclick="switchTab('skills')"><span class="nav-icon">⚙️</span><span class="nav-label">スキル</span></button>
+    <button class="tab-btn" data-tab="skills"            onclick="switchTab('skills')"><span class="nav-icon">⚙️</span><span class="nav-label">ジョブ</span></button>
     <button class="tab-btn" data-tab="automation"        onclick="switchTab('automation')"><span class="nav-icon">🔗</span><span class="nav-label">自動化</span></button>
     <button class="tab-btn" data-tab="memories"          onclick="switchTab('memories')"><span class="nav-icon">🧠</span><span class="nav-label">メモリ</span></button>
     <div class="sidebar-sep"></div>
@@ -336,14 +336,19 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <div style="font-size:13px;font-weight:700;color:var(--text-light);margin-bottom:10px;letter-spacing:.03em;">📋 テンプレートから作成</div>
       <div id="skillTemplateGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;"></div>
     </div>
+    <!-- マイジョブ -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;">マイスキル・共有スキル</div>
-      <label class="btn btn-outline" style="cursor:pointer;font-size:12px;" title="JSONファイルからスキルをインポート">
+      <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;">💼 マイジョブ</div>
+      <label class="btn btn-outline" style="cursor:pointer;font-size:12px;" title="JSONファイルからジョブをインポート">
         📥 インポート
         <input type="file" accept=".json" style="display:none;" onchange="importSkill(this)">
       </label>
     </div>
-    <div id="skillList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+    <div id="myJobList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+
+    <!-- 共有ジョブ -->
+    <div style="font-size:13px;font-weight:700;color:var(--text-light);letter-spacing:.03em;margin-top:24px;margin-bottom:10px;">🤝 共有ジョブ</div>
+    <div id="sharedJobList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
 
   <!-- ─ 自動化（Hooks・Batch・サブエージェント） ─ -->
@@ -352,14 +357,14 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <!-- Hooks -->
       <div class="card">
         <div style="font-size:14px;font-weight:700;margin-bottom:4px;">🔗 フック（Hooks）</div>
-        <div style="font-size:12px;color:var(--text-light);margin-bottom:14px;">スキル実行の前後に自動処理を設定します。</div>
+        <div style="font-size:12px;color:var(--text-light);margin-bottom:14px;">ジョブ実行の前後に自動処理を設定します。</div>
         <div id="hooksListArea"><div style="color:var(--text-light);font-size:13px;">読み込み中...</div></div>
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
           <div style="font-size:13px;font-weight:700;margin-bottom:10px;">新しいフックを追加</div>
           <div style="display:grid;gap:8px;">
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <select id="hookSkillSel" style="flex:1;min-width:120px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);">
-                <option value="">すべてのスキル（共通）</option>
+                <option value="">すべてのジョブ（共通）</option>
               </select>
               <select id="hookTypeSel" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);">
                 <option value="pre_run">実行前 (pre_run)</option>
@@ -367,7 +372,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
               </select>
               <select id="hookActionSel" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);" onchange="onHookActionChange()">
                 <option value="chatwork_notify">Chatwork通知</option>
-                <option value="run_skill">スキル連鎖実行</option>
+                <option value="run_skill">ジョブ連鎖実行</option>
               </select>
             </div>
             <div id="hookConfigArea" style="padding:8px 10px;background:var(--muted-bg);border-radius:6px;border:1px solid var(--border);">
@@ -376,7 +381,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
                 <input type="text" id="hookRoomId" placeholder="12345678" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-top:4px;">
               </div>
               <div id="hookConfigSkill" style="display:none;">
-                <label style="font-size:12px;color:var(--text-light);">連鎖実行するスキル</label>
+                <label style="font-size:12px;color:var(--text-light);">連鎖実行するジョブ</label>
                 <select id="hookNextSkillSel" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);margin-top:4px;"></select>
               </div>
             </div>
@@ -388,10 +393,10 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <!-- Batch API -->
       <div class="card">
         <div style="font-size:14px;font-weight:700;margin-bottom:4px;">📦 バッチ実行（Batch API）</div>
-        <div style="font-size:12px;color:var(--text-light);margin-bottom:14px;">複数スキルをまとめてAnthropicのBatch APIで非同期実行します。コストを最大50%削減できます。</div>
+        <div style="font-size:12px;color:var(--text-light);margin-bottom:14px;">複数ジョブをまとめてAnthropicのBatch APIで非同期実行します。コストを最大50%削減できます。</div>
         <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
-            <label style="font-size:12px;color:var(--text-light);display:block;margin-bottom:4px;">実行するスキルを選択（複数可）</label>
+            <label style="font-size:12px;color:var(--text-light);display:block;margin-bottom:4px;">実行するジョブを選択（複数可）</label>
             <select id="batchSkillSel" multiple style="width:100%;height:100px;padding:4px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);"></select>
           </div>
           <button class="btn btn-primary" onclick="startBatch()">📦 バッチ送信</button>
@@ -405,14 +410,14 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <!-- Webhook受信トリガー -->
       <div class="card">
         <div style="font-size:14px;font-weight:700;margin-bottom:4px;">🔗 Webhook受信トリガー</div>
-        <div style="font-size:12px;color:var(--text-light);margin-bottom:14px;">外部サービスからのHTTPリクエストでスキルを自動実行します。発行したURLをChatwork・GitHub・Zapier等に登録してください。</div>
+        <div style="font-size:12px;color:var(--text-light);margin-bottom:14px;">外部サービスからのHTTPリクエストでジョブを自動実行します。発行したURLをChatwork・GitHub・Zapier等に登録してください。</div>
         <div id="webhookListArea"><div style="color:var(--text-light);font-size:13px;">読み込み中...</div></div>
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
           <div style="font-size:13px;font-weight:700;margin-bottom:10px;">新しいWebhookを作成</div>
           <div style="display:grid;gap:8px;">
             <input type="text" id="whLabel" placeholder="ラベル（例：Chatwork受信・GitHub PR）" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);">
             <select id="whSkillSel" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--input-bg);color:var(--text);">
-              <option value="">スキルを指定しない（プロンプトのみ）</option>
+              <option value="">ジョブを指定しない（プロンプトのみ）</option>
             </select>
             <textarea id="whPromptTpl" rows="3" placeholder="プロンプトテンプレート（省略可）。{{payload}} で受信データを参照できます。" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;resize:vertical;background:var(--input-bg);color:var(--text);"></textarea>
             <button class="btn btn-primary" onclick="createWebhook()" style="width:fit-content;">＋ Webhookを作成</button>
@@ -1285,19 +1290,26 @@ async function loadSkills() {
 }
 
 function renderSkills(skills) {
-  const el = document.getElementById('skillList');
-  if (!skills.length) {
-    el.innerHTML = `<div class="empty">
-      <div class="empty-icon">⚙️</div>
-      <h3>スキルがありません</h3>
-      <p>チャット画面でAIと会話して手順が決まったら<br>スキルとして保存できます。<br><a href="/">チャット画面へ</a></p>
-    </div>`;
-    return;
-  }
   skills.forEach(s => { _skillCache[s.id] = s; });
-  el.innerHTML = skills.map(s => {
-    const isOwn = s.owner_email === currentUser?.email;
-    const ownerLabel = s.owner_name || (s.owner_email ? s.owner_email.split('@')[0] : '');
+  const myJobs     = skills.filter(s => s.owner_email === currentUser?.email);
+  const sharedJobs = skills.filter(s => s.owner_email !== currentUser?.email);
+
+  const myEl = document.getElementById('myJobList');
+  const shEl = document.getElementById('sharedJobList');
+
+  myEl.innerHTML = myJobs.length ? myJobs.map(s => renderJobCard(s, true)).join('') : `<div class="empty">
+    <div class="empty-icon">⚙️</div>
+    <h3>ジョブがありません</h3>
+    <p>チャット画面でAIと会話して手順が決まったら<br>ジョブとして保存できます。<br><a href="/">チャット画面へ</a></p>
+  </div>`;
+
+  shEl.innerHTML = sharedJobs.length ? sharedJobs.map(s => renderJobCard(s, false)).join('') : `<div class="empty" style="padding:16px;">
+    <p style="color:var(--text-light);">チームから共有されたジョブはありません</p>
+  </div>`;
+}
+
+function renderJobCard(s, isOwn) {
+  const ownerLabel = s.owner_name || (s.owner_email ? s.owner_email.split('@')[0] : '');
     return `<div class="card">
       <div class="card-header">
         <div class="card-title">${esc(s.title)}</div>
@@ -2039,7 +2051,7 @@ function renderRules(role) {
 
 // ─ コネクタ ─
 const PERSONAL_CONNECTORS = [
-  { key:'drive',    icon:'📁', name:'Google Drive',    desc:'ファイル参照・スプレッドシート読み書き・ファイル作成', authUrl:'/auth/drive',    discUrl:'/api/drive/disconnect' },
+  { key:'drive',    icon:'📁', name:'Google Drive',    desc:'ファイル参照・スプレッドシート読み書き・Docs作成・Forms回答取得・Search Console・Google Analytics (GA4)', authUrl:'/auth/drive',    discUrl:'/api/drive/disconnect' },
   { key:'calendar', icon:'📅', name:'Google Calendar', desc:'予定の参照・作成・更新',                               authUrl:'/auth/calendar', discUrl:'/api/calendar/disconnect' },
   { key:'gmail',    icon:'✉️',  name:'Gmail',           desc:'メール受信トレイの参照・送信',                        authUrl:'/auth/gmail',    discUrl:'/api/gmail/disconnect' },
   { key:'chatwork', icon:'💬', name:'Chatwork',        desc:'ルーム一覧・メッセージ取得・送信',                    authUrl:'/auth/chatwork', discUrl:'/api/chatwork/disconnect' },
