@@ -157,6 +157,7 @@ app.use((req, res, next) => {
 const chatRateLimit = rateLimit({
   windowMs: 60 * 1000,         // 1分間
   max: 30,                      // 最大30リクエスト
+  keyGenerator: ipKeyGenerator,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }
@@ -164,6 +165,7 @@ const chatRateLimit = rateLimit({
 const apiRateLimit = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
+  keyGenerator: ipKeyGenerator,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }
