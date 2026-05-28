@@ -4552,22 +4552,35 @@ function getSesClient() {
   }
   return _sesClient;
 }
+// nodemailer 互換: 文字列 "a@x.com, b@x.com" / "a@x.com; b@x.com" / 配列 / 単一文字列 を配列に正規化
+function normalizeAddresses(v) {
+  if (!v) return [];
+  const list = Array.isArray(v) ? v : String(v).split(/[,;]\s*/);
+  return list.map(s => String(s).trim()).filter(Boolean);
+}
 function getSesTransport() {
   return {
-    async sendMail({ from, to, subject, text, html }) {
-      const recipients = Array.isArray(to) ? to : [to];
+    async sendMail({ from, to, cc, bcc, replyTo, subject, text, html }) {
+      const destination = { ToAddresses: normalizeAddresses(to) };
+      const ccList = normalizeAddresses(cc);
+      const bccList = normalizeAddresses(bcc);
+      if (ccList.length) destination.CcAddresses = ccList;
+      if (bccList.length) destination.BccAddresses = bccList;
       const body = {};
       if (text) body.Text = { Charset: 'UTF-8', Data: text };
       if (html) body.Html = { Charset: 'UTF-8', Data: html };
       if (!body.Text && !body.Html) body.Text = { Charset: 'UTF-8', Data: '' };
-      const result = await getSesClient().send(new SendEmailCommand({
+      const params = {
         Source: from || process.env.SES_FROM || 'info@acrovision.co.jp',
-        Destination: { ToAddresses: recipients },
+        Destination: destination,
         Message: {
           Subject: { Charset: 'UTF-8', Data: subject || '' },
           Body: body,
         },
-      }));
+      };
+      const replyToList = normalizeAddresses(replyTo);
+      if (replyToList.length) params.ReplyToAddresses = replyToList;
+      const result = await getSesClient().send(new SendEmailCommand(params));
       return { messageId: result.MessageId };
     }
   };
