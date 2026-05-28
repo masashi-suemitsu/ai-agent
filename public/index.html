@@ -675,11 +675,98 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
   font-size: 16px; padding: 0 4px; line-height: 1; transition: color .12s; flex-shrink: 0;
 }
 .mode-bar-clear:hover { color: var(--danger); }
+
+/* ─ Mobile Responsive ─ */
+.mobile-sidebar-btn { display: none; }
+.sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 150; opacity: 0; transition: opacity .25s; }
+.sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
+
+@media (max-width: 768px) {
+  /* Header */
+  header { padding: 0 10px; gap: 6px; }
+  header h1 small { display: none; }
+  .header-right { gap: 4px; }
+  .header-btn:not(#headerManageBtn):not(#headerLogoutBtn) { display: none; }
+  #userBadge, #roleBadge { display: none !important; }
+  .feature-btn { display: none; }
+
+  /* Mobile-only hamburger & connections buttons */
+  .mobile-sidebar-btn {
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: 1px solid var(--border); border-radius: 7px;
+    width: 32px; height: 32px; font-size: 16px; cursor: pointer; flex-shrink: 0;
+    color: var(--text-light); transition: all .15s;
+  }
+  .mobile-sidebar-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .sidebar-backdrop { display: block; pointer-events: none; }
+
+  /* Shorten remaining header buttons */
+  #headerManageBtn { padding: 5px 8px; font-size: 12px; }
+  #headerLogoutBtn { display: none; }
+
+  /* Left sidebar: slide-in drawer */
+  .sidebar {
+    position: fixed;
+    top: 52px;
+    left: -260px;
+    width: 256px;
+    height: calc(100vh - 52px);
+    z-index: 200;
+    transition: left .25s ease;
+    box-shadow: 2px 0 20px rgba(0,0,0,.15);
+  }
+  .sidebar.sp-open { left: 0; }
+
+  /* Right sidebar: slide-in drawer */
+  .sidebar-right {
+    position: fixed;
+    top: 52px;
+    right: -260px;
+    width: 256px;
+    height: calc(100vh - 52px);
+    z-index: 200;
+    transition: right .25s ease;
+    box-shadow: -2px 0 20px rgba(0,0,0,.15);
+  }
+  .sidebar-right.sp-open { right: 0; }
+
+  /* Chat area full width */
+  .layout { position: relative; }
+  .chat-area { width: 100%; }
+
+  /* Messages more comfortable on small screen */
+  .messages { padding: 16px 12px 8px; gap: 10px; }
+  .msg { max-width: 92%; }
+
+  /* Input area compact */
+  .input-area { padding: 8px 10px 10px; }
+  .model-selector { flex-wrap: nowrap; overflow-x: auto; gap: 4px; }
+  .model-btn { padding: 4px 8px; font-size: 11px; white-space: nowrap; }
+  .model-btn .model-hint { display: none; }
+  #thinkingToggle { font-size: 11px !important; padding: 4px 8px !important; white-space: nowrap; }
+  .send-btn { padding: 10px 14px; font-size: 13px; }
+  .attach-btn { width: 36px; height: 36px; font-size: 16px; }
+
+  /* Empty state */
+  .empty-state { padding: 24px 16px; }
+  .empty-state h2 { font-size: 17px; }
+  .examples { max-width: 100%; }
+
+  /* Feature menu popup full-width on mobile */
+  .feature-menu-popup { width: calc(100vw - 24px); left: 0; right: 0; grid-template-columns: 1fr; }
+
+  /* Fixed panels full-width on mobile */
+  .cw-panel, .drive-panel, .history-panel, .schedule-panel {
+    width: 100%; right: -100%;
+  }
+  .cw-panel.open, .drive-panel.open, .history-panel.open, .schedule-panel.open { right: 0; }
+}
 </style>
 </head>
 <body>
 <header>
   <div class="header-left">
+    <button class="mobile-sidebar-btn" id="spSidebarBtn" type="button" onclick="toggleSpSidebar()" title="履歴・スキル">☰</button>
     <a href="/" style="display:contents;text-decoration:none;cursor:pointer;" title="ホームに戻る"><div class="header-logo"><img src="/assets/logo.png" alt="タスクAIエージェント"></div>
     <h1 style="color:inherit;">タスクAIエージェント</h1></a>
   </div>
@@ -695,13 +782,16 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
     <button class="header-btn" type="button" onclick="showShortcutHelp()" title="キーボードショートカット (?)">⌨</button>
     <a href="/about" class="header-btn" style="text-decoration:none;" title="サービス概要・使い方">❔ ヘルプ</a>
     <a href="/feedback" class="header-btn" style="text-decoration:none;" title="不具合・改善要望を報告">💡 改善提案</a>
-    <a href="/manage" class="header-btn" style="text-decoration:none;">⚙️ 管理</a>
-    <a href="/logout" class="header-btn" style="text-decoration:none;">ログアウト</a>
+    <a href="/manage" class="header-btn" id="headerManageBtn" style="text-decoration:none;">⚙️ 管理</a>
+    <a href="/logout" class="header-btn" id="headerLogoutBtn" style="text-decoration:none;">ログアウト</a>
+    <button class="mobile-sidebar-btn" id="spConnBtn" type="button" onclick="toggleSpRightSidebar()" title="連携サービス">🔌</button>
   </div>
 </header>
 
 <!-- ─ Panel Backdrop ─ -->
 <div class="panel-backdrop" id="panelBackdrop" onclick="closeAllPanels()"></div>
+<!-- ─ Sidebar Backdrop (mobile) ─ -->
+<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSpSidebars()"></div>
 
 <div class="layout">
   <!-- ─ Sidebar ─ -->
@@ -1329,6 +1419,9 @@ async function loadConversation(id) {
   document.querySelectorAll('.conv-item').forEach(el => {
     el.classList.toggle('active', parseInt(el.dataset.id) === id);
   });
+
+  // モバイル: 会話選択後にサイドバーを閉じる
+  if (window.innerWidth <= 768) closeSpSidebars();
 }
 
 // ─ 新しい依頼 ─
@@ -1340,6 +1433,7 @@ function newTask() {
   document.getElementById('input').value = '';
   autoResize(document.getElementById('input'));
   document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+  if (window.innerWidth <= 768) closeSpSidebars();
 }
 
 async function exportConversation() {
@@ -2452,6 +2546,27 @@ function closeAllPanels(except) {
 function syncBackdrop() {
   const anyOpen = ALL_PANELS.some(id => document.getElementById(id)?.classList.contains('open'));
   document.getElementById('panelBackdrop')?.classList.toggle('open', anyOpen);
+}
+
+// ─ モバイル サイドバー ─
+function toggleSpSidebar() {
+  const sb = document.querySelector('.sidebar');
+  const bd = document.getElementById('sidebarBackdrop');
+  const isOpen = sb.classList.toggle('sp-open');
+  document.querySelector('.sidebar-right')?.classList.remove('sp-open');
+  bd.classList.toggle('open', isOpen);
+}
+function toggleSpRightSidebar() {
+  const sb = document.querySelector('.sidebar-right');
+  const bd = document.getElementById('sidebarBackdrop');
+  const isOpen = sb.classList.toggle('sp-open');
+  document.querySelector('.sidebar')?.classList.remove('sp-open');
+  bd.classList.toggle('open', isOpen);
+}
+function closeSpSidebars() {
+  document.querySelector('.sidebar')?.classList.remove('sp-open');
+  document.querySelector('.sidebar-right')?.classList.remove('sp-open');
+  document.getElementById('sidebarBackdrop')?.classList.remove('open');
 }
 
 // ─ テーマ切替（ライト/ダーク） ─
