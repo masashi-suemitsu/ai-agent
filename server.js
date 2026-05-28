@@ -130,7 +130,21 @@ const TOOLS_FOR_ROLE = {
 };
 
 app.set('trust proxy', 1);
-app.use(helmet({ contentSecurityPolicy: false })); // CSPはCloudFront側で管理
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'", "'unsafe-inline'"],   // 静的HTMLにインラインスクリプトあり
+      styleSrc:    ["'self'", "'unsafe-inline'"],
+      imgSrc:      ["'self'", "data:"],              // data: はサムネイル表示に必要
+      connectSrc:  ["'self'"],
+      fontSrc:     ["'self'"],
+      objectSrc:   ["'none'"],
+      frameAncestors: ["'none'"],                    // クリックジャッキング防止
+      upgradeInsecureRequests: [],
+    }
+  }
+}));
 
 // ── レート制限 ──
 const chatRateLimit = rateLimit({
@@ -5370,6 +5384,16 @@ const DRIVE_MIME_LABELS = {
 app.get('/api/drive/status', (req, res) => {
   const row = db.prepare('SELECT updated_at FROM user_drive_tokens WHERE email=? AND refresh_token IS NOT NULL').get(req.user.email);
   res.json({ connected: !!row, updatedAt: row?.updated_at || null });
+});
+
+// GET /api/mcp/status — 設定済み MCP サーバー一覧（名前・URL のみ。トークン非公開）
+app.get('/api/mcp/status', (req, res) => {
+  const servers = getMcpServers().map(s => ({
+    name: s.name || s.url || '(unnamed)',
+    url:  s.url  || '',
+    type: s.type || 'url'
+  }));
+  res.json({ servers });
 });
 
 // DELETE /api/drive/disconnect
