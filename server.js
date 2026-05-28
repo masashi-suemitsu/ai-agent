@@ -1119,7 +1119,7 @@ async function executeHooks(hookType, skillInfo, ownerEmail, result) {
 const TOOLS = [
   {
     name: 'query_corp_db',
-    description: '社内MySQL DB（corp_acro_jp）をSELECTで照会する。アロウリスト方式：照会可能なテーブルは kintone_employees / kintone_contract / kintone_anken_eigyo / geppo_data / kintone_customers / kintone_seikyu / hotprofile_business_cards（名刺データ・18,134件）の7つのみ。これ以外のテーブルは拒否される。',
+    description: '社内MySQL DB（corp_acro_jp）をSELECTで照会する。アロウリスト方式：照会可能なテーブルは kintone_employees / kintone_contract / kintone_anken_eigyo / geppo_data / kintone_customers / kintone_seikyu / hotprofile_business_cards（名刺データ・18,134件）/ it_kyujin_job_acrovision（求人データ）の8つのみ。これ以外のテーブルは拒否される。',
     input_schema: {
       type: 'object',
       properties: {
@@ -4041,7 +4041,7 @@ function getCorpDb() {
 // ⚠️ 同期注意: このアロウリストは corp 側 PHP にも同じ内容が定義されています。
 //   多層防御のため両方に同じテーブル名を維持する必要があります。
 //   対応箇所: corp-dev-ec2/home/acrovision/www/corp.acrovision.jp/api/agent.php
-//             の case 'query': 内 $ALLOWED_TABLES（同じ6テーブル）
+//             の case 'query': 内 $ALLOWED_TABLES（同じ8テーブル）
 //   テーブルを追加・削除する場合は必ず両方を更新してください。
 const DB_BLOCKED_KEYWORDS = /\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE|DESCRIBE|SHOW)\b/i;
 const DB_ALLOWED_TABLES = new Set([
@@ -4051,7 +4051,8 @@ const DB_ALLOWED_TABLES = new Set([
   'geppo_data',
   'kintone_customers',
   'kintone_seikyu',
-  'hotprofile_business_cards'
+  'hotprofile_business_cards',
+  'it_kyujin_job_acrovision'
 ]);
 // SQLからFROM/JOIN後のテーブル参照を抽出し、すべてアロウリストに含まれるか検査
 function checkSqlAllowed(sql) {

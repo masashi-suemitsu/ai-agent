@@ -148,6 +148,6 @@ docs: ドキュメント
 
 ## セキュリティ注意
 
-- corp MySQL アクセス可能テーブルは7つのみ（allowlist）→ `SECURITY.md` 参照
+- corp MySQL アクセス可能テーブルは8つのみ（allowlist）→ `SECURITY.md` 参照
 - `users` / `attendance_posts` 等は AI から参照不可
 - Chatwork 送信は必ずユーザー確認（`send_system_notification` のみ確認不要）

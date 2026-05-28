@@ -15,7 +15,7 @@ AIエージェントからアクセスできるデータは **アロウリスト
 
 ## DB アロウリスト
 
-### 許可テーブル（6個）
+### 許可テーブル（8個）
 
 ファイル: `home/ec2-user/claude-agent-web/server.js` (`DB_ALLOWED_TABLES`)
 
@@ -27,6 +27,8 @@ AIエージェントからアクセスできるデータは **アロウリスト
 | `geppo_data` | 月報データ |
 | `kintone_customers` | 顧客データ |
 | `kintone_seikyu` | 請求データ |
+| `hotprofile_business_cards` | 名刺データ |
+| `it_kyujin_job_acrovision` | 求人データ |
 
 これ以外のテーブル（`users` / `attendance_posts` / `king_of_time_attendance` / `jinji_employee_profiles` / `in_member_evaluations` / `in_member_evaluation_results` / `recruit_ats_*` / `follow_signal_pool` など）への AI 経由の照会はすべて拒否される。
 
