@@ -4694,6 +4694,11 @@ const DB_DENIED_MESSAGE = sql => {
   return c.ok ? '' : `テーブル「${c.table}」への照会は許可されていません。許可: ${[...DB_ALLOWED_TABLES].join(', ')}`;
 };
 app.post('/api/db/query', async (req, res) => {
+  const role = req.user.role || getUserRole(req.user.email);
+  if (!['admin','gyoumu'].includes(role)) {
+    audit(req.user.email, req.user.name, 'db.query.denied', { reason: 'role', role });
+    return res.status(403).json({ error: 'corp DB照会は管理者・業務ロールのみ許可されています' });
+  }
   const pool = getCorpDb();
   if (!pool) return res.status(503).json({ error: 'Corp DB未設定' });
   const { sql, params = [] } = req.body;
@@ -5202,7 +5207,7 @@ app.post('/api/scheduled-tasks', (req, res) => {
 
 // PUT /api/scheduled-tasks/:id
 app.put('/api/scheduled-tasks/:id', (req, res) => {
-  const { interval_min, enabled, skill_title, description, steps, schedule_type, schedule_hour, schedule_minute, schedule_weekday, model, shared } = req.body;
+  const { interval_min, enabled, skill_title, description, steps, schedule_type, schedule_hour, schedule_minute, schedule_weekday, model, shared, shared_with } = req.body;
   try {
     const row = db.prepare('SELECT * FROM scheduled_tasks WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
     if (!row) return res.status(403).json({ error: '権限がありません' });
