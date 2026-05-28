@@ -1237,13 +1237,16 @@ const TOOLS = [
   },
   {
     name: 'search_drive_files',
-    description: 'Google Driveをファイル名・MIMEタイプで検索する。スプレッドシートやドキュメントをファイル名で探してIDを取得したい場合に使う。',
+    description: 'Google Driveをファイル名・本文・MIMEタイプ・所有者・期間で検索する。fullTextオプションで本文全文検索可能。',
     input_schema: {
       type: 'object',
       properties: {
-        query:       { type: 'string', description: '検索するファイル名（部分一致）' },
-        mime_type:   { type: 'string', description: 'MIMEタイプフィルタ。スプレッドシート: application/vnd.google-apps.spreadsheet、ドキュメント: application/vnd.google-apps.document。省略時は全種類' },
-        max_results: { type: 'number', description: '最大件数（デフォルト20）' }
+        query:       { type: 'string', description: '検索文字列' },
+        full_text:   { type: 'boolean', description: 'true: 本文も含めて検索。false（既定）: ファイル名のみ' },
+        mime_type:   { type: 'string', description: 'MIMEタイプフィルタ（例: application/vnd.google-apps.spreadsheet）' },
+        owner:       { type: 'string', description: 'オーナー email でフィルタ（任意）' },
+        modified_after:  { type: 'string', description: 'YYYY-MM-DD 以降に変更されたもの（任意）' },
+        max_results: { type: 'number', description: '最大件数（デフォルト20、最大100）' }
       },
       required: ['query']
     }
@@ -1992,15 +1995,19 @@ async function executeTool(name, input, user) {
       };
     }
     case 'search_drive_files': {
-      audit(user.email, user.name, 'tool.drive_search', { query: input.query });
+      audit(user.email, user.name, 'tool.drive_search', { query: input.query, fullText: !!input.full_text });
       const drive = getDriveClientForUser(user);
-      let q = `name contains '${input.query.replace(/'/g, "\\'")}' and trashed=false`;
-      if (input.mime_type) q += ` and mimeType='${input.mime_type}'`;
+      const esc = input.query.replace(/'/g, "\\'");
+      const clauses = [`trashed=false`];
+      clauses.push(input.full_text ? `fullText contains '${esc}'` : `name contains '${esc}'`);
+      if (input.mime_type) clauses.push(`mimeType='${input.mime_type}'`);
+      if (input.owner) clauses.push(`'${input.owner.replace(/'/g, "\\'")}' in owners`);
+      if (input.modified_after) clauses.push(`modifiedTime > '${input.modified_after}T00:00:00'`);
       const r = await drive.files.list({
-        q,
-        fields: 'files(id,name,mimeType,modifiedTime,parents)',
+        q: clauses.join(' and '),
+        fields: 'files(id,name,mimeType,modifiedTime,owners(emailAddress),size,webViewLink)',
         orderBy: 'modifiedTime desc',
-        pageSize: input.max_results || 20
+        pageSize: Math.min(input.max_results || 20, 100)
       });
       return r.data.files || [];
     }
