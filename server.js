@@ -529,6 +529,14 @@ try {
   webpush.setVapidDetails('mailto:info@acrovision.co.jp', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 } catch(e) { console.error('[push] VAPID init failed:', e.message); }
 
+// Webhook 受信機能のグローバル ON/OFF（admin 専用トグル）
+// デフォルト OFF: 使う予定がないあいだは外部公開エンドポイントを完全遮断
+db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('webhook_enabled', '0')").run();
+function isWebhookEnabled() {
+  const row = db.prepare("SELECT value FROM app_settings WHERE key='webhook_enabled'").get();
+  return row?.value === '1';
+}
+
 async function sendPushNotifications(email, title, body) {
   const subs = db.prepare('SELECT * FROM push_subscriptions WHERE email=?').all(email);
   for (const sub of subs) {
@@ -676,6 +684,10 @@ app.get('/logout', (req, res) => {
 // ── Webhook受信（認証不要・トークンで識別） ──
 // POST /webhooks/:token  ボディJSONを受け取り、所有者のスキル/プロンプトでAI実行
 app.post('/webhooks/:token', webhookRateLimit, express.json({ limit: '5mb' }), async (req, res) => {
+  // グローバル機能フラグ: admin が OFF にしているとここで弾く（外部公開エンドポイントの全面遮断）
+  if (!isWebhookEnabled()) {
+    return res.status(503).json({ error: 'webhook receiver is disabled by administrator' });
+  }
   const token = req.params.token;
   const wh = db.prepare('SELECT * FROM webhook_tokens WHERE token=? AND enabled=1').get(token);
   if (!wh) return res.status(404).json({ error: 'webhook token not found or disabled' });
@@ -922,6 +934,21 @@ app.use(express.static(path.join(__dirname, 'public'), {
     if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   }
 }));
+
+// ── Webhook 機能フラグ（admin専用） ──
+app.get('/api/admin/webhook-toggle', (req, res) => {
+  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim());
+  if (!adminEmails.includes(req.user.email)) return res.status(403).json({ error: '管理者専用' });
+  res.json({ enabled: isWebhookEnabled() });
+});
+app.post('/api/admin/webhook-toggle', (req, res) => {
+  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim());
+  if (!adminEmails.includes(req.user.email)) return res.status(403).json({ error: '管理者専用' });
+  const enabled = req.body?.enabled ? '1' : '0';
+  db.prepare("INSERT INTO app_settings (key,value) VALUES ('webhook_enabled', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(enabled);
+  audit(req.user.email, req.user.name, 'webhook.toggle', { enabled: enabled === '1' });
+  res.json({ ok: true, enabled: enabled === '1' });
+});
 
 // ── 監査ログ閲覧 ──
 app.get('/api/admin/logs', (req, res) => {

@@ -404,6 +404,22 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
         <div class="aob-desc">このタブは <strong>admin ロール</strong> のユーザーのみに表示されます。他のロールのユーザーにはタブ自体が表示されません。</div>
       </div>
     </div>
+
+    <!-- Webhook 機能トグル -->
+    <div style="margin-bottom:16px;padding:16px;background:var(--card-bg);border:1px solid var(--border);border-radius:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:240px;">
+          <div style="font-size:14px;font-weight:700;color:var(--text);">📨 Webhook 受信機能</div>
+          <div style="font-size:12px;color:var(--text-light);margin-top:4px;line-height:1.5;">外部システムからの POST で AI を起動する機能。<strong>使う予定がない間は OFF 推奨</strong>（攻撃面の遮断）。OFF 時は <code>/webhooks/:token</code> へのリクエストはすべて 503 で拒否されます。</div>
+        </div>
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;">
+          <span id="webhookToggleLabel" style="font-size:13px;font-weight:600;color:var(--text-light);">読み込み中...</span>
+          <input type="checkbox" id="webhookToggle" onchange="toggleWebhook()" style="width:18px;height:18px;cursor:pointer;">
+        </label>
+      </div>
+      <div id="webhookToggleMsg" style="font-size:12px;margin-top:8px;min-height:18px;"></div>
+    </div>
+
     <div id="userMgmtContent"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
   </div>
 
@@ -890,7 +906,7 @@ function switchTab(name) {
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   if (name === 'history')   loadHistory();
   if (name === 'rules')     loadCustomRules();
-  if (name === 'users')     loadUsers();
+  if (name === 'users')     { loadUsers(); loadWebhookToggle(); }
   if (name === 'usage')     loadUsage();
   if (name === 'dashboard') { loadDashStats(); loadDashAudit(); loadDashTrends(); }
   if (name === 'automation') { loadHooks(); loadBatchHistory(); loadWebhooks(); initPushStatus(); }
@@ -2280,6 +2296,45 @@ function statusColor(s) {
 }
 
 // ─ ユーザー管理 ─
+// Webhook 機能フラグ（admin 専用）
+async function loadWebhookToggle() {
+  try {
+    const r = await fetch('/api/admin/webhook-toggle');
+    if (!r.ok) return;
+    const d = await r.json();
+    const cb = document.getElementById('webhookToggle');
+    const lb = document.getElementById('webhookToggleLabel');
+    if (cb) cb.checked = !!d.enabled;
+    if (lb) lb.textContent = d.enabled ? '✅ ON' : '🔒 OFF';
+  } catch(e) {}
+}
+async function toggleWebhook() {
+  const cb = document.getElementById('webhookToggle');
+  const lb = document.getElementById('webhookToggleLabel');
+  const msg = document.getElementById('webhookToggleMsg');
+  const enabled = cb.checked;
+  if (msg) { msg.style.color = 'var(--text-light)'; msg.textContent = '更新中…'; }
+  try {
+    const r = await fetch('/api/admin/webhook-toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+    if (!r.ok) throw new Error('failed');
+    const d = await r.json();
+    if (lb) lb.textContent = d.enabled ? '✅ ON' : '🔒 OFF';
+    if (msg) {
+      msg.textContent = d.enabled
+        ? '✅ Webhook 受信を有効化しました'
+        : '🔒 Webhook 受信を無効化しました（外部 POST は 503 で拒否されます）';
+      setTimeout(() => { if (msg) msg.textContent = ''; }, 4000);
+    }
+  } catch(e) {
+    if (msg) { msg.style.color = '#e53e3e'; msg.textContent = 'エラー: ' + (e.message || 'failed'); }
+    if (cb) cb.checked = !enabled; // 失敗時はロールバック
+  }
+}
+
 async function loadUsers() {
   try {
     const users = await apiFetch('/api/admin/users');
