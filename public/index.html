@@ -2014,9 +2014,16 @@ async function send() {
           if (confirmLabel) {
             const actions = document.createElement('div');
             actions.className = 'confirm-actions';
-            actions.innerHTML = `
-              <button class="confirm-ok-btn" onclick="quickReply('${confirmLabel.replace(/'/g, "&#39;")}')">${esc(confirmLabel)}</button>
-              <button class="confirm-cancel-btn" onclick="quickReply('キャンセル')">キャンセル</button>`;
+            const okBtn = document.createElement('button');
+            okBtn.className = 'confirm-ok-btn';
+            okBtn.textContent = confirmLabel;
+            okBtn.addEventListener('click', () => quickReply(confirmLabel));
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'confirm-cancel-btn';
+            cancelBtn.textContent = 'キャンセル';
+            cancelBtn.addEventListener('click', () => quickReply('キャンセル'));
+            actions.appendChild(okBtn);
+            actions.appendChild(cancelBtn);
             aiBubble.appendChild(actions);
           }
           // リファイン＆フィードバックバー

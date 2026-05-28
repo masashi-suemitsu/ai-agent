@@ -42,6 +42,14 @@ async function getZoomToken() {
 async function callGenericApi(user, input, label, baseUrl, token, envName) {
   if (!token) throw new Error(`${envName} 未設定。${label} APIトークンを管理者に依頼してください`);
   if (!baseUrl) throw new Error(`${label}: ベースURL未設定（インスタンスURLが必要な場合あり）`);
+  // パス検証: ベースURL外へのリクエスト（SSRF・トークン流出）を防ぐ
+  const rawPath = input.path || '/';
+  if (!rawPath.startsWith('/') || rawPath.includes('..')) throw new Error(`${label}: 不正なパス形式です`);
+  try {
+    const constructed = new URL(rawPath, baseUrl);
+    const base = new URL(baseUrl);
+    if (constructed.origin !== base.origin) throw new Error(`${label}: パスがベースURL範囲外です`);
+  } catch (e) { if (e.message.includes(label)) throw e; throw new Error(`${label}: 不正なパス形式です`); }
   const method = (input.method || 'GET').toUpperCase();
   const isWrite = method !== 'GET';
   if (isWrite && !input.confirmed) {
@@ -3353,6 +3361,10 @@ async function executeTool(name, input, user) {
       }
       // Client Credentials は /me/ 非対応のため、自動的にログインユーザーのアドレスに変換
       const resolvedPath = input.path.replace(/^\/me\b/, `/users/${encodeURIComponent(user.email)}`);
+      // パス検証: graph.microsoft.com 外への逸脱を防ぐ
+      if (!resolvedPath.startsWith('/') || resolvedPath.includes('..')) throw new Error('call_ms_graph: 不正なパス形式です');
+      const msFullUrl = new URL(`https://graph.microsoft.com/v1.0${resolvedPath}`);
+      if (msFullUrl.origin !== 'https://graph.microsoft.com') throw new Error('call_ms_graph: パスが範囲外です');
       audit(user.email, user.name, isWrite ? 'tool.ms_graph.execute' : 'tool.ms_graph', { method, path: resolvedPath });
       const qs = input.query ? '?' + new URLSearchParams(input.query).toString() : '';
       const r = await fetch(`https://graph.microsoft.com/v1.0${resolvedPath}${qs}`, {
@@ -5113,7 +5125,7 @@ app.get('/api/skills/:id/plan', async (req, res) => {
     });
     res.json({ plan: r.content[0]?.text || '', skill_id: skill.id, title: skill.title });
   } catch(e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, '実行計画の生成に失敗しました');
   }
 });
 
@@ -7161,7 +7173,9 @@ async function runSkillBackground(task, ownerEmail, _chainDepth = 0) {
     if (usedFallback) notifyFallback(ownerEmail, task.skill_title || task.skill_name).catch(() => {});
     // パイプライン自動連鎖: chain_skill_id があれば前の結果を渡して次のスキルを実行（最大5段階）
     if (task.chain_skill_id && _chainDepth < 5) {
-      const chainSkill = db.prepare('SELECT * FROM user_skills WHERE id=?').get(task.chain_skill_id);
+      const chainSkill = db.prepare(
+        `SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR (shared=1 AND (shared_with IS NULL OR EXISTS (SELECT 1 FROM json_each(shared_with) WHERE value=?))))`
+      ).get(task.chain_skill_id, ownerEmail, ownerEmail);
       if (chainSkill && chainSkill.id !== task.skill_id) {
         const chainContext = `\n\n## 前のスキル「${task.skill_title || task.skill_name}」の実行結果\n\n${resultBuffer.slice(0, 3000)}`;
         runSkillBackground({
