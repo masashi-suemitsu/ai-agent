@@ -581,7 +581,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 <!-- ─ Skill Edit Modal ─ -->
 <div class="modal-overlay" id="editSkillModal" onclick="if(event.target===this)closeEditSkill()">
   <div class="modal-box modal-lg">
-    <div class="modal-title">✏️ スキルを編集</div>
+    <div class="modal-title">✏️ ジョブを編集</div>
     <input type="hidden" id="editSkillId">
     <div class="modal-field">
       <label>タイトル</label>
@@ -596,11 +596,11 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <textarea id="editSkillSteps" rows="14" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.8;resize:vertical;outline:none;font-family:inherit;min-height:260px;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
     </div>
     <div class="modal-field">
-      <label>🔗 完了後に連鎖実行するスキル（任意）</label>
+      <label>🔗 完了後に連鎖実行するジョブ（任意）</label>
       <select id="editSkillChain" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;outline:none;background:#fff;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
         <option value="">なし（チェーンしない）</option>
       </select>
-      <div style="font-size:11px;color:var(--text-light);margin-top:4px;">このスキルが完了すると、選択したスキルが自動的に続けて実行されます。前のスキルの結果が引き継がれます。</div>
+      <div style="font-size:11px;color:var(--text-light);margin-top:4px;">このジョブが完了すると、選択したジョブが自動的に続けて実行されます。前のジョブの結果が引き継がれます。</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeEditSkill()">キャンセル</button>
@@ -769,7 +769,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     </div>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
       <button id="planModeToggle" onclick="togglePlanMode()" style="font-size:11px;border:1px solid var(--border);color:var(--text-light);background:var(--panel-bg);border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;">📋 実行計画を確認する</button>
-      <button id="thinkingToggleSkill" onclick="toggleSkillThinking()" style="font-size:11px;border:1px solid var(--border);color:var(--text-light);background:var(--panel-bg);border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;" title="拡張思考モード: 複雑なスキルをより深く考えて実行します">🧠 拡張思考モード</button>
+      <button id="thinkingToggleSkill" onclick="toggleSkillThinking()" style="font-size:11px;border:1px solid var(--border);color:var(--text-light);background:var(--panel-bg);border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;" title="拡張思考モード: 複雑なジョブをより深く考えて実行します">🧠 拡張思考モード</button>
     </div>
     <!-- Step Display Area -->
     <div id="runStepArea" style="display:none;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--muted-bg);">
@@ -1092,7 +1092,7 @@ function renderMyTaskCard(t) {
     </div>
     <div class="card-meta">${scheduleMeta}</div>
     <div class="linked-skill">
-      <span class="linked-skill-label">スキル</span>
+      <span class="linked-skill-label">ジョブ</span>
       <span>⚙️ ${esc(t.skill_name)}</span>
     </div>
     ${t.steps ? `<button class="steps-btn" onclick="toggleSteps('task-steps-${t.id}', this)">📋 指示内容を確認 <span>▼</span></button>
@@ -1132,7 +1132,7 @@ function renderTeamTaskCard(t) {
     </div>
     <div class="card-meta">${scheduleMeta}</div>
     <div class="linked-skill">
-      <span class="linked-skill-label">スキル</span>
+      <span class="linked-skill-label">ジョブ</span>
       <span>⚙️ ${esc(t.skill_name)}</span>
     </div>
     ${t.steps ? `<button class="steps-btn" onclick="toggleSteps('team-task-steps-${t.id}', this)">📋 指示内容を確認 <span>▼</span></button>
@@ -1255,7 +1255,7 @@ async function openAnthropicSkillDetail(name) {
     document.querySelector('#resultModal .result-modal-inner')?.appendChild(f);
     return f;
   })();
-  if (footer) footer.innerHTML = `<button class="btn btn-primary" onclick="importAnthropicSkill('${esc(name)}')">📥 マイスキルにインポート</button>`;
+  if (footer) footer.innerHTML = `<button class="btn btn-primary" onclick="importAnthropicSkill('${esc(name)}')">📥 マイジョブにインポート</button>`;
 }
 
 async function importAnthropicSkill(name) {
@@ -1275,7 +1275,7 @@ async function importAnthropicSkill(name) {
     });
     document.getElementById('resultModal').classList.remove('open');
     await loadSkills();
-    alert(`✅「${data.name}」をマイスキルにインポートしました`);
+    alert(`✅「${data.name}」をマイジョブにインポートしました`);
   } catch(e) { alert('インポート失敗: ' + e.message); }
 }
 
@@ -1656,7 +1656,7 @@ async function saveEditSkill() {
     }
     if (!resp.ok) throw new Error((await resp.json()).error || '保存失敗');
     // モーダルタイトルをデフォルトに戻す
-    document.querySelector('#editSkillModal .modal-title').textContent = '✏️ スキルを編集';
+    document.querySelector('#editSkillModal .modal-title').textContent = '✏️ ジョブを編集';
     closeEditSkill();
     await loadSkills();
   } catch(e) {
@@ -1667,7 +1667,7 @@ async function saveEditSkill() {
 }
 
 async function deleteSkill(id) {
-  if (!confirm('このスキルを削除しますか？')) return;
+  if (!confirm('このジョブを削除しますか？')) return;
   const _rs = await fetch(`/api/skills/${id}`, { method: 'DELETE' });
   if (!_rs.ok) { alert('削除に失敗しました'); return; }
   await loadSkills();
@@ -1721,10 +1721,10 @@ async function importSkill(input) {
   if (!file) return;
   try {
     const data = JSON.parse(await file.text());
-    if (!data.title || !data.name) { alert('無効なスキルファイルです'); return; }
+    if (!data.title || !data.name) { alert('無効なジョブファイルです'); return; }
     await apiFetch('/api/skills/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
     await loadSkills();
-    alert(`スキル「${data.title}」をインポートしました`);
+    alert(`ジョブ「${data.title}」をインポートしました`);
   } catch(e) { alert('インポートに失敗しました: ' + e.message); }
   input.value = '';
 }
@@ -1735,7 +1735,7 @@ async function loadWebhooks() {
   const webhooks = whRes.status === 'fulfilled' ? whRes.value : [];
   const skills = skillsRes.status === 'fulfilled' ? skillsRes.value.filter(s => s.owner_email === currentUser?.email) : [];
   const sel = document.getElementById('whSkillSel');
-  if (sel) sel.innerHTML = '<option value="">スキルを指定しない（プロンプトのみ）</option>' + skills.map(s => `<option value="${esc(s.name)}">${esc(s.title)}</option>`).join('');
+  if (sel) sel.innerHTML = '<option value="">ジョブを指定しない（プロンプトのみ）</option>' + skills.map(s => `<option value="${esc(s.name)}">${esc(s.title)}</option>`).join('');
   const area = document.getElementById('webhookListArea');
   if (!area) return;
   if (!webhooks.length) { area.innerHTML = '<div style="color:var(--text-light);font-size:13px;">Webhookがありません</div>'; return; }
@@ -1747,7 +1747,7 @@ async function loadWebhooks() {
           <div style="font-size:11px;color:var(--text-light);word-break:break-all;background:var(--muted-bg);border-radius:4px;padding:4px 6px;margin-bottom:4px;font-family:monospace;">
             https://d2jjp21sq86i80.cloudfront.net/webhooks/${wh.token}
           </div>
-          ${wh.skill_name ? `<div style="font-size:11px;color:var(--text-light);">スキル: ${esc(wh.skill_name)}</div>` : ''}
+          ${wh.skill_name ? `<div style="font-size:11px;color:var(--text-light);">ジョブ: ${esc(wh.skill_name)}</div>` : ''}
           ${wh.last_used_at ? `<div style="font-size:11px;color:var(--text-light);">最終受信: ${fmtDt(wh.last_used_at)}</div>` : ''}
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;">
@@ -2492,7 +2492,7 @@ function renderHistory(runs) {
         <span>🏁 完了: ${finished}</span>
         <span>⏱ 所要: ${duration}</span>
         ${(r.input_tokens || r.output_tokens) ? `<span>🔢 ${(r.input_tokens||0).toLocaleString()}入 / ${(r.output_tokens||0).toLocaleString()}出 tok</span>` : ''}
-        <span style="font-size:11px;color:#a0aec0;">スキル: ${esc(r.skill_name)}</span>
+        <span style="font-size:11px;color:#a0aec0;">ジョブ: ${esc(r.skill_name)}</span>
       </div>
       ${errorBox}${resultHtml}
     </div>`;
@@ -3054,7 +3054,7 @@ async function loadHooks() {
   const hookNextSkillSel = document.getElementById('hookNextSkillSel');
   const batchSkillSel = document.getElementById('batchSkillSel');
   if (hookSkillSel) {
-    hookSkillSel.innerHTML = '<option value="">すべてのスキル（共通）</option>' + skills.map(s => `<option value="${s.id}">${esc(s.title)}</option>`).join('');
+    hookSkillSel.innerHTML = '<option value="">すべてのジョブ（共通）</option>' + skills.map(s => `<option value="${s.id}">${esc(s.title)}</option>`).join('');
   }
   if (hookNextSkillSel) {
     hookNextSkillSel.innerHTML = '<option value="">選択...</option>' + skills.map(s => `<option value="${s.id}">${esc(s.title)}</option>`).join('');
