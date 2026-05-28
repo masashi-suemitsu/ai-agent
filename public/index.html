@@ -620,18 +620,17 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
 
 /* ─ Feature Mode Menu ─ */
 .feature-btn {
-  background: var(--panel-bg); border: 1.5px solid var(--border); border-radius: 10px;
-  padding: 0 12px; height: 40px; cursor: pointer; font-size: 13px; font-weight: 600;
+  background: var(--primary-light); border: 1.5px solid var(--primary); border-radius: 8px;
+  padding: 4px 14px; height: 30px; cursor: pointer; font-size: 13px; font-weight: 700;
   display: flex; align-items: center; gap: 5px; transition: all .15s; flex-shrink: 0;
-  color: var(--text); white-space: nowrap;
+  color: var(--primary); white-space: nowrap;
 }
-.feature-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
-.feature-btn.menu-open { border-color: var(--primary); color: var(--primary); }
+.feature-btn:hover, .feature-btn.menu-open { background: var(--primary); color: #fff; border-color: var(--primary); }
 .feature-menu-popup {
-  position: absolute; bottom: calc(100% + 8px); left: 0;
+  position: absolute; top: calc(100% + 8px); left: 0;
   background: var(--panel-bg); border: 1px solid var(--border);
-  border-radius: 16px; box-shadow: 0 8px 40px rgba(0,0,0,.18);
-  padding: 14px; z-index: 200; width: 440px;
+  border-radius: 16px; box-shadow: 0 12px 48px rgba(0,0,0,.18);
+  padding: 14px; z-index: 9999; width: 460px;
   display: none; grid-template-columns: 1fr 1fr; gap: 8px;
 }
 .feature-menu-popup.open { display: grid; }
@@ -669,6 +668,10 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
   <div class="header-left">
     <a href="/" style="display:contents;text-decoration:none;cursor:pointer;" title="ホームに戻る"><div class="header-logo"><img src="/assets/logo.png" alt="タスクAIエージェント"></div>
     <h1 style="color:inherit;">タスクAIエージェント<small>仕事を任せる</small></h1></a>
+  </div>
+  <div style="position:relative;display:flex;align-items:center;margin-left:4px;">
+    <button class="feature-btn" id="featureBtn" type="button" onclick="toggleFeatureMenu(event)" title="機能を選ぶ">🎯 機能を選ぶ</button>
+    <div class="feature-menu-popup" id="featureMenuPopup"></div>
   </div>
   <div class="header-right">
     <span id="userBadge" style="font-size:12px;color:#718096;"></span>
@@ -732,7 +735,6 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
           style="border:1.5px solid var(--border);border-radius:10px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--text-light);transition:all .15s;white-space:nowrap;">🧠 深く考える</button>
       </div>
       <div class="input-row">
-        <button class="feature-btn" id="featureBtn" type="button" onclick="toggleFeatureMenu(event)" title="機能を選ぶ">🎯 機能を選ぶ</button>
         <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" style="display:none;" onchange="onFilesPicked(event)">
         <button class="attach-btn" type="button" onclick="document.getElementById('fileInput').click()" title="画像・PDFを添付">📎</button>
         <div class="input-wrapper">
