@@ -232,6 +232,37 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   .page { padding: 16px 12px; }
   .tab-btn { font-size: 12px; }
 }
+/* ── ワークフロービルダー ── */
+.wf-builder { display: flex; gap: 16px; height: calc(100vh - 200px); min-height: 500px; }
+.wf-chat-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.wf-chat-history { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.wf-chat-input-area { padding: 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-end; }
+.wf-chat-input { flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; resize: none; background: var(--input-bg); color: var(--text); font-family: inherit; }
+.wf-chat-input:focus { outline: none; border-color: var(--primary); }
+.wf-sys-msg { font-size: 13px; color: var(--text-light); text-align: center; padding: 8px 12px; background: var(--muted-bg); border-radius: 8px; }
+.wf-user-msg { align-self: flex-end; background: var(--primary); color: #fff; padding: 8px 12px; border-radius: 12px 12px 3px 12px; font-size: 13px; max-width: 80%; white-space: pre-wrap; word-break: break-word; }
+.wf-ai-msg { align-self: flex-start; background: var(--muted-bg); color: var(--text); padding: 10px 14px; border-radius: 3px 12px 12px 12px; font-size: 13px; max-width: 90%; line-height: 1.6; word-break: break-word; }
+.wf-preview-pane { width: 340px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.wf-preview-header { padding: 12px 14px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; background: var(--muted-bg); }
+.wf-flow-container { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 0; }
+.wf-node { display: flex; align-items: center; gap: 10px; background: var(--panel-bg); border: 1.5px solid var(--border); border-radius: 10px; padding: 10px 14px; width: 100%; max-width: 280px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.wf-node-trigger { border-color: var(--primary); background: var(--primary-light); }
+.wf-node-end { border-color: var(--success); background: var(--success-bg); }
+.wf-node-badge { width: 24px; height: 24px; border-radius: 50%; background: var(--border); color: var(--text); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.wf-node-body { flex: 1; min-width: 0; }
+.wf-node-label { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf-node-desc { font-size: 11px; color: var(--text-light); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf-node-var { font-size: 10px; color: var(--primary); margin-top: 2px; font-family: monospace; }
+.wf-arrow { color: var(--text-light); font-size: 18px; line-height: 1; padding: 2px 0; }
+.wf-step-status { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 6px; margin-left: 6px; }
+.wf-step-running { background: #fef9e7; color: #92400e; }
+.wf-step-done { background: var(--success-bg); color: var(--success); }
+.wf-step-error { background: #fff5f5; color: var(--danger); }
+@media (max-width: 768px) {
+  .wf-builder { flex-direction: column; height: auto; }
+  .wf-preview-pane { width: 100%; height: 320px; }
+  .wf-chat-pane { height: 400px; }
+}
 .model-desc-card { margin-top: 8px; background: var(--primary-light); border: 1px solid #c3d0ff; border-radius: 10px; padding: 11px 14px; }
 .model-desc-header { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
 .model-provider-chip { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 5px; background: rgba(91,110,255,.18); color: var(--primary-dark); }
@@ -277,6 +308,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     <button class="tab-btn" data-tab="skills"            onclick="switchTab('skills')"><span class="nav-icon">⚙️</span><span class="nav-label">ジョブ</span></button>
     <button class="tab-btn" data-tab="automation"        onclick="switchTab('automation')"><span class="nav-icon">🔗</span><span class="nav-label">自動化</span></button>
     <button class="tab-btn" data-tab="memories"          onclick="switchTab('memories')"><span class="nav-icon">🧠</span><span class="nav-label">メモリ</span></button>
+    <button class="tab-btn" data-tab="workflows"         onclick="switchTab('workflows')"><span class="nav-icon">🔀</span><span class="nav-label">ワークフロー</span></button>
     <div class="sidebar-sep"></div>
     <div class="sidebar-label">設定</div>
     <button class="tab-btn" data-tab="connectors"        onclick="switchTab('connectors')"><span class="nav-icon">🔌</span><span class="nav-label">コネクタ</span></button>
@@ -447,6 +479,82 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <div style="font-size:12px;color:var(--text-light);margin-bottom:16px;">会話から自動的に抽出・保存された記憶です。次回以降の会話で自動的に参照されます。</div>
       <div id="memoriesListArea"><div style="color:var(--text-light);font-size:13px;">読み込み中...</div></div>
     </div>
+  </div>
+
+  <!-- ─ ワークフロー ─ -->
+  <div class="tab-content" id="tab-workflows">
+
+    <!-- ── 一覧画面 ── -->
+    <div id="wfListSection">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div>
+          <div style="font-size:15px;font-weight:700;">🔀 ワークフロー</div>
+          <div style="font-size:12px;color:var(--text-light);margin-top:2px;">複数のステップを組み合わせた自動化フローを管理します</div>
+        </div>
+        <button class="btn btn-primary" onclick="startWfBuilder()">+ 新規作成</button>
+      </div>
+      <div id="wfList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+    </div>
+
+    <!-- ── ビルダー画面 ── -->
+    <div id="wfBuilderSection" style="display:none;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <button class="btn" style="font-size:12px;padding:5px 12px;" onclick="exitWfBuilder()">← 一覧</button>
+        <div style="font-size:14px;font-weight:700;" id="wfBuilderTitle">新規ワークフロー</div>
+      </div>
+      <div class="wf-builder">
+        <!-- 左: チャット -->
+        <div class="wf-chat-pane">
+          <div class="wf-chat-history" id="wfChatHistory">
+            <div class="wf-sys-msg">どんなワークフローを作りますか？<br>やりたいことを日本語で説明してください。</div>
+          </div>
+          <div class="wf-chat-input-area">
+            <textarea class="wf-chat-input" id="wfChatInput" placeholder="例: 毎朝9時にDBの在庫を確認して、少なければChatworkに通知する" rows="3"
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendWfChat();}"></textarea>
+            <button class="btn btn-primary" onclick="sendWfChat()" id="wfChatSendBtn" style="padding:8px 14px;white-space:nowrap;">送信</button>
+          </div>
+        </div>
+        <!-- 右: プレビュー＋設定 -->
+        <div class="wf-preview-pane">
+          <div class="wf-preview-header">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="text" id="wfNameInput" placeholder="ワークフロー名" style="flex:1;border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;background:var(--input-bg);color:var(--text);">
+              <button class="btn btn-primary" onclick="saveWorkflow()" id="wfSaveBtn" style="white-space:nowrap;font-size:12px;padding:6px 14px;">保存</button>
+            </div>
+            <div style="background:var(--panel-bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-weight:600;color:var(--text-light);white-space:nowrap;">トリガー:</span>
+                <select id="wfTriggerType" onchange="updateWfScheduleUI()" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-size:12px;background:var(--input-bg);color:var(--text);">
+                  <option value="manual">手動実行のみ</option>
+                  <option value="scheduled">スケジュール実行</option>
+                </select>
+              </div>
+              <div id="wfScheduleOptions" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap;align-items:center;">
+                <select id="wfScheduleType" onchange="updateWfScheduleTypeUI()" style="border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-size:12px;background:var(--input-bg);color:var(--text);">
+                  <option value="interval">インターバル</option>
+                  <option value="daily">毎日</option>
+                  <option value="weekly">毎週</option>
+                </select>
+                <div id="wfIntervalOpt" style="display:flex;align-items:center;gap:4px;">
+                  <input type="number" id="wfIntervalMin" value="60" min="5" style="width:56px;border:1px solid var(--border);border-radius:5px;padding:4px 6px;font-size:12px;background:var(--input-bg);color:var(--text);">
+                  <span style="color:var(--text-light);">分ごと</span>
+                </div>
+                <div id="wfTimeOpt" style="display:none;align-items:center;gap:4px;">
+                  <input type="number" id="wfHour" placeholder="9" min="0" max="23" style="width:44px;border:1px solid var(--border);border-radius:5px;padding:4px 6px;font-size:12px;background:var(--input-bg);color:var(--text);">
+                  <span style="color:var(--text-light);">時</span>
+                  <input type="number" id="wfMinute" placeholder="0" min="0" max="59" style="width:44px;border:1px solid var(--border);border-radius:5px;padding:4px 6px;font-size:12px;background:var(--input-bg);color:var(--text);">
+                  <span style="color:var(--text-light);">分</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="wf-flow-container" id="wfFlowContainer">
+            <div style="color:var(--text-light);font-size:12px;text-align:center;padding:30px 0;">AIとの対話でステップが生成されます</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- ─ 権限・ルール ─ -->
@@ -987,7 +1095,7 @@ function renderUserBadge(me) {
 }
 
 // ─ タブ切替 ─
-const TAB_NAMES = ['tasks','history','skills','automation','memories','connectors','rules','usage','chatsearch','dashboard','users'];
+const TAB_NAMES = ['tasks','history','skills','automation','memories','workflows','connectors','rules','usage','chatsearch','dashboard','users'];
 
 function switchTab(name) {
   if (!TAB_NAMES.includes(name)) name = 'tasks';
@@ -1003,7 +1111,8 @@ function switchTab(name) {
   if (name === 'usage')     loadUsage();
   if (name === 'dashboard') { loadDashStats(); loadDashAudit(); loadDashTrends(); }
   if (name === 'automation') { loadHooks(); loadBatchHistory(); loadWebhooks(); initPushStatus(); }
-  if (name === 'memories') loadMemories();
+  if (name === 'memories')   loadMemories();
+  if (name === 'workflows')  loadWorkflows();
   if (name === 'chatsearch') initChatSearch();
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
 }
@@ -3357,6 +3466,252 @@ async function runChatSearch() {
   }
 }
 
+
+// ──────────────────────────────────────────────
+// ワークフロービルダー
+// ──────────────────────────────────────────────
+let wfChatMessages = [];
+let wfCurrentWorkflow = null;
+let wfEditingId = null;
+
+async function loadWorkflows() {
+  const listEl = document.getElementById('wfList');
+  try {
+    const rows = await fetch('/api/workflows').then(r => r.json());
+    if (!rows.length) {
+      listEl.innerHTML = '<div class="empty"><div class="empty-icon">🔀</div><p>ワークフローがありません<br><small style="color:var(--text-light);">「＋ 新規作成」から始めましょう</small></p></div>';
+      return;
+    }
+    listEl.innerHTML = rows.map(wf => {
+      const stLabel = wf.last_status === 'done' ? '<span class="wf-step-status wf-step-done">✓ 完了</span>'
+        : wf.last_status === 'error' ? '<span class="wf-step-status wf-step-error">✗ エラー</span>'
+        : wf.last_status === 'running' ? '<span class="wf-step-status wf-step-running">⏳ 実行中</span>' : '';
+      return `<div class="card" style="margin-bottom:10px;">
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:700;">${esc(wf.name)}${stLabel}</div>
+            ${wf.description ? `<div style="font-size:12px;color:var(--text-light);margin-top:2px;">${esc(wf.description)}</div>` : ''}
+            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+              <span style="font-size:11px;background:var(--muted-bg);padding:2px 8px;border-radius:10px;color:var(--text-light);">${wf.steps.length}ステップ</span>
+              <span style="font-size:11px;background:var(--muted-bg);padding:2px 8px;border-radius:10px;color:var(--text-light);">${wf.trigger_type === 'scheduled' ? 'スケジュール' : '手動'}</span>
+              ${!wf.enabled ? '<span style="font-size:11px;background:#fff5f5;color:var(--danger);padding:2px 8px;border-radius:10px;">停止中</span>' : ''}
+              ${wf.last_run_at ? `<span style="font-size:11px;color:var(--text-light);">最終: ${fmtDt(wf.last_run_at)}</span>` : ''}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;">
+            <button class="btn" style="font-size:12px;padding:5px 10px;" onclick="runWorkflowNow(${wf.id}, this)">実行</button>
+            <button class="btn" style="font-size:12px;padding:5px 10px;" onclick="startWfBuilder(${wf.id})">編集</button>
+            <button class="btn btn-danger" style="font-size:12px;padding:5px 10px;" onclick="deleteWorkflow(${wf.id})">削除</button>
+          </div>
+        </div>
+        ${wf.last_result ? `<div style="margin-top:8px;font-size:12px;color:var(--text-light);border-top:1px solid var(--border);padding-top:6px;overflow:hidden;max-height:60px;white-space:pre-wrap;">${esc(wf.last_result)}</div>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    listEl.innerHTML = `<div class="empty"><p>エラー: ${esc(e.message)}</p></div>`;
+  }
+}
+
+async function startWfBuilder(wfId) {
+  wfChatMessages = [];
+  wfCurrentWorkflow = null;
+  wfEditingId = wfId || null;
+
+  document.getElementById('wfListSection').style.display = 'none';
+  document.getElementById('wfBuilderSection').style.display = 'block';
+  document.getElementById('wfBuilderTitle').textContent = wfId ? 'ワークフローを編集' : '新規ワークフロー';
+  document.getElementById('wfChatHistory').innerHTML = '<div class="wf-sys-msg">どんなワークフローを作りますか？<br>やりたいことを日本語で説明してください。</div>';
+  document.getElementById('wfFlowContainer').innerHTML = '<div style="color:var(--text-light);font-size:12px;text-align:center;padding:30px 0;">AIとの対話でステップが生成されます</div>';
+  document.getElementById('wfNameInput').value = '';
+  document.getElementById('wfTriggerType').value = 'manual';
+  document.getElementById('wfScheduleOptions').style.display = 'none';
+
+  if (wfId) {
+    try {
+      const rows = await fetch('/api/workflows').then(r => r.json());
+      const wf = rows.find(w => w.id === wfId);
+      if (wf) {
+        wfCurrentWorkflow = { name: wf.name, description: wf.description, steps: wf.steps };
+        document.getElementById('wfNameInput').value = wf.name;
+        document.getElementById('wfTriggerType').value = wf.trigger_type || 'manual';
+        if (wf.trigger_type === 'scheduled') {
+          document.getElementById('wfScheduleOptions').style.display = 'flex';
+          document.getElementById('wfScheduleType').value = wf.schedule_type || 'interval';
+          document.getElementById('wfIntervalMin').value = wf.interval_min || 60;
+          if (wf.schedule_hour != null) document.getElementById('wfHour').value = wf.schedule_hour;
+          document.getElementById('wfMinute').value = wf.schedule_minute || 0;
+          updateWfScheduleTypeUI();
+        }
+        renderWfFlow(wf.steps);
+        wfChatMessages.push({ role: 'assistant', content: `現在のワークフロー「${wf.name}」を編集します。変更したい点を教えてください。` });
+        const msgEl = document.createElement('div');
+        msgEl.className = 'wf-ai-msg';
+        msgEl.textContent = `現在のワークフロー「${wf.name}」を編集します。変更したい点を教えてください。`;
+        document.getElementById('wfChatHistory').appendChild(msgEl);
+      }
+    } catch(e) {}
+  }
+}
+
+function exitWfBuilder() {
+  document.getElementById('wfBuilderSection').style.display = 'none';
+  document.getElementById('wfListSection').style.display = 'block';
+  loadWorkflows();
+}
+
+async function sendWfChat() {
+  const input = document.getElementById('wfChatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  const sendBtn = document.getElementById('wfChatSendBtn');
+  if (sendBtn.disabled) return;
+
+  input.value = '';
+  sendBtn.disabled = true;
+  wfChatMessages.push({ role: 'user', content: msg });
+
+  const history = document.getElementById('wfChatHistory');
+  const userEl = document.createElement('div');
+  userEl.className = 'wf-user-msg';
+  userEl.textContent = msg;
+  history.appendChild(userEl);
+
+  const loadEl = document.createElement('div');
+  loadEl.className = 'wf-ai-msg';
+  loadEl.style.color = 'var(--text-light)';
+  loadEl.textContent = '考え中…';
+  history.appendChild(loadEl);
+  history.scrollTop = history.scrollHeight;
+
+  try {
+    const resp = await fetch('/api/workflows/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: wfChatMessages, current_workflow: wfCurrentWorkflow })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'エラー');
+
+    wfChatMessages.push({ role: 'assistant', content: data.message || '' });
+    loadEl.style.color = '';
+    loadEl.innerHTML = wfRenderMarkdown(data.message || '');
+
+    if (data.workflow) {
+      wfCurrentWorkflow = data.workflow;
+      renderWfFlow(data.workflow.steps);
+      if (data.workflow.name && !document.getElementById('wfNameInput').value) {
+        document.getElementById('wfNameInput').value = data.workflow.name;
+      }
+    }
+  } catch(e) {
+    loadEl.textContent = 'エラー: ' + e.message;
+    loadEl.style.color = 'var(--danger)';
+  } finally {
+    sendBtn.disabled = false;
+    history.scrollTop = history.scrollHeight;
+    input.focus();
+  }
+}
+
+function renderWfFlow(steps) {
+  const container = document.getElementById('wfFlowContainer');
+  if (!steps || !steps.length) {
+    container.innerHTML = '<div style="color:var(--text-light);font-size:12px;text-align:center;padding:30px 0;">AIとの対話でステップが生成されます</div>';
+    return;
+  }
+  let html = `<div class="wf-node wf-node-trigger"><div class="wf-node-badge" style="background:var(--primary);color:#fff;">▶</div><div class="wf-node-body"><div class="wf-node-label">開始</div></div></div>`;
+  steps.forEach((step, i) => {
+    html += `<div class="wf-arrow">↓</div>`;
+    html += `<div class="wf-node" id="wfNode_${esc(step.id)}">
+      <div class="wf-node-badge" style="background:var(--primary);color:#fff;">${i + 1}</div>
+      <div class="wf-node-body">
+        <div class="wf-node-label">${esc(step.label || 'ステップ' + (i + 1))}</div>
+        ${step.prompt ? `<div class="wf-node-desc" title="${esc(step.prompt)}">${esc(step.prompt.slice(0, 60))}${step.prompt.length > 60 ? '…' : ''}</div>` : ''}
+        ${step.output_var ? `<div class="wf-node-var">→ {{${esc(step.output_var)}}}</div>` : ''}
+      </div>
+    </div>`;
+  });
+  html += `<div class="wf-arrow">↓</div>`;
+  html += `<div class="wf-node wf-node-end"><div class="wf-node-badge" style="background:var(--success);color:#fff;">✓</div><div class="wf-node-body"><div class="wf-node-label">完了</div></div></div>`;
+  container.innerHTML = html;
+}
+
+async function saveWorkflow() {
+  const name = document.getElementById('wfNameInput').value.trim();
+  if (!name) { alert('ワークフロー名を入力してください'); return; }
+  if (!wfCurrentWorkflow?.steps?.length) { alert('ステップがありません。まずAIとの対話でワークフローを作成してください'); return; }
+
+  const triggerType = document.getElementById('wfTriggerType').value;
+  const payload = {
+    name,
+    description: wfCurrentWorkflow.description || '',
+    steps: wfCurrentWorkflow.steps,
+    trigger_type: triggerType,
+    schedule_type: document.getElementById('wfScheduleType').value,
+    interval_min: parseInt(document.getElementById('wfIntervalMin').value) || 60,
+    schedule_hour: parseInt(document.getElementById('wfHour').value) || null,
+    schedule_minute: parseInt(document.getElementById('wfMinute').value) || 0,
+  };
+
+  const btn = document.getElementById('wfSaveBtn');
+  btn.disabled = true; btn.textContent = '保存中…';
+  try {
+    const url = wfEditingId ? `/api/workflows/${wfEditingId}` : '/api/workflows';
+    const method = wfEditingId ? 'PUT' : 'POST';
+    const resp = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '保存失敗');
+    if (!wfEditingId && data.id) wfEditingId = data.id;
+    btn.textContent = '保存済み ✓';
+    setTimeout(() => { btn.disabled = false; btn.textContent = '保存'; }, 2500);
+  } catch(e) {
+    alert('保存エラー: ' + e.message);
+    btn.disabled = false; btn.textContent = '保存';
+  }
+}
+
+async function runWorkflowNow(wfId, btn) {
+  if (!btn) return;
+  btn.disabled = true; btn.textContent = '実行中…';
+  try {
+    const resp = await fetch(`/api/workflows/${wfId}/run`, { method: 'POST' });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '実行失敗');
+    btn.textContent = '開始 ✓';
+    setTimeout(() => { btn.disabled = false; btn.textContent = '実行'; loadWorkflows(); }, 3000);
+  } catch(e) {
+    alert('エラー: ' + e.message);
+    btn.disabled = false; btn.textContent = '実行';
+  }
+}
+
+async function deleteWorkflow(wfId) {
+  if (!confirm('このワークフローを削除しますか？実行履歴も削除されます。')) return;
+  try {
+    await fetch(`/api/workflows/${wfId}`, { method: 'DELETE' });
+    loadWorkflows();
+  } catch(e) { alert('削除エラー: ' + e.message); }
+}
+
+function updateWfScheduleUI() {
+  const ttype = document.getElementById('wfTriggerType').value;
+  document.getElementById('wfScheduleOptions').style.display = ttype === 'scheduled' ? 'flex' : 'none';
+  if (ttype === 'scheduled') updateWfScheduleTypeUI();
+}
+
+function updateWfScheduleTypeUI() {
+  const stype = document.getElementById('wfScheduleType').value;
+  document.getElementById('wfIntervalOpt').style.display = stype === 'interval' ? 'flex' : 'none';
+  document.getElementById('wfTimeOpt').style.display = stype !== 'interval' ? 'flex' : 'none';
+}
+
+function wfRenderMarkdown(text) {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code style="background:var(--muted-bg);padding:1px 4px;border-radius:3px;font-size:12px;">$1</code>')
+    .replace(/\n/g, '<br>');
+}
 
 </script>
 </body>
