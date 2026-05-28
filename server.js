@@ -3547,8 +3547,8 @@ app.post('/api/wp/posts', async (req, res) => {
 function getSesTransport() {
   return nodemailer.createTransport({
     host: process.env.SES_HOST || 'email-smtp.us-west-2.amazonaws.com',
-    port: parseInt(process.env.SES_PORT || '587'),
-    secure: false,
+    port: parseInt(process.env.SES_PORT || '465'),
+    secure: (process.env.SES_PORT ? process.env.SES_PORT === '465' : true),
     auth: { user: process.env.SES_USER, pass: process.env.SES_SECRET }
   });
 }
