@@ -2809,65 +2809,82 @@ app.post('/api/skills/:id/run', async (req, res) => {
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
 
-    while (toolRound < 10) {
-      const stream = anthropic.messages.stream({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
-        system: systemPrompt,
-        tools: activeTools,
-        messages
-      });
+    const claudeSkillRun = async () => {
+      while (toolRound < 10) {
+        const stream = anthropic.messages.stream({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 4096,
+          system: systemPrompt,
+          tools: activeTools,
+          messages
+        });
 
-      for await (const ev of stream) {
-        if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') {
-          resultBuffer += ev.delta.text;
-          res.write(`data: ${JSON.stringify({ text: ev.delta.text })}\n\n`);
-        }
-      }
-
-      const finalMsg = await stream.finalMessage();
-      totalInputTokens += finalMsg.usage?.input_tokens || 0;
-      totalOutputTokens += finalMsg.usage?.output_tokens || 0;
-      if (finalMsg.stop_reason !== 'tool_use') break;
-
-      messages.push({ role: 'assistant', content: finalMsg.content });
-
-      for (const block of finalMsg.content) {
-        if (block.type === 'tool_use') {
-          res.write(`data: ${JSON.stringify({ tool: block.name, status: 'running' })}\n\n`);
-        }
-      }
-
-      const toolResults = [];
-      for (const block of finalMsg.content) {
-        if (block.type !== 'tool_use') continue;
-        try {
-          const result = await executeTool(block.name, block.input, req.user);
-          let toolContent;
-          if (result?.image?.base64) {
-            const meta = { ...result, image: undefined, image_attached: true };
-            toolContent = [
-              { type: 'image', source: { type: 'base64', media_type: result.image.mediaType, data: result.image.base64 } },
-              { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
-            ];
-          } else if (result?.pdf?.base64) {
-            const meta = { ...result, pdf: undefined, pdf_attached: true };
-            toolContent = [
-              { type: 'document', source: { type: 'base64', media_type: result.pdf.mediaType, data: result.pdf.base64 } },
-              { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
-            ];
-          } else {
-            toolContent = JSON.stringify(result).slice(0, 80000);
+        for await (const ev of stream) {
+          if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') {
+            resultBuffer += ev.delta.text;
+            res.write(`data: ${JSON.stringify({ text: ev.delta.text })}\n\n`);
           }
-          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: toolContent });
-          res.write(`data: ${JSON.stringify({ tool: block.name, status: 'done' })}\n\n`);
-        } catch(e) {
-          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
-          res.write(`data: ${JSON.stringify({ tool: block.name, status: 'error', error: e.message })}\n\n`);
         }
+
+        const finalMsg = await stream.finalMessage();
+        totalInputTokens += finalMsg.usage?.input_tokens || 0;
+        totalOutputTokens += finalMsg.usage?.output_tokens || 0;
+        if (finalMsg.stop_reason !== 'tool_use') break;
+
+        messages.push({ role: 'assistant', content: finalMsg.content });
+
+        for (const block of finalMsg.content) {
+          if (block.type === 'tool_use') {
+            res.write(`data: ${JSON.stringify({ tool: block.name, status: 'running' })}\n\n`);
+          }
+        }
+
+        const toolResults = [];
+        for (const block of finalMsg.content) {
+          if (block.type !== 'tool_use') continue;
+          try {
+            const result = await executeTool(block.name, block.input, req.user);
+            let toolContent;
+            if (result?.image?.base64) {
+              const meta = { ...result, image: undefined, image_attached: true };
+              toolContent = [
+                { type: 'image', source: { type: 'base64', media_type: result.image.mediaType, data: result.image.base64 } },
+                { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
+              ];
+            } else if (result?.pdf?.base64) {
+              const meta = { ...result, pdf: undefined, pdf_attached: true };
+              toolContent = [
+                { type: 'document', source: { type: 'base64', media_type: result.pdf.mediaType, data: result.pdf.base64 } },
+                { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
+              ];
+            } else {
+              toolContent = JSON.stringify(result).slice(0, 80000);
+            }
+            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: toolContent });
+            res.write(`data: ${JSON.stringify({ tool: block.name, status: 'done' })}\n\n`);
+          } catch(e) {
+            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
+            res.write(`data: ${JSON.stringify({ tool: block.name, status: 'error', error: e.message })}\n\n`);
+          }
+        }
+        messages.push({ role: 'user', content: toolResults });
+        toolRound++;
       }
-      messages.push({ role: 'user', content: toolResults });
-      toolRound++;
+    };
+
+    try {
+      await retryWithBackoff(claudeSkillRun);
+    } catch(claudeErr) {
+      if (isOverloadError(claudeErr) && process.env.OPENROUTER_API_KEY) {
+        res.write(`data: ${JSON.stringify({ text: '\n\n⚠️ Claude API が混雑しています。OSS AI（Qwen3-235B）で継続します...\n\n' })}\n\n`);
+        const fb = await runWithOss(prompt, systemPrompt, activeTools, req.user);
+        resultBuffer      += fb.resultBuffer;
+        totalInputTokens  += fb.totalInputTokens;
+        totalOutputTokens += fb.totalOutputTokens;
+        res.write(`data: ${JSON.stringify({ text: fb.resultBuffer })}\n\n`);
+      } else {
+        throw claudeErr;
+      }
     }
 
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
@@ -4269,6 +4286,80 @@ function resolveModel(modelKey) {
   return { provider: modelKey.slice(0, colonIdx), modelId: modelKey.slice(colonIdx + 1) };
 }
 
+// ── Anthropic API フォールバック ──
+
+function isOverloadError(e) {
+  const msg = String(e?.message || '');
+  const status = e?.status || e?.statusCode;
+  return status === 529 || status === 503 || status === 429 ||
+    msg.includes('overloaded') || msg.includes('529') || msg.includes('503') || msg.includes('rate limit');
+}
+
+// 指数バックオフでリトライ（fn は async）
+async function retryWithBackoff(fn, { maxRetries = 2, delays = [2000, 5000] } = {}) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn(attempt);
+    } catch(e) {
+      if (attempt < maxRetries && isOverloadError(e)) {
+        await new Promise(r => setTimeout(r, delays[attempt] || 5000));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
+// OSS AI（OpenRouter Qwen3-235B）でタスクを実行（ツールあり）
+async function runWithOss(prompt, systemPrompt, activeTools, user) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY が未設定のため OSS フォールバック不可');
+  const baseUrl = 'https://openrouter.ai/api/v1';
+  const fallbackModel = 'qwen/qwen3-235b-a22b';
+
+  const openaiTools = toOpenAITools(activeTools);
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: prompt }
+  ];
+  let resultBuffer = '';
+  let toolRound = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+
+  while (toolRound < 10) {
+    const r = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://acrovision.co.jp'
+      },
+      body: JSON.stringify({ model: fallbackModel, messages, tools: openaiTools, tool_choice: 'auto', max_tokens: 4096 })
+    });
+    if (!r.ok) throw new Error(`OSS fallback error: ${r.status} ${await r.text()}`);
+    const data = await r.json();
+    totalInputTokens  += data.usage?.prompt_tokens     || 0;
+    totalOutputTokens += data.usage?.completion_tokens || 0;
+    const choice = data.choices?.[0];
+    if (!choice) break;
+    if (choice.message?.content) resultBuffer += choice.message.content;
+    if (!choice.message?.tool_calls?.length) break;
+    messages.push({ role: 'assistant', content: choice.message.content || null, tool_calls: choice.message.tool_calls });
+    for (const tc of choice.message.tool_calls) {
+      let toolResultContent;
+      try {
+        const input = JSON.parse(tc.function.arguments);
+        const result = await executeTool(tc.function.name, input, user);
+        toolResultContent = JSON.stringify(result).slice(0, 80000);
+      } catch(e) { toolResultContent = JSON.stringify({ error: e.message }); }
+      messages.push({ role: 'tool', tool_call_id: tc.id, content: toolResultContent });
+    }
+    toolRound++;
+  }
+  return { resultBuffer, totalInputTokens, totalOutputTokens };
+}
+
 // Anthropicツール定義をOpenAI形式に変換
 function toOpenAITools(anthropicTools) {
   return anthropicTools.map(t => ({
@@ -4308,56 +4399,76 @@ async function runSkillBackground(task, ownerEmail) {
     const { provider, modelId } = resolveModel(task.model);
 
     if (provider === 'anthropic') {
-      // ── Anthropic (Claude) ──
-      const messages = [{ role: 'user', content: prompt }];
-      let toolRound = 0;
+      // ── Anthropic (Claude) — リトライ付き、失敗時は OSS フォールバック ──
+      const anthropicRun = async () => {
+        const messages = [{ role: 'user', content: prompt }];
+        let toolRound = 0;
+        let inTokens = 0;
+        let outTokens = 0;
+        let buf = '';
 
-      while (toolRound < 10) {
-        const response = await anthropic.messages.create({
-          model: modelId,
-          max_tokens: 4096,
-          system: bgSystemPrompt,
-          tools: activeTools,
-          messages
-        });
-
-        totalInputTokens  += response.usage?.input_tokens  || 0;
-        totalOutputTokens += response.usage?.output_tokens || 0;
-
-        for (const block of response.content) {
-          if (block.type === 'text') resultBuffer += block.text;
-        }
-        if (response.stop_reason !== 'tool_use') break;
-
-        messages.push({ role: 'assistant', content: response.content });
-        const toolResults = [];
-        for (const block of response.content) {
-          if (block.type !== 'tool_use') continue;
-          try {
-            const result = await executeTool(block.name, block.input, user);
-            let toolContent;
-            if (result?.image?.base64) {
-              const meta = { ...result, image: undefined, image_attached: true };
-              toolContent = [
-                { type: 'image', source: { type: 'base64', media_type: result.image.mediaType, data: result.image.base64 } },
-                { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
-              ];
-            } else if (result?.pdf?.base64) {
-              const meta = { ...result, pdf: undefined, pdf_attached: true };
-              toolContent = [
-                { type: 'document', source: { type: 'base64', media_type: result.pdf.mediaType, data: result.pdf.base64 } },
-                { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
-              ];
-            } else {
-              toolContent = JSON.stringify(result).slice(0, 80000);
-            }
-            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: toolContent });
-          } catch(e) {
-            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
+        while (toolRound < 10) {
+          const response = await anthropic.messages.create({
+            model: modelId,
+            max_tokens: 4096,
+            system: bgSystemPrompt,
+            tools: activeTools,
+            messages
+          });
+          inTokens  += response.usage?.input_tokens  || 0;
+          outTokens += response.usage?.output_tokens || 0;
+          for (const block of response.content) {
+            if (block.type === 'text') buf += block.text;
           }
+          if (response.stop_reason !== 'tool_use') break;
+          messages.push({ role: 'assistant', content: response.content });
+          const toolResults = [];
+          for (const block of response.content) {
+            if (block.type !== 'tool_use') continue;
+            try {
+              const result = await executeTool(block.name, block.input, user);
+              let toolContent;
+              if (result?.image?.base64) {
+                const meta = { ...result, image: undefined, image_attached: true };
+                toolContent = [
+                  { type: 'image', source: { type: 'base64', media_type: result.image.mediaType, data: result.image.base64 } },
+                  { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
+                ];
+              } else if (result?.pdf?.base64) {
+                const meta = { ...result, pdf: undefined, pdf_attached: true };
+                toolContent = [
+                  { type: 'document', source: { type: 'base64', media_type: result.pdf.mediaType, data: result.pdf.base64 } },
+                  { type: 'text', text: JSON.stringify(meta).slice(0, 5000) }
+                ];
+              } else {
+                toolContent = JSON.stringify(result).slice(0, 80000);
+              }
+              toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: toolContent });
+            } catch(e) {
+              toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
+            }
+          }
+          messages.push({ role: 'user', content: toolResults });
+          toolRound++;
         }
-        messages.push({ role: 'user', content: toolResults });
-        toolRound++;
+        return { buf, inTokens, outTokens };
+      };
+
+      try {
+        const res = await retryWithBackoff(anthropicRun);
+        resultBuffer      = res.buf;
+        totalInputTokens  = res.inTokens;
+        totalOutputTokens = res.outTokens;
+      } catch(anthropicErr) {
+        if (isOverloadError(anthropicErr) && process.env.OPENROUTER_API_KEY) {
+          console.warn(`[fallback] Claude API overloaded (${task.skill_name}), switching to OSS`);
+          const fb = await runWithOss(prompt, bgSystemPrompt, activeTools, user);
+          resultBuffer      = `[OSS フォールバック: Qwen3-235B]\n${fb.resultBuffer}`;
+          totalInputTokens  = fb.totalInputTokens;
+          totalOutputTokens = fb.totalOutputTokens;
+        } else {
+          throw anthropicErr;
+        }
       }
     } else {
       // ── OSS (OpenRouter / DeepInfra) — OpenAI互換API ──
