@@ -32,7 +32,7 @@ git commit -m "feat/fix/ops: 変更内容"
 git push origin main
 ```
 
-> サーバーで直接編集して動作確認した場合も、サーバー上で `git commit && git push` してからローカルで `git pull` する。SCP での直接転送はこのルールが整うまでの暫定手段。
+> サーバーで直接編集して動作確認した場合も、サーバー上で `git commit && git push` してからローカルで `git pull` する。**SCP での直接転送は禁止**（EC2 の git 状態が壊れる原因になる）。
 
 ## 構成
 
