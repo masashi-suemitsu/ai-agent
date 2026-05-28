@@ -45,29 +45,11 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 
 .page { max-width: 1372px; margin: 0 auto; padding: 24px 20px; }
 
-/* ── サイドバーレイアウト ── */
-.layout { display: flex; gap: 20px; align-items: flex-start; }
-.tab-nav {
-  width: 192px; flex-shrink: 0;
-  background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px;
-  padding: 8px 6px;
-  position: sticky; top: 68px;
-  max-height: calc(100vh - 90px); overflow-y: auto;
-  display: flex; flex-direction: column; gap: 1px;
-}
-.sidebar-sep { height: 1px; background: var(--border); margin: 6px 4px; }
-.sidebar-label { font-size: 10px; font-weight: 700; color: var(--text-light); letter-spacing: .06em; text-transform: uppercase; padding: 6px 10px 2px; }
-.content { flex: 1; min-width: 0; }
-.tab-btn {
-  display: flex; align-items: center; gap: 9px;
-  padding: 9px 10px; border: none; border-radius: 8px;
-  font-size: 13px; font-weight: 500; cursor: pointer;
-  background: none; color: var(--text-light);
-  transition: all .15s; text-align: left; width: 100%;
-}
-.tab-btn .nav-icon { font-size: 15px; flex-shrink: 0; }
-.tab-btn .nav-label { flex: 1; }
-.tab-btn.active { background: var(--primary-light); color: var(--primary); font-weight: 700; }
+.tab-nav { display: flex; flex-wrap: wrap; gap: 4px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 24px; }
+.tab-btn { padding: 8px 14px; border: none; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; background: none; color: var(--text-light); transition: all .15s; white-space: nowrap; }
+.tab-btn .nav-icon { margin-right: 4px; }
+.tab-btn .nav-label { }
+.tab-btn.active { background: var(--primary); color: #fff; }
 .tab-btn:hover:not(.active) { background: var(--bg); color: var(--text); }
 .admin-tab-btn .admin-badge { font-size: 9px; }
 .tab-content { display: none; }
@@ -214,23 +196,9 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 .admin-only-banner .aob-title { font-weight: 700; color: #c53030; margin-bottom: 2px; font-size: 14px; }
 .admin-only-banner .aob-desc { color: #742a2a; }
 
-@media (max-width: 768px) {
-  .layout { flex-direction: column; }
-  .tab-nav {
-    width: 100%; flex-direction: row; overflow-x: auto; overflow-y: hidden;
-    position: static; max-height: none;
-    padding: 4px; gap: 2px;
-    scrollbar-width: none;
-  }
-  .tab-nav::-webkit-scrollbar { display: none; }
-  .tab-btn { white-space: nowrap; width: auto; padding: 7px 12px; gap: 6px; }
-  .tab-btn .nav-label { flex: none; }
-  .sidebar-sep, .sidebar-label { display: none; }
-  .content { width: 100%; }
-}
 @media (max-width: 600px) {
   .page { padding: 16px 12px; }
-  .tab-btn { font-size: 12px; }
+  .tab-btn { padding: 7px 10px; font-size: 12px; }
 }
 .model-desc-card { margin-top: 8px; background: var(--primary-light); border: 1px solid #c3d0ff; border-radius: 10px; padding: 11px 14px; }
 .model-desc-header { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
@@ -270,21 +238,17 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 </header>
 
 <div class="page">
-<div class="layout">
-  <nav class="tab-nav" id="tabNav">
-    <button class="tab-btn active" data-tab="tasks"      onclick="switchTab('tasks')"><span class="nav-icon">⏰</span><span class="nav-label">タスク</span></button>
-    <button class="tab-btn" data-tab="history"           onclick="switchTab('history')"><span class="nav-icon">📊</span><span class="nav-label">実行履歴</span></button>
-    <button class="tab-btn" data-tab="skills"            onclick="switchTab('skills')"><span class="nav-icon">⚙️</span><span class="nav-label">スキル</span></button>
-    <button class="tab-btn" data-tab="automation"        onclick="switchTab('automation')"><span class="nav-icon">🔗</span><span class="nav-label">自動化</span></button>
-    <button class="tab-btn" data-tab="memories"          onclick="switchTab('memories')"><span class="nav-icon">🧠</span><span class="nav-label">メモリ</span></button>
-    <div class="sidebar-sep"></div>
-    <div class="sidebar-label">設定</div>
-    <button class="tab-btn" data-tab="connectors"        onclick="switchTab('connectors')"><span class="nav-icon">🔌</span><span class="nav-label">コネクタ</span></button>
-    <button class="tab-btn" data-tab="rules"             onclick="switchTab('rules')"><span class="nav-icon">🔒</span><span class="nav-label">権限・ルール</span></button>
-    <button class="tab-btn" data-tab="usage"             onclick="switchTab('usage')"><span class="nav-icon">💰</span><span class="nav-label">利用状況</span></button>
-    <button class="tab-btn" data-tab="chatsearch"        onclick="switchTab('chatsearch')"><span class="nav-icon">💬</span><span class="nav-label">会話検索</span></button>
-  </nav>
-  <div class="content">
+  <div class="tab-nav" id="tabNav">
+    <button class="tab-btn active" data-tab="tasks"      onclick="switchTab('tasks')"><span class="nav-icon">⏰</span>タスク</button>
+    <button class="tab-btn" data-tab="history"           onclick="switchTab('history')"><span class="nav-icon">📊</span>実行履歴</button>
+    <button class="tab-btn" data-tab="skills"            onclick="switchTab('skills')"><span class="nav-icon">⚙️</span>スキル</button>
+    <button class="tab-btn" data-tab="automation"        onclick="switchTab('automation')"><span class="nav-icon">🔗</span>自動化</button>
+    <button class="tab-btn" data-tab="memories"          onclick="switchTab('memories')"><span class="nav-icon">🧠</span>メモリ</button>
+    <button class="tab-btn" data-tab="connectors"        onclick="switchTab('connectors')"><span class="nav-icon">🔌</span>コネクタ</button>
+    <button class="tab-btn" data-tab="rules"             onclick="switchTab('rules')"><span class="nav-icon">🔒</span>権限・ルール</button>
+    <button class="tab-btn" data-tab="usage"             onclick="switchTab('usage')"><span class="nav-icon">💰</span>利用状況</button>
+    <button class="tab-btn" data-tab="chatsearch"        onclick="switchTab('chatsearch')"><span class="nav-icon">💬</span>会話検索</button>
+  </div>
 
   <!-- ─ 定期タスク ─ -->
   <div class="tab-content active" id="tab-tasks">
@@ -554,10 +518,8 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <div id="dashAuditTable"></div>
     </div>
   </div>
-</div>
 
-  </div><!-- /.content -->
-</div><!-- /.layout -->
+</div><!-- /.page -->
 
 <!-- ─ Skill Edit Modal ─ -->
 <div class="modal-overlay" id="editSkillModal" onclick="if(event.target===this)closeEditSkill()">
@@ -922,8 +884,6 @@ function toggleTheme() {
   renderUserBadge(currentUser);
   if (currentUser.role === 'admin') {
     const nav = document.getElementById('tabNav');
-    const sep = document.createElement('div'); sep.className = 'sidebar-sep'; nav.appendChild(sep);
-    const lbl = document.createElement('div'); lbl.className = 'sidebar-label'; lbl.textContent = '管理者'; nav.appendChild(lbl);
     [
       { tab: 'dashboard', icon: '📊', label: 'ダッシュボード' },
       { tab: 'users',     icon: '👤', label: 'ユーザー' },
@@ -931,7 +891,7 @@ function toggleTheme() {
       const btn = document.createElement('button');
       btn.className = 'tab-btn admin-tab-btn';
       btn.dataset.tab = tab;
-      btn.innerHTML = `<span class="nav-icon">${icon}</span><span class="nav-label">${label}</span>`;
+      btn.innerHTML = `<span class="nav-icon">${icon}</span>${label}`;
       btn.onclick = () => switchTab(tab);
       nav.appendChild(btn);
     });
