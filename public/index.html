@@ -681,7 +681,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
 <header>
   <div class="header-left">
     <a href="/" style="display:contents;text-decoration:none;cursor:pointer;" title="ホームに戻る"><div class="header-logo"><img src="/assets/logo.png" alt="タスクAIエージェント"></div>
-    <h1 style="color:inherit;">タスクAIエージェント<small>仕事を任せる</small></h1></a>
+    <h1 style="color:inherit;">タスクAIエージェント</h1></a>
   </div>
   <div class="header-right">
     <div style="position:relative;display:flex;align-items:center;">
@@ -1155,6 +1155,7 @@ let currentUser = null;
   }
   await loadSidebar();
   loadRightSidebarStatuses();
+  loadSidebarTasks();
 
   // OAuth コールバック後の通知 + manage画面からの会話直接リンク
   const urlParams = new URLSearchParams(window.location.search);
@@ -3010,6 +3011,71 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // ─ Scheduled Tasks ─
 let scheduleTargetSkillId = null;
+
+// ─ サイドバー タスク一覧 ─
+function taskScheduleLabel(t) {
+  if (t.task_type === 'once') {
+    const d = t.next_run_at ? new Date(t.next_run_at.replace(' ','T')+'Z').toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '─';
+    return `単発: ${d}`;
+  }
+  if (t.schedule_type === 'daily') return `毎日 ${String(t.schedule_hour||0).padStart(2,'0')}:${String(t.schedule_minute||0).padStart(2,'0')}`;
+  if (t.schedule_type === 'weekly') {
+    const days = ['日','月','火','水','木','金','土'];
+    return `毎週${days[t.schedule_weekday||0]} ${String(t.schedule_hour||0).padStart(2,'0')}:${String(t.schedule_minute||0).padStart(2,'0')}`;
+  }
+  const m = t.interval_min || 60;
+  return m < 60 ? `${m}分ごと` : m === 60 ? '1時間ごと' : m < 1440 ? `${m/60}時間ごと` : '毎日';
+}
+
+async function loadSidebarTasks() {
+  const el = document.getElementById('rsTasksList');
+  const max = parseInt(document.getElementById('rsTasksMax')?.value || '5');
+  try {
+    const tasks = await fetch('/api/scheduled-tasks').then(r => r.json());
+    const enabled = tasks.filter(t => t.enabled).slice(0, max);
+    if (!enabled.length) { el.innerHTML = '<div class="rs-tasks-empty">有効なタスクなし</div>'; return; }
+    el.innerHTML = enabled.map(t => {
+      const statusDot = t.last_status === 'error' ? '🔴' : t.last_status === 'running' ? '🟡' : '🟢';
+      return `<div class="rs-task-item" onclick="closeAllPanels('schedulePanel');document.getElementById('schedulePanel').classList.add('open');document.getElementById('rs-schedule-btn').classList.add('active');syncBackdrop();loadScheduledTasks();">
+        <div class="rs-task-name">${statusDot} ${esc(t.skill_title || t.skill_name)}</div>
+        <div class="rs-task-meta">${esc(taskScheduleLabel(t))}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="rs-tasks-empty">取得失敗</div>';
+  }
+}
+
+// ─ スキルパネル ─
+function toggleSkillsPanel() {
+  const panel = document.getElementById('skillsPanel');
+  const btn = document.getElementById('rs-skills-btn');
+  const isOpen = panel.classList.contains('open');
+  closeAllPanels('skillsPanel');
+  panel.classList.toggle('open', !isOpen);
+  btn.classList.toggle('active', !isOpen);
+  syncBackdrop();
+  if (!isOpen) loadSkillsPanel();
+}
+
+async function loadSkillsPanel() {
+  const el = document.getElementById('skillsPanelList');
+  try {
+    const skills = await fetch('/api/skills').then(r => r.json());
+    if (!skills.length) { el.innerHTML = '<div class="history-empty">スキルがありません</div>'; return; }
+    el.innerHTML = skills.map(s => `
+      <div class="sched-card">
+        <div class="sched-card-title">${esc(s.title)}</div>
+        ${s.description ? `<div class="sched-card-meta" style="margin-bottom:8px;">${esc(s.description)}</div>` : ''}
+        <div class="sched-card-actions">
+          <button class="skill-run-btn" style="background:#ed8936;" data-id="${s.id}" data-title="${esc(s.title)}" onclick="openScheduleModal(this.dataset.id,this.dataset.title)">⏰</button>
+          <button class="skill-run-btn" data-id="${s.id}" data-title="${esc(s.title)}" onclick="runSkill(this.dataset.id,this.dataset.title)">実行</button>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="history-empty">取得失敗: ${esc(e.message)}</div>`;
+  }
+}
 
 function toggleSchedule() {
   const panel = document.getElementById('schedulePanel');
