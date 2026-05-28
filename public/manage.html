@@ -1736,12 +1736,13 @@ function buildModelSelects() {
   const anthropic = MODEL_OPTIONS.filter(m => m.provider === 'Anthropic');
   const or = MODEL_OPTIONS.filter(m => m.provider === 'OpenRouter');
   const di = MODEL_OPTIONS.filter(m => m.provider === 'DeepInfra');
+  const opt = (m, providerSuffix) => `<option value="${m.key}">${m.name}（${providerSuffix}）— ${calcModelCostJpy(m)}</option>`;
   const html =
-    anthropic.map(m => `<option value="${m.key}">${m.name}（${m.provider}）</option>`).join('') +
+    anthropic.map(m => opt(m, m.provider)).join('') +
     '<optgroup label="── OSS / OpenRouter ──">' +
-    or.map(m => `<option value="${m.key}">${m.name}（OR）</option>`).join('') +
+    or.map(m => opt(m, 'OR')).join('') +
     '</optgroup><optgroup label="── OSS / DeepInfra ──">' +
-    di.map(m => `<option value="${m.key}">${m.name}（DI）</option>`).join('') +
+    di.map(m => opt(m, 'DI')).join('') +
     '</optgroup>';
   ['modalModel', 'editTaskModel'].forEach(id => {
     const el = document.getElementById(id);
