@@ -991,7 +991,8 @@ app.get('/auth/drive', requireAuth, (req, res) => {
       'https://www.googleapis.com/auth/forms.body.readonly',
       'https://www.googleapis.com/auth/forms.responses.readonly',
       'https://www.googleapis.com/auth/webmasters.readonly',
-      'https://www.googleapis.com/auth/analytics.readonly'
+      'https://www.googleapis.com/auth/analytics.readonly',
+      'https://www.googleapis.com/auth/calendar'  // カレンダー取得・作成に必要
     ],
     state
   });
@@ -1840,6 +1841,54 @@ const TOOLS = [
         model:           { type: 'string', description: '使用AIモデル。sonnet（Claude Sonnet 4.6）/ haiku（Claude Haiku 4.5）/ openrouter:モデルID / deepinfra:モデルID。省略時はsonnet' }
       },
       required: ['task_type', 'skill_name', 'steps']
+    }
+  },
+  {
+    name: 'create_workflow',
+    description: '複数ステップを順番に連結した自動化ワークフローを作成・保存する。register_task（単一ステップ）と異なり、前のステップの結果を次に引き渡せる。「ワークフロー作って」「〇〇→〇〇の順で自動化して」「複数の処理をつなげたい」などの場合に使う。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name:        { type: 'string', description: 'ワークフロー名' },
+        description: { type: 'string', description: '説明（1〜2文、省略可）' },
+        steps: {
+          type: 'array',
+          description: '実行ステップ。直列に順番に実行される。',
+          items: {
+            type: 'object',
+            properties: {
+              id:         { type: 'string', description: 'ステップID（s1, s2 ...）' },
+              label:      { type: 'string', description: 'ステップ名（簡潔に）' },
+              prompt:     { type: 'string', description: 'AIへの実行指示。どのツールで何をするか具体的に。send_chatwork_message ではなく send_system_notification を使うこと。前のステップの出力は {{output_var名}} で参照可。' },
+              output_var: { type: 'string', description: '出力変数名（省略可。次ステップの prompt で {{この名前}} として参照できる）' }
+            },
+            required: ['id', 'label', 'prompt']
+          }
+        },
+        trigger_type:    { type: 'string', enum: ['manual','scheduled'], description: '手動=manual（デフォルト）、スケジュール=scheduled' },
+        schedule_type:   { type: 'string', enum: ['interval','daily','weekly'], description: 'trigger_type=scheduled のとき使用' },
+        interval_min:    { type: 'number', description: 'インターバル分数（schedule_type=interval のとき）' },
+        schedule_hour:   { type: 'number', description: '実行時刻（時・JST）。daily/weekly のとき使用' },
+        schedule_minute: { type: 'number', description: '実行時刻（分）。省略時0' },
+        schedule_weekday:{ type: 'number', description: '曜日 0=日/1=月/2=火/3=水/4=木/5=金/6=土。weekly のとき使用' }
+      },
+      required: ['name', 'steps']
+    }
+  },
+  {
+    name: 'list_workflows',
+    description: 'ユーザーが作成したワークフローの一覧を取得する。「ワークフロー一覧」「どんなワークフローがあるか」などの場合に使う。',
+    input_schema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'run_workflow',
+    description: '保存済みワークフローを今すぐ実行する。「今すぐ実行して」「ワークフローを動かして」などの場合に使う。IDまたは名前で指定。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        id:   { type: 'number', description: 'ワークフローID（list_workflows で確認可）' },
+        name: { type: 'string', description: 'ワークフロー名（id の代わりに指定可、部分一致）' }
+      }
     }
   },
   {
@@ -3016,6 +3065,41 @@ async function executeTool(name, input, user) {
             ? `定期タスク「${skill_name}」を毎週${wdays[schedule_weekday]}曜${schedule_hour}:${String(schedule_minute).padStart(2,'0')}に実行するよう登録しました（ID: ${ins.lastInsertRowid}）`
             : `定期タスク「${skill_name}」を${interval_min}分ごとに実行するよう登録しました（ID: ${ins.lastInsertRowid}）`;
       return { ok: true, id: ins.lastInsertRowid, message: label };
+    }
+    case 'create_workflow': {
+      const { name: wfName, description: wfDesc, steps: wfSteps, trigger_type, schedule_type, interval_min, schedule_hour, schedule_minute, schedule_weekday } = input;
+      if (!wfName?.trim()) throw new Error('name は必須です');
+      if (!Array.isArray(wfSteps) || !wfSteps.length) throw new Error('steps は1つ以上必要です');
+      const ttype = trigger_type || 'manual';
+      const stype = schedule_type || 'interval';
+      const next_run_at = ttype === 'scheduled' ? calcNextRunAt({ schedule_type: stype, interval_min: interval_min || 60, schedule_hour: schedule_hour ?? null, schedule_minute: schedule_minute ?? 0, schedule_weekday: schedule_weekday ?? null }) : null;
+      const ins = db.prepare('INSERT INTO workflows (owner_email,name,description,steps,trigger_type,schedule_type,interval_min,schedule_hour,schedule_minute,schedule_weekday,next_run_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(user.email, wfName.trim(), wfDesc || '', JSON.stringify(wfSteps), ttype, stype, interval_min || 60, schedule_hour ?? null, schedule_minute ?? 0, schedule_weekday ?? null, next_run_at);
+      audit(user.email, user.name, 'workflow.create_from_chat', { name: wfName.trim(), id: ins.lastInsertRowid });
+      const wdays = ['日','月','火','水','木','金','土'];
+      const triggerLabel = ttype === 'scheduled'
+        ? (stype === 'daily' ? `毎日${schedule_hour}:${String(schedule_minute ?? 0).padStart(2,'0')} 自動実行`
+          : stype === 'weekly' ? `毎週${wdays[schedule_weekday ?? 0]}曜${schedule_hour}:${String(schedule_minute ?? 0).padStart(2,'0')} 自動実行`
+          : `${interval_min || 60}分ごとに自動実行`)
+        : '手動実行';
+      return { ok: true, id: ins.lastInsertRowid, name: wfName.trim(), steps_count: wfSteps.length, trigger: triggerLabel };
+    }
+    case 'list_workflows': {
+      const rows = db.prepare('SELECT id,name,description,trigger_type,schedule_type,interval_min,schedule_hour,schedule_minute,enabled,last_status,last_run_at FROM workflows WHERE owner_email=? ORDER BY updated_at DESC LIMIT 20').all(user.email);
+      return { count: rows.length, workflows: rows.map(r => ({ id: r.id, name: r.name, description: r.description, trigger: r.trigger_type, enabled: !!r.enabled, last_status: r.last_status, last_run_at: r.last_run_at })) };
+    }
+    case 'run_workflow': {
+      const { id: rwId, name: rwName } = input;
+      let wf;
+      if (rwId) {
+        wf = db.prepare('SELECT * FROM workflows WHERE id=? AND owner_email=?').get(rwId, user.email);
+      } else if (rwName) {
+        wf = db.prepare("SELECT * FROM workflows WHERE owner_email=? AND name LIKE ? ORDER BY updated_at DESC LIMIT 1").get(user.email, `%${rwName}%`);
+      }
+      if (!wf) throw new Error('ワークフローが見つかりません。list_workflows で確認してください。');
+      const steps = JSON.parse(wf.steps || '[]');
+      if (!steps.length) throw new Error(`ワークフロー「${wf.name}」にステップがありません`);
+      runWorkflow(wf, user.email).catch(e => console.error('[run_workflow tool] error:', e.message));
+      return { ok: true, id: wf.id, name: wf.name, steps_count: steps.length, message: `ワークフロー「${wf.name}」の実行を開始しました（${steps.length}ステップ）` };
     }
     case 'send_system_notification': {
       const sysToken = process.env.CHATWORK_SYSTEM_TOKEN;
@@ -5806,16 +5890,16 @@ app.post('/api/ai/chat', async (req, res) => {
 
 // ── Google Calendar API ──
 function getCalendarClientForUser(user) {
-  // メインログイントークン（user_drive_tokens）が calendar フルスコープを持つため優先。
-  // 旧 user_calendar_tokens は calendar.readonly のみの場合があり書込不可なのでフォールバック扱い。
-  let tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
-  let tableName = 'user_drive_tokens';
+  // カレンダー専用トークンを優先（calendar スコープを含む）。
+  // Drive トークンに calendar スコープが含まれていない場合もあるためフォールバック扱いに変更。
+  let tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_calendar_tokens WHERE email=?').get(user.email);
+  let tableName = 'user_calendar_tokens';
   if (!tokenRow?.refresh_token) {
-    tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_calendar_tokens WHERE email=?').get(user.email);
-    tableName = 'user_calendar_tokens';
+    tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
+    tableName = 'user_drive_tokens';
   }
   if (!tokenRow?.refresh_token) {
-    throw new Error('Googleカレンダー未連携。一度ログアウトして再ログインし、カレンダー権限を許可してください');
+    throw new Error('Googleカレンダー未連携。/manage の「コネクタ」タブからGoogleカレンダー連携を行ってください');
   }
   const oauth2 = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
