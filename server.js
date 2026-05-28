@@ -416,6 +416,59 @@ function recordUsage(email, name, inputTokens, outputTokens, model, context) {
  'ALTER TABLE token_usage ADD COLUMN cost_usd REAL DEFAULT 0',
 ].forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
+// ── 新機能テーブル（メモリ・フック・ファイル・バッチ）──
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    memory TEXT NOT NULL,
+    importance TEXT DEFAULT 'medium',
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_mem_email ON user_memories(email, id DESC);
+
+  CREATE TABLE IF NOT EXISTS skill_hooks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_email TEXT NOT NULL,
+    skill_id INTEGER,
+    hook_type TEXT NOT NULL DEFAULT 'post_run',
+    action TEXT NOT NULL,
+    config TEXT DEFAULT '{}',
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_hook_owner ON skill_hooks(owner_email);
+
+  CREATE TABLE IF NOT EXISTS uploaded_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    file_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    media_type TEXT NOT NULL,
+    size_bytes INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_files_email ON uploaded_files(email, id DESC);
+
+  CREATE TABLE IF NOT EXISTS skill_batch_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_email TEXT NOT NULL,
+    batch_id TEXT NOT NULL,
+    status TEXT DEFAULT 'processing',
+    skill_ids TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    finished_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_batch_owner ON skill_batch_jobs(owner_email, id DESC);
+`);
+
+// ループ・プランモード用カラム追加
+['ALTER TABLE scheduled_tasks ADD COLUMN loop_enabled INTEGER DEFAULT 0',
+ 'ALTER TABLE scheduled_tasks ADD COLUMN loop_count INTEGER DEFAULT 0',
+ 'ALTER TABLE scheduled_tasks ADD COLUMN loop_interval_min INTEGER DEFAULT 60',
+ 'ALTER TABLE scheduled_tasks ADD COLUMN loop_remaining INTEGER',
+].forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
+
 function audit(email, name, action, details = {}) {
   try {
     db.prepare('INSERT INTO audit_logs (email,name,action,details) VALUES (?,?,?,?)')
@@ -972,7 +1025,94 @@ function getSystemPromptForUser(role, email) {
       prompt += `\n\n## あなたへの個人指示（${email} 専用・最優先で守ること）\n${row.custom_rules.trim()}`;
     }
   } catch(e) { /* テーブル未作成時など無視 */ }
+  // Auto-memory: 会話から自動学習した情報
+  try {
+    const memories = db.prepare('SELECT memory FROM user_memories WHERE email=? ORDER BY id DESC LIMIT 10').all(email);
+    if (memories.length > 0) {
+      prompt += `\n\n## このユーザーについて自動記録された情報（会話から学習済み）\n${memories.map(m => `- ${m.memory}`).join('\n')}`;
+    }
+  } catch(e) {}
   return prompt;
+}
+
+// ── Context Compression ──
+async function compressConversationContext(oldMessages) {
+  try {
+    const text = oldMessages.map(m =>
+      `${m.role}: ${typeof m.content === 'string' ? m.content.slice(0, 300) : '[添付/ツール結果]'}`
+    ).join('\n');
+    const r = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      messages: [{ role: 'user', content: `以下の会話を3〜5行で要約してください（重要な事実・決定・文脈を保持）:\n\n${text}` }]
+    });
+    return r.content[0]?.text || '';
+  } catch(e) {
+    console.error('[compress] failed:', e.message);
+    return '';
+  }
+}
+
+// ── Auto Memory Extraction ──
+async function extractAndSaveMemories(email, conversationMessages) {
+  try {
+    const recent = conversationMessages.slice(-8).map(m =>
+      `${m.role}: ${typeof m.content === 'string' ? m.content.slice(0, 400) : '[ツール結果]'}`
+    ).join('\n');
+    const r = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 400,
+      messages: [{
+        role: 'user',
+        content: `会話から将来の会話でも役立つ「記憶すべき重要な事実」のみを抽出してください。\n- ユーザーの好み・習慣・繰り返す指示のみ対象\n- 一時的な内容・一般的な知識は除外\n- 該当なければ「なし」と返す\n- 箇条書きで返す\n\n会話:\n${recent}`
+      }]
+    });
+    const text = r.content[0]?.text?.trim() || '';
+    if (!text || text === 'なし' || (text.includes('なし') && text.length < 15)) return;
+    const facts = text.split('\n').filter(l => l.trim().length > 5 && !/^#+/.test(l.trim()));
+    for (const fact of facts.slice(0, 3)) {
+      const clean = fact.replace(/^[-・*•\d.]\s*/, '').trim();
+      if (clean.length > 5) {
+        db.prepare('INSERT INTO user_memories (email, memory) VALUES (?,?)').run(email, clean.slice(0, 300));
+      }
+    }
+  } catch(e) {
+    console.error('[memory] extraction failed:', e.message);
+  }
+}
+
+// ── Hooks Executor ──
+async function executeHooks(hookType, skillInfo, ownerEmail, result) {
+  try {
+    const hooks = db.prepare(
+      'SELECT * FROM skill_hooks WHERE owner_email=? AND enabled=1 AND hook_type=? AND (skill_id IS NULL OR skill_id=?)'
+    ).all(ownerEmail, hookType, skillInfo.id || null);
+    for (const hook of hooks) {
+      const config = JSON.parse(hook.config || '{}');
+      if (hook.action === 'chatwork_notify') {
+        const roomId = config.room_id;
+        const sysToken = process.env.CHATWORK_SYSTEM_TOKEN;
+        if (roomId && sysToken) {
+          const msg = `[info][title]🔔 ${hookType === 'post_run' ? '実行完了' : '実行開始'}: ${skillInfo.title}[/title]${(result || '').slice(0, 500)}[/info]`;
+          await fetch(`https://api.chatwork.com/v2/rooms/${roomId}/messages`, {
+            method: 'POST',
+            headers: { 'X-ChatWorkToken': sysToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ body: msg }).toString()
+          }).catch(() => {});
+        }
+      } else if (hook.action === 'run_skill' && hookType === 'post_run') {
+        const nextSkillId = config.skill_id;
+        if (nextSkillId) {
+          const nextSkill = db.prepare('SELECT * FROM user_skills WHERE id=? AND owner_email=?').get(nextSkillId, ownerEmail);
+          if (nextSkill) {
+            runSkillBackground({ ...nextSkill, skill_name: nextSkill.name, skill_title: nextSkill.title }, ownerEmail).catch(() => {});
+          }
+        }
+      }
+    }
+  } catch(e) {
+    console.error('[hooks] execution error:', e.message);
+  }
 }
 
 // ── Tool Definitions ──
@@ -1570,6 +1710,29 @@ const TOOLS = [
         confirmed: { type: 'boolean' }
       },
       required: ['file_name', 'slides']
+    }
+  },
+  {
+    name: 'run_subagents',
+    description: '複数のサブタスクを並列サブエージェントで実行する。独立した作業を同時並行で処理できる（最大3つ）。大きなタスクを分割して効率化したいときに使う。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tasks: {
+          type: 'array',
+          description: '並列実行するサブタスクのリスト（最大3件）',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'サブタスクのタイトル' },
+              steps: { type: 'string', description: '実行手順（具体的に記述）' }
+            },
+            required: ['title', 'steps']
+          },
+          maxItems: 3
+        }
+      },
+      required: ['tasks']
     }
   }
 ];
@@ -2544,6 +2707,22 @@ async function executeTool(name, input, user) {
       });
       return { ok: true, id: r.data.id, name: r.data.name, slide_count: slides.length, webViewLink: r.data.webViewLink };
     }
+    case 'run_subagents': {
+      const tasks = (input.tasks || []).slice(0, 3);
+      if (tasks.length === 0) return { error: 'tasks が空です' };
+      audit(user.email, user.name, 'tool.run_subagents', { count: tasks.length, titles: tasks.map(t => t.title) });
+      const results = await Promise.allSettled(tasks.map(t =>
+        runSkillBackground(
+          { skill_name: 'subagent', skill_title: t.title, description: '', steps: t.steps, model: 'sonnet' },
+          user.email
+        )
+      ));
+      return results.map((r, i) => {
+        const val = r.status === 'fulfilled' ? r.value : { ok: false, error: r.reason?.message };
+        const runRow = val.runId ? db.prepare('SELECT result FROM task_runs WHERE id=?').get(val.runId) : null;
+        return { task: tasks[i].title, status: val.ok ? 'done' : 'error', result: val.ok ? (runRow?.result || '完了') : val.error };
+      });
+    }
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -2601,17 +2780,42 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
     const activeTools = allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS;
     const systemPrompt = getSystemPromptForUser(role, user.email);
 
-    const messages = history.map(m => ({ role: m.role, content: m.content }));
+    // Context Compression: 30件超なら古い部分をサマリ化
+    let messages;
+    if (history.length > 30) {
+      const toCompress = history.slice(0, -20);
+      const recentHistory = history.slice(-20);
+      const summary = await compressConversationContext(toCompress);
+      messages = summary
+        ? [
+            { role: 'user', content: `[以前の会話サマリー]\n${summary}` },
+            { role: 'assistant', content: '承知しました。以前の会話内容を把握しています。' },
+            ...recentHistory.map(m => ({ role: m.role, content: m.content }))
+          ]
+        : history.map(m => ({ role: m.role, content: m.content }));
+      res.write(`data: ${JSON.stringify({ contextCompressed: true, savedMessages: toCompress.length })}\n\n`);
+    } else {
+      messages = history.map(m => ({ role: m.role, content: m.content }));
+    }
     // 添付ファイル（画像/PDF）を最新ユーザーメッセージにブロックとして注入
     if (Array.isArray(attachments) && attachments.length > 0 && messages.length > 0) {
       const lastIdx = messages.length - 1;
       const blocks = [];
       for (const a of attachments) {
-        if (!a?.base64 || !a?.mediaType) continue;
-        if (a.kind === 'image') {
-          blocks.push({ type: 'image', source: { type: 'base64', media_type: a.mediaType, data: a.base64 } });
-        } else if (a.kind === 'document') {
-          blocks.push({ type: 'document', source: { type: 'base64', media_type: a.mediaType, data: a.base64 } });
+        if (!a?.mediaType) continue;
+        if (a.file_id) {
+          // Files API: file_idで参照
+          if (a.kind === 'image') {
+            blocks.push({ type: 'image', source: { type: 'file', file_id: a.file_id } });
+          } else {
+            blocks.push({ type: 'document', source: { type: 'file', file_id: a.file_id } });
+          }
+        } else if (a.base64) {
+          if (a.kind === 'image') {
+            blocks.push({ type: 'image', source: { type: 'base64', media_type: a.mediaType, data: a.base64 } });
+          } else if (a.kind === 'document') {
+            blocks.push({ type: 'document', source: { type: 'base64', media_type: a.mediaType, data: a.base64 } });
+          }
         }
       }
       if (blocks.length > 0) {
@@ -2625,15 +2829,24 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
     let totalOutputTokens = 0;
     const mcpServers = getMcpServers();
 
+    // Prompt Caching: ツール定義の最後にキャッシュマーカーを付与
+    const cachedTools = activeTools.length > 0 ? [
+      ...activeTools.slice(0, -1),
+      { ...activeTools[activeTools.length - 1], cache_control: { type: 'ephemeral' } }
+    ] : activeTools;
+    const betaFlags = ['prompt-caching-2024-07-31'];
+    if (mcpServers.length > 0) betaFlags.push('mcp-client-2025-04-04');
+
     while (toolRound < 10) {
       const stream = anthropic.messages.stream({
         model: chatModel,
         max_tokens: useThinking ? 16000 : 4096,
-        system: systemPrompt,
-        tools: activeTools,
+        system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+        tools: cachedTools,
         messages,
+        betas: betaFlags,
         ...(useThinking ? { thinking: { type: 'enabled', budget_tokens: 8000 } } : {}),
-        ...(mcpServers.length > 0 ? { mcp_servers: mcpServers, betas: ['mcp-client-2025-04-04'] } : {})
+        ...(mcpServers.length > 0 ? { mcp_servers: mcpServers } : {})
       });
 
       for await (const ev of stream) {
@@ -2693,6 +2906,8 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
     const insertedMsg = db.prepare('INSERT INTO messages (conversation_id, role, content) VALUES (?,?,?)').run(convId, 'assistant', fullAssistantText);
     recordUsage(user.email, user.name, totalInputTokens, totalOutputTokens, chatModel, 'chat');
     res.write(`data: ${JSON.stringify({ done: true, messageId: insertedMsg.lastInsertRowid })}\n\n`);
+    // Auto-memory: バックグラウンドで記憶抽出（完了を待たない）
+    extractAndSaveMemories(user.email, messages).catch(() => {});
   } catch(e) {
     res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
   }
@@ -3079,14 +3294,24 @@ app.post('/api/skills/:id/run', async (req, res) => {
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
 
+    // Hooks: pre_run
+    await executeHooks('pre_run', skill, req.user.email, prompt).catch(() => {});
+
+    // Prompt Caching: ツール定義をキャッシュ
+    const cachedSkillTools = activeTools.length > 0 ? [
+      ...activeTools.slice(0, -1),
+      { ...activeTools[activeTools.length - 1], cache_control: { type: 'ephemeral' } }
+    ] : activeTools;
+
     const claudeSkillRun = async () => {
       while (toolRound < 10) {
         const stream = anthropic.messages.stream({
           model: 'claude-sonnet-4-6',
           max_tokens: 4096,
-          system: systemPrompt,
-          tools: activeTools,
-          messages
+          system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+          tools: cachedSkillTools,
+          messages,
+          betas: ['prompt-caching-2024-07-31']
         });
 
         for await (const ev of stream) {
@@ -3160,6 +3385,8 @@ app.post('/api/skills/:id/run', async (req, res) => {
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
       .run('done', resultBuffer.slice(0, 2000), runId);
     recordUsage(req.user.email, req.user.name, totalInputTokens, totalOutputTokens, 'claude-sonnet-4-6', 'skill_run');
+    // Hooks: post_run
+    executeHooks('post_run', skill, req.user.email, resultBuffer).catch(() => {});
     res.write(`data: ${JSON.stringify({ done: true, code: 0, runId })}\n\n`);
   } catch(e) {
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
@@ -3168,6 +3395,25 @@ app.post('/api/skills/:id/run', async (req, res) => {
     res.write(`data: ${JSON.stringify({ done: true, code: 1, runId })}\n\n`);
   }
   res.end();
+});
+
+// GET /api/skills/:id/plan — Plan Mode: 実行前プレビュー
+app.get('/api/skills/:id/plan', async (req, res) => {
+  const skill = db.prepare(`SELECT * FROM user_skills WHERE id=? AND (owner_email=? OR (shared=1 AND (shared_with IS NULL OR EXISTS (SELECT 1 FROM json_each(shared_with) WHERE value=?))))`).get(req.params.id, req.user.email, req.user.email);
+  if (!skill) return res.status(404).json({ error: 'Not found' });
+  try {
+    const r = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 800,
+      messages: [{
+        role: 'user',
+        content: `以下のスキルを実行する前に、実行計画を番号付きリストで示してください。各ステップで使用するツール（DBクエリ・Chatwork送信・Drive操作等）を明記してください。\n\nスキル: ${skill.title}\n説明: ${skill.description}\n手順:\n${skill.steps}`
+      }]
+    });
+    res.json({ plan: r.content[0]?.text || '', skill_id: skill.id, title: skill.title });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── 為替レート（USD/JPY）──
@@ -3288,6 +3534,116 @@ app.put('/api/user-settings', (req, res) => {
   `).run(req.user.email, custom_rules.slice(0, 2000));
   audit(req.user.email, req.user.name, 'user_settings.update');
   res.json({ ok: true });
+});
+
+// ── Memories API ──
+app.get('/api/memories', (req, res) => {
+  const rows = db.prepare('SELECT id, memory, importance, created_at FROM user_memories WHERE email=? ORDER BY id DESC LIMIT 20').all(req.user.email);
+  res.json(rows);
+});
+app.delete('/api/memories/:id', (req, res) => {
+  db.prepare('DELETE FROM user_memories WHERE id=? AND email=?').run(req.params.id, req.user.email);
+  res.json({ ok: true });
+});
+app.delete('/api/memories', (req, res) => {
+  db.prepare('DELETE FROM user_memories WHERE email=?').run(req.user.email);
+  res.json({ ok: true });
+});
+
+// ── Skill Hooks API ──
+app.get('/api/skill-hooks', (req, res) => {
+  const hooks = db.prepare('SELECT * FROM skill_hooks WHERE owner_email=? ORDER BY id DESC').all(req.user.email);
+  res.json(hooks);
+});
+app.post('/api/skill-hooks', (req, res) => {
+  const { skill_id, hook_type, action, config } = req.body;
+  if (!hook_type || !action) return res.status(400).json({ error: 'hook_type と action は必須' });
+  const r = db.prepare('INSERT INTO skill_hooks (owner_email, skill_id, hook_type, action, config) VALUES (?,?,?,?,?)').run(req.user.email, skill_id || null, hook_type, action, config ? JSON.stringify(config) : '{}');
+  audit(req.user.email, req.user.name, 'hook.create', { id: r.lastInsertRowid, hook_type, action });
+  res.json({ ok: true, id: r.lastInsertRowid });
+});
+app.patch('/api/skill-hooks/:id', (req, res) => {
+  const hook = db.prepare('SELECT id FROM skill_hooks WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
+  if (!hook) return res.status(404).json({ error: 'not found' });
+  const { enabled } = req.body;
+  if (enabled !== undefined) db.prepare('UPDATE skill_hooks SET enabled=? WHERE id=?').run(enabled ? 1 : 0, req.params.id);
+  res.json({ ok: true });
+});
+app.delete('/api/skill-hooks/:id', (req, res) => {
+  db.prepare('DELETE FROM skill_hooks WHERE id=? AND owner_email=?').run(req.params.id, req.user.email);
+  res.json({ ok: true });
+});
+
+// ── Files API (Anthropic Files API) ──
+app.post('/api/files/upload', apiRateLimit, async (req, res) => {
+  const { filename, mediaType, base64 } = req.body;
+  if (!filename || !mediaType || !base64) return res.status(400).json({ error: 'filename, mediaType, base64 は必須' });
+  const supportedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+  if (!supportedTypes.includes(mediaType)) return res.status(400).json({ error: '未対応ファイル形式' });
+  try {
+    const buffer = Buffer.from(base64, 'base64');
+    const { Blob } = require('buffer');
+    const fileObj = new File([new Blob([buffer], { type: mediaType })], filename, { type: mediaType });
+    const fileResponse = await anthropic.beta.files.upload({ file: fileObj });
+    db.prepare('INSERT INTO uploaded_files (email, file_id, filename, media_type, size_bytes) VALUES (?,?,?,?,?)').run(req.user.email, fileResponse.id, filename, mediaType, buffer.length);
+    audit(req.user.email, req.user.name, 'file.upload', { file_id: fileResponse.id, filename, size: buffer.length });
+    res.json({ ok: true, file_id: fileResponse.id, filename });
+  } catch(e) {
+    serverError(res, e, 'ファイルアップロードに失敗しました');
+  }
+});
+app.get('/api/files', (req, res) => {
+  const files = db.prepare('SELECT id, file_id, filename, media_type, size_bytes, created_at FROM uploaded_files WHERE email=? ORDER BY id DESC LIMIT 50').all(req.user.email);
+  res.json(files);
+});
+app.delete('/api/files/:fileId', async (req, res) => {
+  const file = db.prepare('SELECT id FROM uploaded_files WHERE file_id=? AND email=?').get(req.params.fileId, req.user.email);
+  if (!file) return res.status(404).json({ error: 'not found' });
+  try { await anthropic.beta.files.delete(req.params.fileId); } catch(e) { console.warn('[files] Anthropic delete failed:', e.message); }
+  db.prepare('DELETE FROM uploaded_files WHERE id=?').run(file.id);
+  res.json({ ok: true });
+});
+
+// ── Batch API ──
+app.post('/api/skills/batch', apiRateLimit, async (req, res) => {
+  const { skill_ids } = req.body;
+  if (!Array.isArray(skill_ids) || skill_ids.length < 1 || skill_ids.length > 10) {
+    return res.status(400).json({ error: 'skill_ids は 1〜10 件' });
+  }
+  const sharedCheck = `owner_email=? OR (shared=1 AND (shared_with IS NULL OR EXISTS (SELECT 1 FROM json_each(shared_with) WHERE value=?)))`;
+  const skills = skill_ids.map(id => db.prepare(`SELECT * FROM user_skills WHERE id=? AND (${sharedCheck})`).get(id, req.user.email, req.user.email)).filter(Boolean);
+  if (skills.length === 0) return res.status(404).json({ error: 'スキルが見つかりません' });
+  const role = req.user.role || getUserRole(req.user.email);
+  const systemPrompt = getSystemPromptForUser(role, req.user.email);
+  const requests = skills.map(s => ({
+    custom_id: `skill-${s.id}`,
+    params: {
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: `# ${s.title}\n\n${s.description}\n\n## 実行手順\n\n${s.steps}` }]
+    }
+  }));
+  try {
+    const batch = await anthropic.messages.batches.create({ requests });
+    db.prepare('INSERT INTO skill_batch_jobs (owner_email, batch_id, skill_ids) VALUES (?,?,?)').run(req.user.email, batch.id, JSON.stringify(skill_ids));
+    audit(req.user.email, req.user.name, 'skill.batch', { batch_id: batch.id, count: skills.length });
+    res.json({ ok: true, batch_id: batch.id, status: batch.processing_status, skill_count: skills.length });
+  } catch(e) {
+    serverError(res, e, 'バッチ実行の開始に失敗しました');
+  }
+});
+app.get('/api/skills/batch/:batchId', async (req, res) => {
+  const job = db.prepare('SELECT * FROM skill_batch_jobs WHERE batch_id=? AND owner_email=?').get(req.params.batchId, req.user.email);
+  if (!job) return res.status(404).json({ error: 'not found' });
+  try {
+    const batch = await anthropic.messages.batches.retrieve(req.params.batchId);
+    res.json({ batch_id: batch.id, status: batch.processing_status, request_counts: batch.request_counts, created_at: job.created_at });
+  } catch(e) { serverError(res, e); }
+});
+app.get('/api/skills/batches', (req, res) => {
+  const rows = db.prepare('SELECT * FROM skill_batch_jobs WHERE owner_email=? ORDER BY id DESC LIMIT 20').all(req.user.email);
+  res.json(rows);
 });
 
 // ── Task Runs API ──
@@ -3966,7 +4322,7 @@ app.get('/api/scheduled-tasks', (req, res) => {
 
 // POST /api/scheduled-tasks
 app.post('/api/scheduled-tasks', (req, res) => {
-  const { skill_id, task_type = 'recurring', interval_min = 60, run_at, schedule_type = 'interval', schedule_hour, schedule_minute = 0, schedule_weekday, model = 'sonnet' } = req.body;
+  const { skill_id, task_type = 'recurring', interval_min = 60, run_at, schedule_type = 'interval', schedule_hour, schedule_minute = 0, schedule_weekday, model = 'sonnet', loop_enabled = 0, loop_remaining, loop_interval_min = 60 } = req.body;
 
   let taskData = {};
   if (skill_id) {
@@ -3989,9 +4345,9 @@ app.post('/api/scheduled-tasks', (req, res) => {
   try {
     const result = db.prepare(
       `INSERT INTO scheduled_tasks
-         (owner_email, task_type, skill_id, skill_name, skill_title, description, steps, interval_min, run_at, enabled, next_run_at, schedule_type, schedule_hour, schedule_minute, schedule_weekday, model)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`
-    ).run(req.user.email, task_type, taskData.skill_id, taskData.skill_name, taskData.skill_title, taskData.description, taskData.steps, Number(interval_min), run_at || null, nextRunAt, schedule_type, schedule_hour ?? null, Number(schedule_minute), schedule_weekday ?? null, model);
+         (owner_email, task_type, skill_id, skill_name, skill_title, description, steps, interval_min, run_at, enabled, next_run_at, schedule_type, schedule_hour, schedule_minute, schedule_weekday, model, loop_enabled, loop_remaining, loop_interval_min)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(req.user.email, task_type, taskData.skill_id, taskData.skill_name, taskData.skill_title, taskData.description, taskData.steps, Number(interval_min), run_at || null, nextRunAt, schedule_type, schedule_hour ?? null, Number(schedule_minute), schedule_weekday ?? null, model, loop_enabled ? 1 : 0, loop_remaining ?? null, Number(loop_interval_min));
     res.json({ ok: true, id: result.lastInsertRowid });
   } catch(e) { serverError(res, e); }
 });
@@ -4684,13 +5040,19 @@ async function runSkillBackground(task, ownerEmail) {
         let outTokens = 0;
         let buf = '';
 
+        // Prompt Caching for background tasks
+        const cachedBgTools = activeTools.length > 0 ? [
+          ...activeTools.slice(0, -1),
+          { ...activeTools[activeTools.length - 1], cache_control: { type: 'ephemeral' } }
+        ] : activeTools;
         while (toolRound < 10) {
           const response = await anthropic.messages.create({
             model: modelId,
             max_tokens: 4096,
-            system: bgSystemPrompt,
-            tools: activeTools,
-            messages
+            system: [{ type: 'text', text: bgSystemPrompt, cache_control: { type: 'ephemeral' } }],
+            tools: cachedBgTools,
+            messages,
+            betas: ['prompt-caching-2024-07-31']
           });
           inTokens  += response.usage?.input_tokens  || 0;
           outTokens += response.usage?.output_tokens || 0;
@@ -4809,9 +5171,12 @@ async function runSkillBackground(task, ownerEmail) {
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
       .run('done', resultBuffer.slice(0, 2000), runId);
     audit(ownerEmail, '', 'scheduled_task.ran', { skillName: task.skill_name, runId, model: actualModel });
+    // Hooks: post_run
+    const skillInfo = { id: task.skill_id, title: task.skill_title || task.skill_name };
+    executeHooks('post_run', skillInfo, ownerEmail, resultBuffer).catch(() => {});
     notifyTaskResult(ownerEmail, task.skill_title || task.skill_name, 'done', resultBuffer).catch(() => {});
     if (usedFallback) notifyFallback(ownerEmail, task.skill_title || task.skill_name).catch(() => {});
-    return { ok: true, runId };
+    return { ok: true, runId, resultBuffer };
   } catch(e) {
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
       .run('error', e.message.slice(0, 2000), runId);
@@ -4892,6 +5257,13 @@ function runScheduler() {
       runSkillBackground(task, task.owner_email).then(result => {
         db.prepare("UPDATE scheduled_tasks SET last_status=?, last_result=? WHERE id=?")
           .run(result.ok ? 'done' : 'error', result.error || null, task.id);
+        // Loop: ループ残回数があれば次回を設定
+        if (task.loop_enabled && task.loop_remaining > 0) {
+          const nextLoopAt = toUtcStr(Date.now() + (task.loop_interval_min || 60) * 60 * 1000);
+          db.prepare("UPDATE scheduled_tasks SET enabled=1, next_run_at=?, loop_remaining=loop_remaining-1, loop_count=loop_count+1 WHERE id=?")
+            .run(nextLoopAt, task.id);
+          console.log(`[loop] task ${task.id} (${task.skill_name}) → next at ${nextLoopAt}, remaining: ${task.loop_remaining - 1}`);
+        }
       }).catch(e => {
         db.prepare("UPDATE scheduled_tasks SET last_status='error', last_result=? WHERE id=?")
           .run(e.message.slice(0, 500), task.id);

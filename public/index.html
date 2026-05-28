@@ -1435,6 +1435,13 @@ async function send() {
         if (d.conversationId) {
           currentConvId = d.conversationId;
         }
+        // コンテキスト圧縮通知
+        if (d.contextCompressed) {
+          const notif = document.createElement('div');
+          notif.style.cssText = 'font-size:11px;color:#718096;text-align:center;padding:3px 0;';
+          notif.textContent = `⚡ 長い会話をサマリ化しました（${d.savedMessages}件を圧縮）`;
+          aiBubble.insertBefore(notif, aiBubble.firstChild);
+        }
         // 拡張思考ブロック
         if (d.thinking) {
           thinkingText += d.thinking;
@@ -2475,6 +2482,21 @@ async function addFile(file) {
     r.onerror = reject;
     r.readAsDataURL(file);
   });
+  // Files API: 大きいファイル(>1MB)はAnthropicにアップロードしてfile_idで参照
+  if (file.size > 1024 * 1024) {
+    try {
+      const resp = await fetch('/api/files/upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, mediaType: file.type, base64 })
+      });
+      if (resp.ok) {
+        const d = await resp.json();
+        mediaAttachments.push({ name: file.name, kind, mediaType: file.type, file_id: d.file_id });
+        renderAttachBar();
+        return;
+      }
+    } catch(e) { /* base64フォールバック */ }
+  }
   mediaAttachments.push({ name: file.name, kind, mediaType: file.type, base64 });
   renderAttachBar();
 }

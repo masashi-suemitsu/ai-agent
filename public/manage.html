@@ -218,6 +218,8 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     <button class="tab-btn active" data-tab="tasks"   onclick="switchTab('tasks')">⏰ タスク</button>
     <button class="tab-btn" data-tab="history" onclick="switchTab('history')">📊 実行履歴</button>
     <button class="tab-btn" data-tab="skills"  onclick="switchTab('skills')">⚙️ スキル</button>
+    <button class="tab-btn" data-tab="automation" onclick="switchTab('automation')">🔗 自動化</button>
+    <button class="tab-btn" data-tab="memories" onclick="switchTab('memories')">🧠 メモリ</button>
     <button class="tab-btn" data-tab="rules"   onclick="switchTab('rules')">🔒 権限・ルール</button>
     <button class="tab-btn" data-tab="usage"   onclick="switchTab('usage')">💰 利用状況</button>
   </div>
@@ -253,6 +255,77 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   <!-- ─ スキル ─ -->
   <div class="tab-content" id="tab-skills">
     <div id="skillList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+  </div>
+
+  <!-- ─ 自動化（Hooks・Batch・サブエージェント） ─ -->
+  <div class="tab-content" id="tab-automation">
+    <div style="display:grid;gap:20px;">
+      <!-- Hooks -->
+      <div class="card">
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px;">🔗 フック（Hooks）</div>
+        <div style="font-size:12px;color:var(--text-light);margin-bottom:14px;">スキル実行の前後に自動処理を設定します。</div>
+        <div id="hooksListArea"><div style="color:var(--text-light);font-size:13px;">読み込み中...</div></div>
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px;">新しいフックを追加</div>
+          <div style="display:grid;gap:8px;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <select id="hookSkillSel" style="flex:1;min-width:120px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;">
+                <option value="">すべてのスキル（共通）</option>
+              </select>
+              <select id="hookTypeSel" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;">
+                <option value="pre_run">実行前 (pre_run)</option>
+                <option value="post_run" selected>実行後 (post_run)</option>
+              </select>
+              <select id="hookActionSel" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;" onchange="onHookActionChange()">
+                <option value="chatwork_notify">Chatwork通知</option>
+                <option value="run_skill">スキル連鎖実行</option>
+              </select>
+            </div>
+            <div id="hookConfigArea" style="padding:8px 10px;background:#f7f8fc;border-radius:6px;border:1px solid var(--border);">
+              <div id="hookConfigChatwork">
+                <label style="font-size:12px;color:var(--text-light);">通知先ChatworkルームID</label>
+                <input type="text" id="hookRoomId" placeholder="12345678" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-top:4px;">
+              </div>
+              <div id="hookConfigSkill" style="display:none;">
+                <label style="font-size:12px;color:var(--text-light);">連鎖実行するスキル</label>
+                <select id="hookNextSkillSel" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;margin-top:4px;"></select>
+              </div>
+            </div>
+            <button class="btn btn-primary" onclick="saveHook()" style="width:fit-content;">＋ フックを追加</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Batch API -->
+      <div class="card">
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px;">📦 バッチ実行（Batch API）</div>
+        <div style="font-size:12px;color:var(--text-light);margin-bottom:14px;">複数スキルをまとめてAnthropicのBatch APIで非同期実行します。コストを最大50%削減できます。</div>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;">
+            <label style="font-size:12px;color:var(--text-light);display:block;margin-bottom:4px;">実行するスキルを選択（複数可）</label>
+            <select id="batchSkillSel" multiple style="width:100%;height:100px;padding:4px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;"></select>
+          </div>
+          <button class="btn btn-primary" onclick="startBatch()">📦 バッチ送信</button>
+        </div>
+        <div id="batchResultArea" style="margin-top:12px;"></div>
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+          <div style="font-size:12px;font-weight:700;color:var(--text-light);margin-bottom:8px;">バッチ実行履歴</div>
+          <div id="batchHistoryArea"><div style="color:var(--text-light);font-size:12px;">読み込み中...</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─ 自動メモリ ─ -->
+  <div class="tab-content" id="tab-memories">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div style="font-size:14px;font-weight:700;">🧠 自動メモリ</div>
+        <button class="btn btn-danger" onclick="clearAllMemories()" style="font-size:11px;padding:4px 10px;">すべて削除</button>
+      </div>
+      <div style="font-size:12px;color:var(--text-light);margin-bottom:16px;">会話から自動的に抽出・保存された記憶です。次回以降の会話で自動的に参照されます。</div>
+      <div id="memoriesListArea"><div style="color:var(--text-light);font-size:13px;">読み込み中...</div></div>
+    </div>
   </div>
 
   <!-- ─ 権限・ルール ─ -->
@@ -465,11 +538,27 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   </div>
 </div>
 
-<!-- ─ Run Confirm Modal ─ -->
+<!-- ─ Run Confirm Modal (Plan Mode) ─ -->
 <div class="modal-overlay" id="runConfirmModal" onclick="if(event.target===this)closeRunConfirmModal()">
-  <div class="modal-box" style="max-width:400px;">
+  <div class="modal-box" style="max-width:460px;">
     <div class="modal-title">▶ 今すぐ実行</div>
-    <div class="modal-subtitle" id="runConfirmTitle" style="margin-bottom:16px;"></div>
+    <div class="modal-subtitle" id="runConfirmTitle" style="margin-bottom:12px;"></div>
+    <!-- Plan Mode: 実行計画プレビュー -->
+    <div id="planModeArea" style="margin-bottom:12px;display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:12px;font-weight:700;color:var(--primary);">📋 実行計画（Plan Mode）</span>
+        <button onclick="loadPlan()" style="font-size:11px;border:1px solid var(--primary);color:var(--primary);background:var(--primary-light);border-radius:5px;padding:2px 8px;cursor:pointer;">更新</button>
+      </div>
+      <div id="planContent" style="background:#f0f4ff;border:1px solid #c3d0ff;border-radius:8px;padding:12px 14px;font-size:12px;line-height:1.8;white-space:pre-wrap;max-height:220px;overflow-y:auto;color:var(--text);">
+        <span style="color:var(--text-light);">プランを読み込み中...</span>
+      </div>
+    </div>
+    <button id="planModeToggle" onclick="togglePlanMode()" style="font-size:11px;border:1px solid var(--border);color:var(--text-light);background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:5px;">📋 実行計画を確認する</button>
+    <!-- Step Display Area -->
+    <div id="runStepArea" style="display:none;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:#f7f8fc;">
+      <div style="font-size:11px;font-weight:700;color:var(--text-light);margin-bottom:6px;">実行ステップ</div>
+      <div id="runStepList" style="font-size:12px;line-height:1.7;"></div>
+    </div>
     <div id="runEstimateArea" style="background:#f7f8fc;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:4px;font-size:13px;line-height:1.9;color:var(--text);">
       <span style="color:var(--text-light);">コスト算出中...</span>
     </div>
@@ -555,6 +644,28 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <button type="button" class="recommend-btn" id="modalRecommendBtn" onclick="recommendModel('modal')">🤖 AIにおすすめを聞く</button>
       <div id="modalRecommendResult" class="recommend-result" style="display:none;"></div>
     </div>
+    <!-- Loop設定 -->
+    <div class="modal-field">
+      <label style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="mgLoopEnabled" onchange="mgOnLoopChange()"> ループ実行（完了後に自動で繰り返す）
+      </label>
+      <div id="mgLoopSub" style="display:none;margin-top:8px;padding:10px 12px;background:#f7f8fc;border-radius:8px;border:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <label style="font-size:12px;color:var(--text-light);font-weight:normal;">繰り返し回数上限</label>
+          <input type="number" id="mgLoopRemaining" min="1" max="100" value="5" style="width:70px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:14px;"> 回
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label style="font-size:12px;color:var(--text-light);font-weight:normal;">次回実行まで</label>
+          <select id="mgLoopInterval" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+            <option value="5">5分後</option>
+            <option value="15">15分後</option>
+            <option value="30" selected>30分後</option>
+            <option value="60">1時間後</option>
+            <option value="120">2時間後</option>
+          </select>
+        </div>
+      </div>
+    </div>
     <div class="modal-btns">
       <button class="modal-btn-cancel" onclick="closeModal()">キャンセル</button>
       <button class="modal-btn-save" id="modalSaveBtn" onclick="saveSchedule()">登録する</button>
@@ -622,7 +733,7 @@ function renderUserBadge(me) {
 }
 
 // ─ タブ切替 ─
-const TAB_NAMES = ['tasks','history','skills','rules','usage','dashboard','users'];
+const TAB_NAMES = ['tasks','history','skills','automation','memories','rules','usage','dashboard','users'];
 
 function switchTab(name) {
   if (!TAB_NAMES.includes(name)) name = 'tasks';
@@ -635,6 +746,8 @@ function switchTab(name) {
   if (name === 'users')     loadUsers();
   if (name === 'usage')     loadUsage();
   if (name === 'dashboard') { loadDashStats(); loadDashAudit(); }
+  if (name === 'automation') { loadHooks(); loadBatchHistory(); }
+  if (name === 'memories') loadMemories();
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
 }
 
@@ -893,13 +1006,19 @@ function renderSkills(skills) {
 
 let _runConfirmSkillId = null;
 let _runConfirmBtn = null;
+let _planModeOn = false;
 
 async function runSkillNow(id, title, btn) {
   _runConfirmSkillId = id;
   _runConfirmBtn = btn;
+  _planModeOn = false;
   document.getElementById('runConfirmTitle').textContent = title;
   document.getElementById('runConfirmBtn').disabled = true;
   document.getElementById('runEstimateArea').innerHTML = '<span style="color:var(--text-light);">コスト算出中...</span>';
+  document.getElementById('planModeArea').style.display = 'none';
+  document.getElementById('planModeToggle').textContent = '📋 実行計画を確認する';
+  document.getElementById('runStepArea').style.display = 'none';
+  document.getElementById('runStepList').innerHTML = '';
   document.getElementById('runConfirmModal').classList.add('open');
 
   try {
@@ -923,11 +1042,52 @@ async function runSkillNow(id, title, btn) {
   document.getElementById('runConfirmBtn').disabled = false;
 }
 
+async function togglePlanMode() {
+  _planModeOn = !_planModeOn;
+  const area = document.getElementById('planModeArea');
+  const toggle = document.getElementById('planModeToggle');
+  if (_planModeOn) {
+    area.style.display = '';
+    toggle.textContent = '📋 実行計画を非表示';
+    await loadPlan();
+  } else {
+    area.style.display = 'none';
+    toggle.textContent = '📋 実行計画を確認する';
+  }
+}
+
+async function loadPlan() {
+  const id = _runConfirmSkillId;
+  if (!id) return;
+  const planContent = document.getElementById('planContent');
+  planContent.innerHTML = '<span style="color:var(--text-light);">プランを生成中...</span>';
+  try {
+    const r = await fetch(`/api/skills/${id}/plan`);
+    const d = await r.json();
+    planContent.textContent = d.plan || '（プランを取得できませんでした）';
+  } catch(e) {
+    planContent.textContent = 'エラー: ' + e.message;
+  }
+}
+
 function closeRunConfirmModal() {
   document.getElementById('runConfirmModal').classList.remove('open');
   _runConfirmSkillId = null;
   _runConfirmBtn = null;
+  _planModeOn = false;
 }
+
+const TOOL_LABELS = {
+  query_corp_db: 'DBを照会中', list_chatwork_rooms: 'Chatworkルーム取得中',
+  get_chatwork_messages: 'Chatworkメッセージ取得中', send_chatwork_message: 'Chatworkに送信中',
+  send_system_notification: 'システム通知を送信中', list_drive_files: 'Driveファイル一覧取得中',
+  read_drive_file: 'Driveファイルを読取中', list_calendar_events: 'カレンダー取得中',
+  list_gmail_messages: 'メール取得中', send_gmail: 'メール送信中',
+  call_oss_ai: 'OSS AIを呼び出し中', run_subagents: 'サブエージェントを並列実行中',
+  update_sheet_range: 'スプレッドシートを更新中', append_sheet_rows: 'スプレッドシートに追記中',
+  create_drive_file: 'Driveファイルを作成中', generate_pdf_report: 'PDFを生成中',
+  create_pptx: 'PowerPointを作成中', fetch_url: 'URLを取得中',
+};
 
 async function doRunSkillNow() {
   const id = _runConfirmSkillId;
@@ -935,6 +1095,11 @@ async function doRunSkillNow() {
   closeRunConfirmModal();
   if (!id) return;
   if (btn) { btn.disabled = true; btn.textContent = '実行中...'; }
+  // Step display
+  const stepArea = document.getElementById('runStepArea');
+  const stepList = document.getElementById('runStepList');
+  stepArea.style.display = '';
+  stepList.innerHTML = '';
   try {
     const resp = await fetch(`/api/skills/${id}/run`, { method: 'POST' });
     const reader = resp.body.getReader();
@@ -949,14 +1114,44 @@ async function doRunSkillNow() {
         if (!line.startsWith('data:')) continue;
         try {
           const d = JSON.parse(line.slice(5));
-          if (d.done && btn) { btn.textContent = '✓ 実行完了'; setTimeout(() => { btn.disabled = false; btn.textContent = '▶ 今すぐ実行'; }, 3000); }
+          if (d.tool) {
+            const label = TOOL_LABELS[d.tool] || d.tool;
+            const elId = `step-${d.tool}-${Date.now()}`;
+            if (d.status === 'running') {
+              const el = document.createElement('div');
+              el.id = elId;
+              el.dataset.tool = d.tool;
+              el.innerHTML = `<span style="display:inline-block;width:8px;height:8px;background:#f6ad55;border-radius:50%;margin-right:6px;animation:pulse .8s infinite;"></span>${label}`;
+              el.style.cssText = 'padding:2px 0;color:var(--text);';
+              stepList.appendChild(el);
+            } else {
+              const running = [...stepList.querySelectorAll(`[data-tool="${d.tool}"]`)].reverse()[0];
+              if (running) {
+                const icon = d.status === 'done' ? '✓' : '✕';
+                const color = d.status === 'done' ? '#48bb78' : '#e53e3e';
+                running.innerHTML = `<span style="color:${color};margin-right:6px;">${icon}</span>${label.replace('中', d.status === 'done' ? '完了' : 'エラー')}`;
+              }
+            }
+          }
+          if (d.done && btn) {
+            const icon = d.code === 0 ? '✓ 実行完了' : '⚠ 実行エラー';
+            btn.textContent = icon;
+            setTimeout(() => { btn.disabled = false; btn.textContent = '▶ 今すぐ実行'; stepArea.style.display = 'none'; }, 4000);
+            loadHistory();
+          }
         } catch {}
       }
     }
   } catch(e) {
     alert(e.message);
     if (btn) { btn.disabled = false; btn.textContent = '▶ 今すぐ実行'; }
+    stepArea.style.display = 'none';
   }
+}
+
+function mgOnLoopChange() {
+  const en = document.getElementById('mgLoopEnabled').checked;
+  document.getElementById('mgLoopSub').style.display = en ? '' : 'none';
 }
 
 function openEditTask(id) {
@@ -1370,6 +1565,13 @@ async function saveSchedule() {
         body.schedule_hour = parseInt(document.getElementById('mgWeeklyHour').value);
         body.schedule_minute = parseInt(document.getElementById('mgWeeklyMin').value);
       }
+    }
+    // Loop設定
+    const loopEnabled = document.getElementById('mgLoopEnabled').checked;
+    if (loopEnabled) {
+      body.loop_enabled = 1;
+      body.loop_remaining = parseInt(document.getElementById('mgLoopRemaining').value) || 5;
+      body.loop_interval_min = parseInt(document.getElementById('mgLoopInterval').value) || 30;
     }
     const resp = await fetch('/api/scheduled-tasks', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1852,6 +2054,132 @@ function switchDashScope(s) {
   loadDashStats();
   loadDashAudit();
 }
+
+// ── Hooks ──
+async function loadHooks() {
+  const [hooksRes, skillsRes] = await Promise.all([fetch('/api/skill-hooks'), fetch('/api/skills')]);
+  const hooks = await hooksRes.json();
+  const skills = await skillsRes.json();
+  // populate skill selects
+  const hookSkillSel = document.getElementById('hookSkillSel');
+  const hookNextSkillSel = document.getElementById('hookNextSkillSel');
+  const batchSkillSel = document.getElementById('batchSkillSel');
+  if (hookSkillSel) {
+    hookSkillSel.innerHTML = '<option value="">すべてのスキル（共通）</option>' + skills.map(s => `<option value="${s.id}">${esc(s.title)}</option>`).join('');
+  }
+  if (hookNextSkillSel) {
+    hookNextSkillSel.innerHTML = '<option value="">選択...</option>' + skills.map(s => `<option value="${s.id}">${esc(s.title)}</option>`).join('');
+  }
+  if (batchSkillSel) {
+    batchSkillSel.innerHTML = skills.map(s => `<option value="${s.id}">${esc(s.title)}</option>`).join('');
+  }
+  const area = document.getElementById('hooksListArea');
+  if (!area) return;
+  if (!hooks.length) { area.innerHTML = '<div style="color:var(--text-light);font-size:12px;">フックが登録されていません</div>'; return; }
+  const skillMap = Object.fromEntries(skills.map(s => [s.id, s.title]));
+  area.innerHTML = hooks.map(h => {
+    const config = JSON.parse(h.config || '{}');
+    const skillLabel = h.skill_id ? (skillMap[h.skill_id] || `ID:${h.skill_id}`) : 'すべてのスキル';
+    const actionLabel = h.action === 'chatwork_notify' ? `Chatwork通知 (ルーム: ${config.room_id || '未設定'})` : `スキル連鎖 (ID: ${config.skill_id || '未設定'})`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;background:#fff;">
+      <div style="flex:1;font-size:12px;">
+        <span style="font-weight:600;">${esc(skillLabel)}</span>
+        <span style="color:var(--text-light);margin:0 6px;">›</span>
+        <span style="background:#e2e8f0;border-radius:4px;padding:1px 6px;font-size:11px;">${h.hook_type}</span>
+        <span style="color:var(--text-light);margin:0 6px;">›</span>
+        <span>${esc(actionLabel)}</span>
+      </div>
+      <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+        <input type="checkbox" ${h.enabled ? 'checked' : ''} onchange="toggleHook(${h.id}, this.checked)"> 有効
+      </label>
+      <button class="btn btn-danger" style="padding:3px 8px;font-size:11px;" onclick="deleteHook(${h.id})">削除</button>
+    </div>`;
+  }).join('');
+}
+function onHookActionChange() {
+  const action = document.getElementById('hookActionSel').value;
+  document.getElementById('hookConfigChatwork').style.display = action === 'chatwork_notify' ? '' : 'none';
+  document.getElementById('hookConfigSkill').style.display = action === 'run_skill' ? '' : 'none';
+}
+async function saveHook() {
+  const skill_id = document.getElementById('hookSkillSel').value || null;
+  const hook_type = document.getElementById('hookTypeSel').value;
+  const action = document.getElementById('hookActionSel').value;
+  const config = action === 'chatwork_notify'
+    ? { room_id: document.getElementById('hookRoomId').value }
+    : { skill_id: parseInt(document.getElementById('hookNextSkillSel').value) || null };
+  const r = await fetch('/api/skill-hooks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ skill_id, hook_type, action, config }) });
+  if (r.ok) { await loadHooks(); } else alert('保存失敗');
+}
+async function toggleHook(id, enabled) {
+  await fetch(`/api/skill-hooks/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });
+}
+async function deleteHook(id) {
+  if (!confirm('このフックを削除しますか？')) return;
+  await fetch(`/api/skill-hooks/${id}`, { method: 'DELETE' });
+  await loadHooks();
+}
+
+// ── Batch API ──
+async function startBatch() {
+  const sel = document.getElementById('batchSkillSel');
+  const skill_ids = [...sel.selectedOptions].map(o => parseInt(o.value));
+  if (skill_ids.length === 0) { alert('スキルを選択してください'); return; }
+  const r = await fetch('/api/skills/batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ skill_ids }) });
+  const d = await r.json();
+  const area = document.getElementById('batchResultArea');
+  if (r.ok) {
+    area.innerHTML = `<div style="background:#f0fff4;border:1px solid #9ae6b4;border-radius:7px;padding:10px 12px;font-size:12px;color:#276749;">
+      ✅ バッチ送信完了<br>Batch ID: <code>${d.batch_id}</code><br>スキル数: ${d.skill_count}件<br>
+      <span style="color:var(--text-light);">処理完了まで数分かかります。</span>
+    </div>`;
+    loadBatchHistory();
+  } else {
+    area.innerHTML = `<div style="color:var(--danger);font-size:12px;">エラー: ${esc(d.error)}</div>`;
+  }
+}
+async function loadBatchHistory() {
+  const r = await fetch('/api/skills/batches');
+  const batches = await r.json();
+  const area = document.getElementById('batchHistoryArea');
+  if (!area) return;
+  if (!batches.length) { area.innerHTML = '<div style="color:var(--text-light);font-size:12px;">バッチ実行履歴がありません</div>'; return; }
+  area.innerHTML = batches.map(b => `
+    <div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">
+      <span style="font-family:monospace;font-size:11px;color:var(--text-light);">${b.batch_id.slice(0, 20)}...</span>
+      <span class="badge badge-${b.status === 'ended' ? 'green' : 'orange'}">${b.status}</span>
+      <span style="color:var(--text-light);">${fmtDt(b.created_at)}</span>
+    </div>`).join('');
+}
+
+// ── Memories ──
+async function loadMemories() {
+  const r = await fetch('/api/memories');
+  const memories = await r.json();
+  const area = document.getElementById('memoriesListArea');
+  if (!area) return;
+  if (!memories.length) {
+    area.innerHTML = '<div style="color:var(--text-light);font-size:13px;padding:20px 0;text-align:center;">会話からまだメモリが保存されていません。<br><small>チャットを続けると自動で学習されます。</small></div>';
+    return;
+  }
+  area.innerHTML = memories.map(m => `
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;font-size:13px;line-height:1.6;">${esc(m.memory)}</div>
+      <div style="font-size:11px;color:var(--text-light);flex-shrink:0;">${fmtDt(m.created_at)}</div>
+      <button class="btn btn-danger" style="padding:2px 8px;font-size:11px;flex-shrink:0;" onclick="deleteMemory(${m.id})">削除</button>
+    </div>`).join('');
+}
+async function deleteMemory(id) {
+  await fetch(`/api/memories/${id}`, { method: 'DELETE' });
+  await loadMemories();
+}
+async function clearAllMemories() {
+  if (!confirm('すべてのメモリを削除しますか？')) return;
+  await fetch('/api/memories', { method: 'DELETE' });
+  await loadMemories();
+}
+
+
 </script>
 </body>
 </html>
