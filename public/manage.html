@@ -178,12 +178,19 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
 
   <!-- ─ 定期タスク ─ -->
   <div class="tab-content active" id="tab-tasks">
-    <div class="filter-bar">
-      <button class="filter-btn active" onclick="filterTasks('all', this)">すべて</button>
-      <button class="filter-btn" onclick="filterTasks('enabled', this)">有効のみ</button>
-      <button class="filter-btn" onclick="filterTasks('disabled', this)">停止中のみ</button>
+    <div style="margin-bottom:18px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text-light);margin-bottom:10px;letter-spacing:.03em;">マイタスク</div>
+      <div class="filter-bar" style="margin-bottom:12px;">
+        <button class="filter-btn active" onclick="filterTasks('all', this)">すべて</button>
+        <button class="filter-btn" onclick="filterTasks('enabled', this)">有効のみ</button>
+        <button class="filter-btn" onclick="filterTasks('disabled', this)">停止中のみ</button>
+      </div>
+      <div id="myTaskList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
     </div>
-    <div id="taskList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+    <div>
+      <div style="font-size:13px;font-weight:700;color:var(--text-light);margin-bottom:10px;letter-spacing:.03em;">チームのタスク</div>
+      <div id="teamTaskList"><div class="empty"><div class="empty-icon">⏳</div><p>読み込み中...</p></div></div>
+    </div>
   </div>
 
   <!-- ─ 実行履歴 ─ -->
@@ -431,6 +438,8 @@ let currentUser = null;
 let modalSkillId = null;
 const _taskCache = {};
 const _skillCache = {};
+let _usdJpy = 150;
+let _usdJpyUpdatedAt = null;
 
 // ─ 初期化 ─
 (async () => {
@@ -445,6 +454,9 @@ const _skillCache = {};
     btn.onclick = () => switchTab('users');
     nav.appendChild(btn);
   }
+  fetch('/api/exchange-rate').then(r => r.json()).then(d => {
+    if (d.usd_jpy && d.usd_jpy > 50) { _usdJpy = d.usd_jpy; _usdJpyUpdatedAt = d.updated_at; }
+  }).catch(() => {});
   await Promise.all([loadTasks(), loadSkills()]);
   renderRules(currentUser.role);
   loadCustomRules();
@@ -486,76 +498,128 @@ async function loadTasks() {
     allTasks = await fetch('/api/scheduled-tasks').then(r => r.json());
     renderTasks(allTasks);
   } catch(e) {
-    document.getElementById('taskList').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>${esc(e.message)}</p></div>`;
+    document.getElementById('myTaskList').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>${esc(e.message)}</p></div>`;
   }
 }
 
 function filterTasks(mode, btn) {
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  const filtered = mode === 'enabled'  ? allTasks.filter(t => t.enabled) :
-                   mode === 'disabled' ? allTasks.filter(t => !t.enabled) : allTasks;
-  renderTasks(filtered);
+  // フィルターはマイタスクのみに適用（チームタスクは全件表示）
+  const myTasks = allTasks.filter(t => t.owner_email === currentUser?.email);
+  const filtered = mode === 'enabled'  ? myTasks.filter(t => t.enabled) :
+                   mode === 'disabled' ? myTasks.filter(t => !t.enabled) : myTasks;
+  // マイタスク部分だけ再描画
+  const myEl = document.getElementById('myTaskList');
+  if (!filtered.length) {
+    myEl.innerHTML = `<div class="empty"><div class="empty-icon">⏰</div><h3>条件に合うタスクがありません</h3></div>`;
+  } else {
+    myEl.innerHTML = filtered.map(t => renderMyTaskCard(t)).join('');
+  }
 }
 
 function renderTasks(tasks) {
-  const el = document.getElementById('taskList');
-  if (!tasks.length) {
-    el.innerHTML = `<div class="empty">
+  tasks.forEach(t => { _taskCache[t.id] = t; });
+  const myTasks   = tasks.filter(t => t.owner_email === currentUser?.email);
+  const teamTasks = tasks.filter(t => t.owner_email !== currentUser?.email && t.shared);
+
+  // ── マイタスク ──
+  const myEl = document.getElementById('myTaskList');
+  if (!myTasks.length) {
+    myEl.innerHTML = `<div class="empty">
       <div class="empty-icon">⏰</div>
       <h3>定期タスクがありません</h3>
       <p>チャット画面のスキル一覧から ⏰ ボタンで登録できます。<br><a href="/">チャット画面へ</a></p>
     </div>`;
-    return;
+  } else {
+    myEl.innerHTML = myTasks.map(t => renderMyTaskCard(t)).join('');
   }
-  tasks.forEach(t => { _taskCache[t.id] = t; });
-  el.innerHTML = tasks.map(t => {
-    const isOnce = t.task_type === 'once';
-    const nextRun  = fmtDt(t.next_run_at);
-    const lastRun  = fmtDt(t.last_run_at);
-    const statusBadge = t.last_status ? `<span class="badge ${statusColor(t.last_status)}">${statusLabel(t.last_status)}</span>` : '';
-    const typeBadge = isOnce
-      ? '<span class="badge" style="background:#e9d8fd;color:#6b46c1;">単発</span>'
-      : '<span class="badge" style="background:#bee3f8;color:#2b6cb0;">定期</span>';
-    const enabledBadge = t.enabled
-      ? '<span class="badge badge-green">▶ 有効</span>'
-      : `<span class="badge badge-gray">${isOnce && t.last_status === 'done' ? '✓ 実行済' : '⏸ 停止中'}</span>`;
-    const modelLabel = modelDisplayName(t.model);
-    const scheduleMeta = isOnce
-      ? `<span>実行日時: ${nextRun}</span><span>前回: ${lastRun}</span><span>🤖 ${esc(modelLabel)}</span>`
-      : `<span>🔄 ${esc(scheduleLabel(t))}</span><span>次回: ${nextRun}</span><span>前回: ${lastRun}</span><span>🤖 ${esc(modelLabel)}</span>`;
-    return `<div class="card" id="task-card-${t.id}">
-      <div class="card-header">
-        <div class="card-title">${typeBadge} ${esc(t.skill_title || t.skill_name)}</div>
-        <div class="card-badges">${enabledBadge}${statusBadge}</div>
-      </div>
-      <div class="card-meta">${scheduleMeta}</div>
-      <div class="linked-skill">
-        <span class="linked-skill-label">スキル</span>
-        <span>⚙️ ${esc(t.skill_name)}</span>
-      </div>
-      ${t.steps ? `<button class="steps-btn" onclick="toggleSteps('task-steps-${t.id}', this)">📋 指示内容を確認 <span>▼</span></button>
-      <div class="steps-body" id="task-steps-${t.id}">${esc(t.steps)}</div>` : ''}
-      ${t.last_result ? (() => {
-        const preview = t.last_result.slice(0, 200);
-        const hasMore = t.last_result.length > 200;
-        return `<div style="margin-top:8px;padding:8px 10px;background:#f7f8fc;border-radius:7px;font-size:12px;color:var(--text-light);line-height:1.6;">${esc(preview)}${hasMore ? '…' : ''}</div>
-        ${hasMore ? `<button class="steps-btn" style="margin-top:4px;" onclick="openResultModal_t(${t.id})">📄 全文を表示</button>` : ''}`;
-      })() : ''}
-      <div class="card-actions">
-        <div class="toggle-wrap">
-          <label class="toggle">
-            <input type="checkbox" ${t.enabled ? 'checked' : ''} onchange="toggleTask(${t.id}, this.checked)">
-            <span class="toggle-slider"></span>
-          </label>
-          <span class="toggle-label" id="task-toggle-label-${t.id}">${t.enabled ? '有効' : (isOnce && t.last_status === 'done' ? '実行済' : '停止中')}</span>
-        </div>
-        <button class="btn btn-outline" onclick="runTaskNow(${t.id}, this)" title="今すぐ実行">▶ 実行</button>
-        <button class="btn btn-outline" onclick="openEditTask(${t.id})">✏️ 編集</button>
-        <button class="btn btn-danger" onclick="deleteTask(${t.id})">削除</button>
-      </div>
+
+  // ── チームのタスク ──
+  const teamEl = document.getElementById('teamTaskList');
+  if (!teamTasks.length) {
+    teamEl.innerHTML = `<div class="empty">
+      <div class="empty-icon">🌐</div>
+      <p style="color:var(--text-light);font-size:13px;">チームに共有されたタスクはありません</p>
     </div>`;
-  }).join('');
+  } else {
+    teamEl.innerHTML = teamTasks.map(t => renderTeamTaskCard(t)).join('');
+  }
+}
+
+function renderMyTaskCard(t) {
+  const isOnce = t.task_type === 'once';
+  const nextRun = fmtDt(t.next_run_at);
+  const lastRun = fmtDt(t.last_run_at);
+  const statusBadge = t.last_status ? `<span class="badge ${statusColor(t.last_status)}">${statusLabel(t.last_status)}</span>` : '';
+  const typeBadge = isOnce
+    ? '<span class="badge" style="background:#e9d8fd;color:#6b46c1;">単発</span>'
+    : '<span class="badge" style="background:#bee3f8;color:#2b6cb0;">定期</span>';
+  const enabledBadge = t.enabled
+    ? '<span class="badge badge-green">▶ 有効</span>'
+    : `<span class="badge badge-gray">${isOnce && t.last_status === 'done' ? '✓ 実行済' : '⏸ 停止中'}</span>`;
+  const modelLabel = modelDisplayName(t.model);
+  const scheduleMeta = isOnce
+    ? `<span>実行日時: ${nextRun}</span><span>前回: ${lastRun}</span><span>🤖 ${esc(modelLabel)}</span>`
+    : `<span>🔄 ${esc(scheduleLabel(t))}</span><span>次回: ${nextRun}</span><span>前回: ${lastRun}</span><span>🤖 ${esc(modelLabel)}</span>`;
+  return `<div class="card" id="task-card-${t.id}">
+    <div class="card-header">
+      <div class="card-title">${typeBadge} ${esc(t.skill_title || t.skill_name)}</div>
+      <div class="card-badges">${enabledBadge}${statusBadge}</div>
+    </div>
+    <div class="card-meta">${scheduleMeta}</div>
+    <div class="linked-skill">
+      <span class="linked-skill-label">スキル</span>
+      <span>⚙️ ${esc(t.skill_name)}</span>
+    </div>
+    ${t.steps ? `<button class="steps-btn" onclick="toggleSteps('task-steps-${t.id}', this)">📋 指示内容を確認 <span>▼</span></button>
+    <div class="steps-body" id="task-steps-${t.id}">${esc(t.steps)}</div>` : ''}
+    <div class="card-actions">
+      <div class="toggle-wrap">
+        <label class="toggle">
+          <input type="checkbox" ${t.enabled ? 'checked' : ''} onchange="toggleTask(${t.id}, this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label" id="task-toggle-label-${t.id}">${t.enabled ? '有効' : (isOnce && t.last_status === 'done' ? '実行済' : '停止中')}</span>
+      </div>
+      <button class="btn ${t.shared ? 'btn-primary' : 'btn-outline'}" onclick="toggleShareTask(${t.id}, ${!t.shared})" title="${t.shared ? 'クリックで非公開に' : 'チームに共有する'}">
+        ${t.shared ? '🌐 共有中' : '🔒 共有する'}
+      </button>
+      <button class="btn btn-outline" onclick="runTaskNow(${t.id}, this)" title="今すぐ実行">▶ 実行</button>
+      <button class="btn btn-outline" onclick="openEditTask(${t.id})">✏️ 編集</button>
+      <button class="btn btn-danger" onclick="deleteTask(${t.id})">削除</button>
+    </div>
+  </div>`;
+}
+
+function renderTeamTaskCard(t) {
+  const isOnce = t.task_type === 'once';
+  const typeBadge = isOnce
+    ? '<span class="badge" style="background:#e9d8fd;color:#6b46c1;">単発</span>'
+    : '<span class="badge" style="background:#bee3f8;color:#2b6cb0;">定期</span>';
+  const ownerLabel = t.owner_name || (t.owner_email ? t.owner_email.split('@')[0] : '');
+  const modelLabel = modelDisplayName(t.model);
+  const scheduleMeta = isOnce
+    ? `<span>🤖 ${esc(modelLabel)}</span>`
+    : `<span>🔄 ${esc(scheduleLabel(t))}</span><span>🤖 ${esc(modelLabel)}</span>`;
+  return `<div class="card">
+    <div class="card-header">
+      <div class="card-title">${typeBadge} ${esc(t.skill_title || t.skill_name)}</div>
+      <div class="card-badges">
+        <span class="badge" style="background:#e8f5e9;color:#2e7d32;font-size:10px;">by ${esc(ownerLabel)}</span>
+      </div>
+    </div>
+    <div class="card-meta">${scheduleMeta}</div>
+    <div class="linked-skill">
+      <span class="linked-skill-label">スキル</span>
+      <span>⚙️ ${esc(t.skill_name)}</span>
+    </div>
+    ${t.steps ? `<button class="steps-btn" onclick="toggleSteps('team-task-steps-${t.id}', this)">📋 指示内容を確認 <span>▼</span></button>
+    <div class="steps-body" id="team-task-steps-${t.id}">${esc(t.steps)}</div>` : ''}
+    <div class="card-actions">
+      <button class="btn btn-primary" onclick="runTaskNow(${t.id}, this)" title="このタスクを今すぐ実行">▶ 実行する</button>
+    </div>
+  </div>`;
 }
 
 function openIntervalEdit(id, current) {
@@ -607,6 +671,16 @@ async function runTaskNow(id, btn) {
 async function deleteTask(id) {
   if (!confirm('この定期タスクを削除しますか？')) return;
   await fetch(`/api/scheduled-tasks/${id}`, { method: 'DELETE' });
+  await loadTasks();
+}
+
+async function toggleShareTask(id, shared) {
+  const resp = await fetch(`/api/scheduled-tasks/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shared })
+  });
+  if (!resp.ok) { alert('共有設定の変更に失敗しました'); return; }
   await loadTasks();
 }
 
@@ -685,12 +759,13 @@ async function runSkillNow(id, title, btn) {
     const inp = (est.input_tokens || 0).toLocaleString();
     const out = (est.output_tokens || 0).toLocaleString();
     const rounds = est.estimated_rounds || 1;
+    const fxRate = est.usd_jpy || _usdJpy;
     document.getElementById('runEstimateArea').innerHTML = `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;">
         <span style="color:var(--text-light);">入力トークン(推定)</span><span style="font-weight:600;">${inp}</span>
         <span style="color:var(--text-light);">出力トークン(推定)</span><span style="font-weight:600;">${out}</span>
         <span style="color:var(--text-light);">ツール呼び出し(推定)</span><span style="font-weight:600;">${rounds} 回</span>
-        <span style="color:var(--text-light);">コスト見込み</span><span style="font-weight:700;color:${jpy >= 1 ? '#e53e3e' : '#2b6cb0'};">約 ${jpy === 0 ? '< ¥1' : '¥' + jpy}</span>
+        <span style="color:var(--text-light);">コスト見込み</span><span style="font-weight:700;color:${jpy >= 1 ? '#e53e3e' : '#2b6cb0'};">約 ${jpy === 0 ? '< ¥1' : '¥' + jpy}<span style="font-size:10px;font-weight:400;color:var(--text-light);margin-left:4px;">¥${fxRate}/$</span></span>
       </div>`;
   } catch {
     document.getElementById('runEstimateArea').innerHTML = '<span style="color:var(--text-light);">見積もりを取得できませんでした</span>';
@@ -1158,20 +1233,21 @@ function toggleSteps(id, btn) {
 }
 
 // ─ モデル選択 ─
+// input_per_1m / output_per_1m: USD per 1M tokens（典型的な1回の実行: 入力2800tok + 出力1000tok）
 const MODEL_OPTIONS = [
-  { key: 'sonnet',  name: 'Claude Sonnet 4.6', provider: 'Anthropic',   cost_label: '約3〜4円/回',  quality: 5, speed: 3, kospa: 3, tags: ['高品質', 'ツール連携安定', '複雑な判断'],      best_for: '重要な業務・複雑な判断・品質最優先タスク' },
-  { key: 'haiku',   name: 'Claude Haiku 4.5',  provider: 'Anthropic',   cost_label: '約1円/回',     quality: 3, speed: 5, kospa: 4, tags: ['高速', '低コスト', 'シンプル作業'],            best_for: 'シンプルな通知・定型データ取得・高頻度実行' },
-  { key: 'openrouter:deepseek/deepseek-chat',                 name: 'DeepSeek V3',         provider: 'OpenRouter', cost_label: '約0.1円/回',   quality: 4, speed: 4, kospa: 5, tags: ['コーディング', 'データ分析', '超低コスト'],       best_for: 'コード生成・データ処理・分析・コスト最優先' },
-  { key: 'openrouter:deepseek/deepseek-r1',                   name: 'DeepSeek R1 推論',    provider: 'OpenRouter', cost_label: '約0.6円/回',   quality: 5, speed: 2, kospa: 4, tags: ['推論', '論理', '数学', '複雑問題解決'],           best_for: '複雑な推論・論理問題・数学的処理（やや遅め）' },
-  { key: 'deepinfra:deepseek-ai/DeepSeek-V3',                 name: 'DeepSeek V3',         provider: 'DeepInfra',  cost_label: '約0.3円/回',   quality: 4, speed: 4, kospa: 5, tags: ['コーディング', 'データ分析', '低コスト'],          best_for: 'コード生成・データ処理・DeepInfra経由で安定' },
-  { key: 'deepinfra:deepseek-ai/DeepSeek-R1',                 name: 'DeepSeek R1 推論',    provider: 'DeepInfra',  cost_label: '約0.6円/回',   quality: 5, speed: 2, kospa: 4, tags: ['推論', '論理', '数学'],                         best_for: '複雑な推論・数学・DeepInfra経由' },
-  { key: 'openrouter:qwen/qwen3-235b-a22b',                   name: 'Qwen3 235B',          provider: 'OpenRouter', cost_label: '約0.2円/回',   quality: 4, speed: 3, kospa: 5, tags: ['日本語強', '多言語', 'バランス良'],               best_for: '日本語タスク・多言語処理・コスパ重視の汎用作業' },
-  { key: 'openrouter:qwen/qwen3-30b-a3b',                     name: 'Qwen3 30B',           provider: 'OpenRouter', cost_label: '約0.03円/回',  quality: 3, speed: 5, kospa: 5, tags: ['超軽量', '超低コスト', '日本語'],                 best_for: '高頻度の軽量タスク・日本語シンプル処理・超低コスト重視' },
-  { key: 'deepinfra:Qwen/Qwen3-235B-A22B',                    name: 'Qwen3 235B',          provider: 'DeepInfra',  cost_label: '約0.2円/回',   quality: 4, speed: 3, kospa: 5, tags: ['日本語', '多言語', '低コスト'],                  best_for: '日本語タスク・多言語処理・DeepInfra経由' },
-  { key: 'openrouter:meta-llama/llama-4-maverick',             name: 'Llama 4 Maverick',    provider: 'OpenRouter', cost_label: '約0.2円/回',   quality: 4, speed: 4, kospa: 5, tags: ['最新Llama', '汎用', 'マルチモーダル', '英語強'],  best_for: '英語中心の汎用タスク・最新Llamaモデル' },
-  { key: 'openrouter:meta-llama/llama-4-scout',                name: 'Llama 4 Scout',       provider: 'OpenRouter', cost_label: '約0.2円/回',   quality: 3, speed: 5, kospa: 5, tags: ['軽量Llama4', '高速', '低コスト'],                best_for: 'シンプルな英語タスク・高速レスポンス重視' },
-  { key: 'deepinfra:meta-llama/Llama-3.3-70B-Instruct',       name: 'Llama 3.3 70B',       provider: 'DeepInfra',  cost_label: '約0.1円/回',   quality: 4, speed: 4, kospa: 5, tags: ['汎用', '英語強', '低コスト'],                   best_for: '英語汎用タスク・Llama系での安定した実行' },
-  { key: 'openrouter:mistralai/mistral-small-3.1-24b-instruct',name: 'Mistral Small 3.1',   provider: 'OpenRouter', cost_label: '約0.1円/回',   quality: 3, speed: 5, kospa: 5, tags: ['効率的', 'ツール対応', '低コスト'],              best_for: 'シンプルなツール呼び出し・低コスト重視タスク' },
+  { key: 'sonnet',  name: 'Claude Sonnet 4.6', provider: 'Anthropic',   input_per_1m: 3.00,  output_per_1m: 15.00, quality: 5, speed: 3, kospa: 3, tags: ['高品質', 'ツール連携安定', '複雑な判断'],      best_for: '重要な業務・複雑な判断・品質最優先タスク' },
+  { key: 'haiku',   name: 'Claude Haiku 4.5',  provider: 'Anthropic',   input_per_1m: 0.80,  output_per_1m:  4.00, quality: 3, speed: 5, kospa: 4, tags: ['高速', '低コスト', 'シンプル作業'],            best_for: 'シンプルな通知・定型データ取得・高頻度実行' },
+  { key: 'openrouter:deepseek/deepseek-chat',                  name: 'DeepSeek V3',         provider: 'OpenRouter', input_per_1m: 0.14,  output_per_1m:  0.28, quality: 4, speed: 4, kospa: 5, tags: ['コーディング', 'データ分析', '超低コスト'],       best_for: 'コード生成・データ処理・分析・コスト最優先' },
+  { key: 'openrouter:deepseek/deepseek-r1',                    name: 'DeepSeek R1 推論',    provider: 'OpenRouter', input_per_1m: 0.55,  output_per_1m:  2.19, quality: 5, speed: 2, kospa: 4, tags: ['推論', '論理', '数学', '複雑問題解決'],           best_for: '複雑な推論・論理問題・数学的処理（やや遅め）' },
+  { key: 'deepinfra:deepseek-ai/DeepSeek-V3',                  name: 'DeepSeek V3',         provider: 'DeepInfra',  input_per_1m: 0.35,  output_per_1m:  0.89, quality: 4, speed: 4, kospa: 5, tags: ['コーディング', 'データ分析', '低コスト'],          best_for: 'コード生成・データ処理・DeepInfra経由で安定' },
+  { key: 'deepinfra:deepseek-ai/DeepSeek-R1',                  name: 'DeepSeek R1 推論',    provider: 'DeepInfra',  input_per_1m: 0.55,  output_per_1m:  2.19, quality: 5, speed: 2, kospa: 4, tags: ['推論', '論理', '数学'],                         best_for: '複雑な推論・数学・DeepInfra経由' },
+  { key: 'openrouter:qwen/qwen3-235b-a22b',                    name: 'Qwen3 235B',          provider: 'OpenRouter', input_per_1m: 0.22,  output_per_1m:  0.88, quality: 4, speed: 3, kospa: 5, tags: ['日本語強', '多言語', 'バランス良'],               best_for: '日本語タスク・多言語処理・コスパ重視の汎用作業' },
+  { key: 'openrouter:qwen/qwen3-30b-a3b',                      name: 'Qwen3 30B',           provider: 'OpenRouter', input_per_1m: 0.03,  output_per_1m:  0.09, quality: 3, speed: 5, kospa: 5, tags: ['超軽量', '超低コスト', '日本語'],                 best_for: '高頻度の軽量タスク・日本語シンプル処理・超低コスト重視' },
+  { key: 'deepinfra:Qwen/Qwen3-235B-A22B',                     name: 'Qwen3 235B',          provider: 'DeepInfra',  input_per_1m: 0.22,  output_per_1m:  0.88, quality: 4, speed: 3, kospa: 5, tags: ['日本語', '多言語', '低コスト'],                  best_for: '日本語タスク・多言語処理・DeepInfra経由' },
+  { key: 'openrouter:meta-llama/llama-4-maverick',              name: 'Llama 4 Maverick',    provider: 'OpenRouter', input_per_1m: 0.19,  output_per_1m:  0.85, quality: 4, speed: 4, kospa: 5, tags: ['最新Llama', '汎用', 'マルチモーダル', '英語強'],  best_for: '英語中心の汎用タスク・最新Llamaモデル' },
+  { key: 'openrouter:meta-llama/llama-4-scout',                 name: 'Llama 4 Scout',       provider: 'OpenRouter', input_per_1m: 0.18,  output_per_1m:  0.59, quality: 3, speed: 5, kospa: 5, tags: ['軽量Llama4', '高速', '低コスト'],                best_for: 'シンプルな英語タスク・高速レスポンス重視' },
+  { key: 'deepinfra:meta-llama/Llama-3.3-70B-Instruct',        name: 'Llama 3.3 70B',       provider: 'DeepInfra',  input_per_1m: 0.13,  output_per_1m:  0.40, quality: 4, speed: 4, kospa: 5, tags: ['汎用', '英語強', '低コスト'],                   best_for: '英語汎用タスク・Llama系での安定した実行' },
+  { key: 'openrouter:mistralai/mistral-small-3.1-24b-instruct', name: 'Mistral Small 3.1',   provider: 'OpenRouter', input_per_1m: 0.10,  output_per_1m:  0.30, quality: 3, speed: 5, kospa: 5, tags: ['効率的', 'ツール対応', '低コスト'],              best_for: 'シンプルなツール呼び出し・低コスト重視タスク' },
 ];
 
 function buildModelSelects() {
@@ -1191,6 +1267,14 @@ function buildModelSelects() {
   });
 }
 
+function calcModelCostJpy(m) {
+  const usd = (m.input_per_1m * 2800 + m.output_per_1m * 1000) / 1e6;
+  const jpy = usd * _usdJpy;
+  if (jpy < 0.1) return `約${(jpy * 100).toFixed(2)}銭/回`;
+  if (jpy < 1)   return `約${jpy.toFixed(2)}円/回`;
+  return `約${jpy.toFixed(1)}円/回`;
+}
+
 function updateModelDesc(context) {
   const selId = context === 'modal' ? 'modalModel' : 'editTaskModel';
   const descId = context === 'modal' ? 'modalModelDesc' : 'editTaskModelDesc';
@@ -1203,10 +1287,12 @@ function updateModelDesc(context) {
     const cls = (isKospa && val >= 5) ? ' high' : '';
     return `<span class="model-bar-label">${label}</span><div class="model-bar-track"><div class="model-bar-fill${cls}" style="width:${val * 20}%"></div></div>`;
   };
+  const costLabel = calcModelCostJpy(m);
+  const rateHint = `<span style="font-size:9px;color:var(--text-light);margin-left:4px;">¥${_usdJpy}/$</span>`;
   descEl.innerHTML = `
     <div class="model-desc-header">
       <span class="model-provider-chip">${m.provider}</span>
-      <span class="model-cost-chip">${m.cost_label}</span>
+      <span class="model-cost-chip">${costLabel}${rateHint}</span>
     </div>
     <div class="model-tags">${m.tags.map(t => `<span class="model-tag">${t}</span>`).join('')}</div>
     <div class="model-bars">${bar('品質', m.quality, false)}${bar('速度', m.speed, false)}${bar('コスパ', m.kospa, true)}</div>
@@ -1385,7 +1471,10 @@ async function loadUsage() {
   const fmtN = n => Number(n).toLocaleString();
   const fmtUsd = v => '$' + Number(v).toFixed(4);
   const fmtJpy = v => '¥' + Math.ceil(v).toLocaleString();
-  const note = '<span style="font-size:11px;color:var(--text-light);">（¥150/$ 換算・参考値）</span>';
+  const rateLabel = _usdJpyUpdatedAt
+    ? `¥${_usdJpy}/$（${new Date(_usdJpyUpdatedAt).toLocaleString('ja-JP', {timeZone:'Asia/Tokyo', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})} 更新）`
+    : `¥${_usdJpy}/$`;
+  const note = `<span style="font-size:11px;color:var(--text-light);">（${rateLabel}）</span>`;
 
   try {
     const isAdmin = currentUser?.role === 'admin';

@@ -266,7 +266,8 @@ function recordUsage(email, name, inputTokens, outputTokens, model, context) {
  'ALTER TABLE scheduled_tasks ADD COLUMN schedule_hour INTEGER',
  'ALTER TABLE scheduled_tasks ADD COLUMN schedule_minute INTEGER DEFAULT 0',
  'ALTER TABLE scheduled_tasks ADD COLUMN schedule_weekday INTEGER',
- 'ALTER TABLE scheduled_tasks ADD COLUMN model TEXT DEFAULT \'sonnet\''
+ 'ALTER TABLE scheduled_tasks ADD COLUMN model TEXT DEFAULT \'sonnet\'',
+ 'ALTER TABLE scheduled_tasks ADD COLUMN shared INTEGER DEFAULT 0'
 ].forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
 function audit(email, name, action, details = {}) {
@@ -2632,7 +2633,13 @@ function calcNextRunAt(task) {
 // GET /api/scheduled-tasks
 app.get('/api/scheduled-tasks', (req, res) => {
   try {
-    const rows = db.prepare('SELECT * FROM scheduled_tasks WHERE owner_email=? ORDER BY created_at DESC').all(req.user.email);
+    const rows = db.prepare(`
+      SELECT st.*,
+        (SELECT al.name FROM audit_logs al WHERE al.email = st.owner_email AND al.name != '' ORDER BY al.ts DESC LIMIT 1) as owner_name
+      FROM scheduled_tasks st
+      WHERE st.owner_email=? OR st.shared=1
+      ORDER BY st.created_at DESC
+    `).all(req.user.email);
     res.json(rows);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -2671,10 +2678,17 @@ app.post('/api/scheduled-tasks', (req, res) => {
 
 // PUT /api/scheduled-tasks/:id
 app.put('/api/scheduled-tasks/:id', (req, res) => {
-  const { interval_min, enabled, skill_title, description, steps, schedule_type, schedule_hour, schedule_minute, schedule_weekday, model } = req.body;
+  const { interval_min, enabled, skill_title, description, steps, schedule_type, schedule_hour, schedule_minute, schedule_weekday, model, shared } = req.body;
   try {
     const row = db.prepare('SELECT * FROM scheduled_tasks WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
     if (!row) return res.status(403).json({ error: '権限がありません' });
+
+    // 共有トグルのみの更新
+    if (shared !== undefined && interval_min === undefined && enabled === undefined && skill_title === undefined && description === undefined && steps === undefined && model === undefined) {
+      db.prepare('UPDATE scheduled_tasks SET shared=? WHERE id=?').run(shared ? 1 : 0, req.params.id);
+      audit(req.user.email, req.user.name, shared ? 'scheduled_task.share' : 'scheduled_task.unshare', { id: req.params.id, name: row.skill_title });
+      return res.json({ ok: true });
+    }
 
     const updates = [];
     const params = [];
@@ -2709,16 +2723,22 @@ app.put('/api/scheduled-tasks/:id', (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// POST /api/scheduled-tasks/:id/run — 即時実行
+// POST /api/scheduled-tasks/:id/run — 即時実行（自分のタスク or 共有タスク）
 app.post('/api/scheduled-tasks/:id/run', (req, res) => {
   try {
-    const task = db.prepare('SELECT * FROM scheduled_tasks WHERE id=? AND owner_email=?').get(req.params.id, req.user.email);
+    const task = db.prepare('SELECT * FROM scheduled_tasks WHERE id=? AND (owner_email=? OR shared=1)').get(req.params.id, req.user.email);
     if (!task) return res.status(403).json({ error: '権限がありません' });
+    const isOwn = task.owner_email === req.user.email;
     const now = toUtcStr(Date.now());
-    db.prepare("UPDATE scheduled_tasks SET last_run_at=?, last_status='running' WHERE id=?").run(now, task.id);
+    // 自分のタスクのみ last_run_at / last_status を更新（共有タスクの状態は変えない）
+    if (isOwn) {
+      db.prepare("UPDATE scheduled_tasks SET last_run_at=?, last_status='running' WHERE id=?").run(now, task.id);
+    }
     runSkillBackground(task, req.user.email).then(result => {
-      db.prepare("UPDATE scheduled_tasks SET last_status=?, last_result=? WHERE id=?")
-        .run(result.ok ? 'done' : 'error', result.error || null, task.id);
+      if (isOwn) {
+        db.prepare("UPDATE scheduled_tasks SET last_status=?, last_result=? WHERE id=?")
+          .run(result.ok ? 'done' : 'error', result.error || null, task.id);
+      }
     }).catch(() => {});
     audit(req.user.email, req.user.name, 'scheduled_task.run_now', { id: task.id, skill_name: task.skill_name });
     res.json({ ok: true, message: '実行を開始しました' });
