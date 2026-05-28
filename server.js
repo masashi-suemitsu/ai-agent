@@ -2555,9 +2555,11 @@ async function executeTool(name, input, user) {
 
 // POST /api/chat
 app.post('/api/chat', chatRateLimit, async (req, res) => {
-  const { message, conversationId, model: modelPref, attachments = [] } = req.body;
+  const { message, conversationId, model: modelPref, attachments = [], thinking: thinkingMode = false } = req.body;
   const MODEL_MAP = { haiku: 'claude-haiku-4-5-20251001', sonnet: 'claude-sonnet-4-6' };
   const chatModel = MODEL_MAP[modelPref] || 'claude-sonnet-4-6';
+  // 拡張思考モードは haiku 非対応（sonnet以上のみ）
+  const useThinking = thinkingMode && chatModel !== 'claude-haiku-4-5-20251001';
   const user = req.user;
 
   if ((!message || !message.trim()) && (!Array.isArray(attachments) || attachments.length === 0)) return res.status(400).json({ error: '空メッセージ' });
@@ -2630,10 +2632,11 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
     while (toolRound < 10) {
       const stream = anthropic.messages.stream({
         model: chatModel,
-        max_tokens: 4096,
+        max_tokens: useThinking ? 16000 : 4096,
         system: systemPrompt,
         tools: activeTools,
         messages,
+        ...(useThinking ? { thinking: { type: 'enabled', budget_tokens: 8000 } } : {}),
         ...(mcpServers.length > 0 ? { mcp_servers: mcpServers, betas: ['mcp-client-2025-04-04'] } : {})
       });
 
@@ -2641,6 +2644,9 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
         if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') {
           fullAssistantText += ev.delta.text;
           res.write(`data: ${JSON.stringify({ text: ev.delta.text })}\n\n`);
+        }
+        if (ev.type === 'content_block_delta' && ev.delta.type === 'thinking_delta') {
+          res.write(`data: ${JSON.stringify({ thinking: ev.delta.thinking })}\n\n`);
         }
       }
 
@@ -2952,6 +2958,45 @@ app.delete('/api/skills/:id', (req, res) => {
   db.prepare('DELETE FROM user_skills WHERE id=?').run(req.params.id);
   audit(req.user.email, req.user.name, 'skill.delete', { id: req.params.id, name: skill.name });
   res.json({ ok: true });
+});
+
+// POST /api/skills/run-parallel — 複数スキルを並列実行
+app.post('/api/skills/run-parallel', apiRateLimit, async (req, res) => {
+  const { skill_ids } = req.body;
+  if (!Array.isArray(skill_ids) || skill_ids.length < 2 || skill_ids.length > 5) {
+    return res.status(400).json({ error: 'skill_ids は 2〜5 件' });
+  }
+
+  const sharedCheck = `owner_email=? OR (shared=1 AND (shared_with IS NULL OR EXISTS (SELECT 1 FROM json_each(shared_with) WHERE value=?)))`;
+  const skills = skill_ids.map(id =>
+    db.prepare(`SELECT * FROM user_skills WHERE id=? AND (${sharedCheck})`).get(id, req.user.email, req.user.email)
+  );
+  if (skills.some(s => !s)) return res.status(403).json({ error: '一部のスキルにアクセスできません' });
+
+  audit(req.user.email, req.user.name, 'skill.run_parallel', { ids: skill_ids });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.flushHeaders();
+
+  await Promise.allSettled(skills.map(async skill => {
+    res.write(`data: ${JSON.stringify({ skill_id: skill.id, title: skill.title, status: 'running' })}\n\n`);
+    try {
+      const r = await runSkillBackground(
+        { skill_name: skill.name, skill_title: skill.title, description: skill.description, steps: skill.steps, model: 'sonnet' },
+        req.user.email
+      );
+      // task_runs テーブルから実際の結果テキストを取得
+      const runRow = r.runId ? db.prepare('SELECT result FROM task_runs WHERE id=?').get(r.runId) : null;
+      const resultText = r.ok ? (runRow?.result || '（結果なし）') : r.error;
+      res.write(`data: ${JSON.stringify({ skill_id: skill.id, status: r.ok ? 'done' : 'error', result: resultText })}\n\n`);
+    } catch(e) {
+      res.write(`data: ${JSON.stringify({ skill_id: skill.id, status: 'error', result: e.message })}\n\n`);
+    }
+  }));
+
+  res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+  res.end();
 });
 
 // GET /api/skills/:id/estimate  — 実行コスト見積もり
@@ -4610,6 +4655,8 @@ async function runSkillBackground(task, ownerEmail) {
   let resultBuffer = '';
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  let usedFallback = false;
+  let actualModel = task.model || 'sonnet';
   try {
     const allowedToolNames = TOOLS_FOR_ROLE[role];
     const activeTools = (allowedToolNames ? TOOLS.filter(t => allowedToolNames.has(t.name)) : TOOLS)
@@ -4685,6 +4732,8 @@ async function runSkillBackground(task, ownerEmail) {
           resultBuffer      = `[OSS フォールバック: Qwen3-235B]\n${fb.resultBuffer}`;
           totalInputTokens  = fb.totalInputTokens;
           totalOutputTokens = fb.totalOutputTokens;
+          usedFallback = true;
+          actualModel  = 'openrouter:qwen/qwen3-235b-a22b';
         } else {
           throw anthropicErr;
         }
@@ -4741,15 +4790,16 @@ async function runSkillBackground(task, ownerEmail) {
       }
     }
 
-    // コスト計上（モデル別料金で計算）
+    // コスト計上（実際に使ったモデル＝フォールバック後は OSS 料金）
     if (totalInputTokens > 0 || totalOutputTokens > 0) {
-      recordUsage(ownerEmail, '', totalInputTokens, totalOutputTokens, task.model || 'sonnet', 'scheduled_task');
+      recordUsage(ownerEmail, '', totalInputTokens, totalOutputTokens, actualModel, 'scheduled_task');
     }
 
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
       .run('done', resultBuffer.slice(0, 2000), runId);
-    audit(ownerEmail, '', 'scheduled_task.ran', { skillName: task.skill_name, runId, model: task.model });
+    audit(ownerEmail, '', 'scheduled_task.ran', { skillName: task.skill_name, runId, model: actualModel });
     notifyTaskResult(ownerEmail, task.skill_title || task.skill_name, 'done', resultBuffer).catch(() => {});
+    if (usedFallback) notifyFallback(ownerEmail, task.skill_title || task.skill_name).catch(() => {});
     return { ok: true, runId };
   } catch(e) {
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
@@ -4757,6 +4807,19 @@ async function runSkillBackground(task, ownerEmail) {
     notifyTaskResult(ownerEmail, task.skill_title || task.skill_name, 'error', e.message).catch(() => {});
     return { ok: false, error: e.message, runId };
   }
+}
+
+async function notifyFallback(ownerEmail, taskName) {
+  const sysToken   = process.env.CHATWORK_SYSTEM_TOKEN;
+  const notifyRoom = process.env.TASK_NOTIFY_CW_ROOM_ID;
+  if (!sysToken || !notifyRoom) return;
+  const jst = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const msg = `[info][title]⚠️ OSSフォールバック: ${taskName}[/title]担当者: ${ownerEmail}\n実行日時: ${jst} (JST)\n\nClaude API が過負荷のため、Qwen3-235B (OpenRouter) で代替実行しました。\n結果は管理画面でご確認ください。\n\n[管理画面](https://d2jjp21sq86i80.cloudfront.net/manage)[/info]`;
+  await fetch(`${CW_BASE}/rooms/${notifyRoom}/messages`, {
+    method: 'POST',
+    headers: { 'X-ChatWorkToken': sysToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ body: msg }).toString()
+  });
 }
 
 async function notifyTaskResult(ownerEmail, taskName, status, result) {
