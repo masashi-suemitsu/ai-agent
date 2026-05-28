@@ -146,6 +146,13 @@ app.use(helmet({
   }
 }));
 
+// キャッシュ不要（社内ツールのため全レスポンスに no-cache）
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  next();
+});
+
 // ── レート制限 ──
 const chatRateLimit = rateLimit({
   windowMs: 60 * 1000,         // 1分間
