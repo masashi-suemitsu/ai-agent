@@ -1630,7 +1630,9 @@ async function loadUsage() {
     const isAdmin = currentUser?.role === 'admin';
 
     // 本人分：直近3ヶ月
-    const myRows = await fetch('/api/usage/me').then(r => r.json());
+    const myResp = await fetch('/api/usage/me');
+    if (!myResp.ok) { const t = await myResp.text(); throw new Error(`/api/usage/me: HTTP ${myResp.status} — ${t.slice(0, 200)}`); }
+    const myRows = await myResp.json();
 
     let html = '<h3 style="font-size:14px;font-weight:700;margin-bottom:12px;">自分の利用状況（直近3ヶ月）</h3>';
     if (!myRows.length) {
@@ -1661,7 +1663,9 @@ async function loadUsage() {
     // admin: 全員当月分
     if (isAdmin) {
       const thisMonth = new Date().toISOString().slice(0, 7);
-      const allData = await fetch(`/api/usage/all?month=${thisMonth}`).then(r => r.json());
+      const allResp = await fetch(`/api/usage/all?month=${thisMonth}`);
+      if (!allResp.ok) { const t = await allResp.text(); throw new Error(`/api/usage/all: HTTP ${allResp.status} — ${t.slice(0, 200)}`); }
+      const allData = await allResp.json();
 
       html += `<h3 style="font-size:14px;font-weight:700;margin-bottom:4px;">全ユーザー利用状況（${allData.month}）</h3>
         <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">管理者のみ表示</p>`;
