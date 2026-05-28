@@ -593,7 +593,12 @@ app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: process.env.NODE_ENV === 'production', httpOnly: true, maxAge: THIRTY_DAYS }
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'lax',   // CSRF防御: cross-site の POST/PUT/DELETE で cookie が送られない（Google OAuth等の top-level navigation は許可）
+    maxAge: THIRTY_DAYS
+  }
 }));
 
 app.use(passport.initialize());
