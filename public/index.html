@@ -1895,7 +1895,8 @@ async function saveSkill(btn) {
 // ─ スキル削除 ─
 async function deleteSkill(id) {
   if (!confirm('このスキルを削除しますか？')) return;
-  await fetch(`/api/skills/${id}`, { method: 'DELETE' });
+  const r = await fetch(`/api/skills/${id}`, { method: 'DELETE' });
+  if (!r.ok) { alert('削除に失敗しました'); return; }
   await loadSidebar();
 }
 
@@ -2078,6 +2079,7 @@ async function doRunSkill() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ variables })
   });
+  if (!resp.ok) { const e = await resp.json().catch(() => ({})); out.textContent = e.error || `実行失敗 (${resp.status})`; return; }
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
@@ -2104,7 +2106,8 @@ async function doRunSkill() {
 // ─ 会話削除 ─
 async function deleteConversation(id) {
   if (!confirm('この依頼履歴を削除しますか？')) return;
-  await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
+  const r = await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
+  if (!r.ok) { alert('削除に失敗しました'); return; }
   if (currentConvId === id) newTask();
   await loadSidebar();
 }
@@ -2981,7 +2984,8 @@ async function toggleScheduledTask(id, enabled) {
 
 async function deleteScheduledTask(id) {
   if (!confirm('このタスクを削除しますか？')) return;
-  await fetch(`/api/scheduled-tasks/${id}`, { method: 'DELETE' });
+  const r = await fetch(`/api/scheduled-tasks/${id}`, { method: 'DELETE' });
+  if (!r.ok) { alert('削除に失敗しました'); return; }
   await loadScheduledTasks();
 }
 
