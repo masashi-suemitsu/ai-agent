@@ -2719,6 +2719,56 @@ app.get('/api/conversations/search', (req, res) => {
   res.json(rows);
 });
 
+// ── 監査ログAPI ──
+app.get('/api/audit-logs', (req, res) => {
+  const role = req.user.role || getUserRole(req.user.email);
+  const isAdmin = role === 'admin';
+  const { email, action, limit = 100, since } = req.query;
+  const where = [];
+  const params = [];
+  if (!isAdmin) { where.push('email = ?'); params.push(req.user.email); }
+  else if (email) { where.push('email = ?'); params.push(email); }
+  if (action) { where.push('action LIKE ?'); params.push(action + '%'); }
+  if (since) { where.push('ts >= ?'); params.push(since); }
+  const sql = `SELECT id, ts, email, name, action, details FROM audit_logs ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC LIMIT ?`;
+  params.push(Math.min(parseInt(limit, 10) || 100, 1000));
+  const rows = db.prepare(sql).all(...params);
+  res.json({ admin_view: isAdmin, rows });
+});
+
+// ── ダッシュボードAPI ──
+app.get('/api/dashboard', (req, res) => {
+  const role = req.user.role || getUserRole(req.user.email);
+  const isAdmin = role === 'admin';
+  const myEmail = req.user.email;
+  const todayStart = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Tokyo' }) + ' 00:00:00';
+  const monthStart = todayStart.slice(0, 7) + '-01 00:00:00';
+  // 個人/全体 切替
+  const scope = isAdmin && req.query.scope === 'all' ? 'all' : 'me';
+  const emailClause = scope === 'me' ? 'AND email = ?' : '';
+  const emailParam = scope === 'me' ? [myEmail] : [];
+  // チャット数
+  const todayChats = db.prepare(`SELECT COUNT(*) AS c FROM audit_logs WHERE action='chat' AND ts >= ? ${emailClause}`).get(todayStart, ...emailParam).c;
+  const monthChats = db.prepare(`SELECT COUNT(*) AS c FROM audit_logs WHERE action='chat' AND ts >= ? ${emailClause}`).get(monthStart, ...emailParam).c;
+  // ツール呼び出し（上位）
+  const topTools = db.prepare(`SELECT action, COUNT(*) AS c FROM audit_logs WHERE action LIKE 'tool.%' AND ts >= ? ${emailClause} GROUP BY action ORDER BY c DESC LIMIT 10`).all(monthStart, ...emailParam);
+  // 最近のタスク実行
+  const recentTasks = db.prepare(`SELECT id, user_email, skill_title, status, started_at, finished_at FROM task_runs ${scope === 'me' ? 'WHERE user_email = ?' : ''} ORDER BY id DESC LIMIT 10`).all(...(scope === 'me' ? [myEmail] : []));
+  // 直近アクティブユーザー（管理者のみ）
+  let activeUsers = [];
+  if (isAdmin && scope === 'all') {
+    activeUsers = db.prepare(`SELECT email, name, COUNT(*) AS actions, MAX(ts) AS last_action FROM audit_logs WHERE ts >= ? GROUP BY email ORDER BY actions DESC LIMIT 10`).all(todayStart);
+  }
+  // 連携サービス状態（自分）
+  const integ = {
+    drive: !!db.prepare('SELECT 1 FROM user_drive_tokens WHERE email=?').get(myEmail),
+    calendar: !!db.prepare('SELECT 1 FROM user_calendar_tokens WHERE email=?').get(myEmail),
+    gmail: !!db.prepare('SELECT 1 FROM user_gmail_tokens WHERE email=?').get(myEmail),
+    chatwork: !!db.prepare('SELECT 1 FROM user_chatwork_tokens WHERE email=?').get(myEmail)
+  };
+  res.json({ scope, today_chats: todayChats, month_chats: monthChats, top_tools: topTools, recent_tasks: recentTasks, active_users: activeUsers, integrations: integ });
+});
+
 // ── Webhook管理API（認証済みユーザー） ──
 app.get('/api/webhooks', (req, res) => {
   const rows = db.prepare('SELECT token, label, skill_name, prompt_template, enabled, created_at, last_used_at FROM webhook_tokens WHERE owner_email=? ORDER BY created_at DESC').all(req.user.email);
