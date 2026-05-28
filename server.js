@@ -150,6 +150,15 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now','localtime'))
   );
 
+  CREATE TABLE IF NOT EXISTS ai_response_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL UNIQUE,
+    user_email TEXT NOT NULL,
+    rating INTEGER NOT NULL,
+    comment TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+  );
+
   CREATE TABLE IF NOT EXISTS task_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_email TEXT NOT NULL,
@@ -2257,6 +2266,33 @@ app.post('/api/conversations', (req, res) => {
   res.json({ id: r.lastInsertRowid });
 });
 
+// POST /api/messages/:id/feedback - AI回答へのフィードバック（👍/👎）
+app.post('/api/messages/:id/feedback', (req, res) => {
+  const messageId = parseInt(req.params.id, 10);
+  const { rating, comment = '' } = req.body;
+  if (!Number.isFinite(messageId) || ![1, -1, 0].includes(rating)) {
+    return res.status(400).json({ error: 'rating は 1 / -1 / 0 のみ' });
+  }
+  // メッセージの所有確認
+  const m = db.prepare(`
+    SELECT m.id FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    WHERE m.id = ? AND c.user_email = ?
+  `).get(messageId, req.user.email);
+  if (!m) return res.status(404).json({ error: 'メッセージが見つかりません' });
+  if (rating === 0) {
+    db.prepare('DELETE FROM ai_response_feedback WHERE message_id=?').run(messageId);
+  } else {
+    db.prepare(`
+      INSERT INTO ai_response_feedback (message_id, user_email, rating, comment)
+      VALUES (?,?,?,?)
+      ON CONFLICT(message_id) DO UPDATE SET rating=excluded.rating, comment=excluded.comment, created_at=datetime('now','localtime')
+    `).run(messageId, req.user.email, rating, String(comment).slice(0, 500));
+  }
+  audit(req.user.email, req.user.name, 'feedback.ai_response', { messageId, rating });
+  res.json({ ok: true });
+});
+
 // GET /api/conversations/:id/messages
 app.get('/api/conversations/:id/messages', (req, res) => {
   const conv = db.prepare('SELECT id FROM conversations WHERE id=? AND user_email=?').get(req.params.id, req.user.email);
@@ -2315,7 +2351,7 @@ app.post('/api/skills', (req, res) => {
     const skill = db.prepare('SELECT * FROM user_skills WHERE owner_email=? AND name=?').get(req.user.email, name);
     res.json({ ok: true, skill });
   } catch(e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e);
   }
 });
 
@@ -2681,7 +2717,7 @@ async function cwFetch(path, options = {}, userEmail = null) {
 app.get('/api/chatwork/rooms', async (req, res) => {
   audit(req.user.email, req.user.name, 'cw.rooms');
   try { res.json(await cwFetch('/rooms', {}, req.user.email)); }
-  catch(e) { res.status(500).json({ error: e.message }); }
+  catch(e) { serverError(res, e); }
 });
 
 // GET /api/chatwork/rooms/:id/messages?force=1
@@ -2690,13 +2726,13 @@ app.get('/api/chatwork/rooms/:id/messages', async (req, res) => {
   try {
     const force = req.query.force === '1' ? '?force=1' : '';
     res.json(await cwFetch(`/rooms/${req.params.id}/messages${force}`, {}, req.user.email));
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { serverError(res, e); }
 });
 
 // GET /api/chatwork/rooms/:id (room info)
 app.get('/api/chatwork/rooms/:id', async (req, res) => {
   try { res.json(await cwFetch(`/rooms/${req.params.id}`, {}, req.user.email)); }
-  catch(e) { res.status(500).json({ error: e.message }); }
+  catch(e) { serverError(res, e); }
 });
 
 // POST /api/chatwork/rooms/:id/messages  body: { body }
@@ -2707,13 +2743,13 @@ app.post('/api/chatwork/rooms/:id/messages', async (req, res) => {
   try {
     const params = new URLSearchParams({ body });
     res.json(await cwFetch(`/rooms/${req.params.id}/messages`, { method: 'POST', body: params.toString() }, req.user.email));
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { serverError(res, e); }
 });
 
 // GET /api/chatwork/me
 app.get('/api/chatwork/me', async (req, res) => {
   try { res.json(await cwFetch('/me', {}, req.user.email)); }
-  catch(e) { res.status(500).json({ error: e.message }); }
+  catch(e) { serverError(res, e); }
 });
 
 // ── Chatwork OAuth ──
@@ -2866,7 +2902,7 @@ app.post('/api/db/query', async (req, res) => {
   try {
     const [rows] = await pool.execute(sql, params);
     res.json({ rows, count: rows.length });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { serverError(res, e); }
 });
 
 // GET /api/db/tables  アロウリスト内のテーブルのみ返却
@@ -2877,7 +2913,7 @@ app.get('/api/db/tables', async (req, res) => {
     const [rows] = await pool.execute('SHOW TABLES');
     const all = rows.map(r => Object.values(r)[0]);
     res.json(all.filter(t => DB_ALLOWED_TABLES.has(String(t).toLowerCase())));
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { serverError(res, e); }
 });
 
 // ── WordPress REST API ──
@@ -2905,7 +2941,7 @@ app.get('/api/wp/posts', async (req, res) => {
     const qs = new URLSearchParams({ per_page, page, status });
     if (search) qs.set('search', search);
     res.json(await wpFetch(`/posts?${qs}`));
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { serverError(res, e); }
 });
 
 // GET /api/wp/posts/:id
@@ -2913,7 +2949,7 @@ app.get('/api/wp/posts/:id', async (req, res) => {
   if (!process.env.WP_URL) return res.status(503).json({ error: 'WordPress未設定' });
   audit(req.user.email, req.user.name, 'wp.post', { id: req.params.id });
   try { res.json(await wpFetch(`/posts/${req.params.id}`)); }
-  catch(e) { res.status(500).json({ error: e.message }); }
+  catch(e) { serverError(res, e); }
 });
 
 // POST /api/wp/posts  body: { title, content, status }
@@ -2924,7 +2960,7 @@ app.post('/api/wp/posts', async (req, res) => {
   audit(req.user.email, req.user.name, 'wp.create_post', { title: title.slice(0, 50), status });
   try {
     res.json(await wpFetch('/posts', { method: 'POST', body: JSON.stringify({ title, content, status }) }));
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { serverError(res, e); }
 });
 
 // ── AWS SES (nodemailer) ──
@@ -2951,7 +2987,7 @@ app.post('/api/email/send', async (req, res) => {
       to, subject, text, html
     });
     res.json({ ok: true, messageId: info.messageId });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { serverError(res, e); }
 });
 
 // ── OpenRouter / DeepInfra (OpenAI-compatible) ──
@@ -2982,7 +3018,7 @@ app.post('/api/ai/chat', async (req, res) => {
     if (!r.ok) throw new Error(`${provider} error: ${r.status} ${await r.text()}`);
     const data = await r.json();
     res.json({ content: data.choices?.[0]?.message?.content || '', usage: data.usage });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { serverError(res, e); }
 });
 
 // ── Google Calendar API ──
@@ -3044,7 +3080,7 @@ app.get('/api/calendar/events', async (req, res) => {
     });
     res.json(r.data.items || []);
   } catch(e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e);
   }
 });
 
@@ -3113,7 +3149,7 @@ app.get('/api/drive/list', async (req, res) => {
     });
     res.json(r.data.files || []);
   } catch(e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e);
   }
 });
 
@@ -3141,7 +3177,7 @@ app.get('/api/drive/read/:id', async (req, res) => {
 
     res.json({ id: req.params.id, name, mimeType, content: content.slice(0, 60000) });
   } catch(e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e);
   }
 });
 
@@ -3216,7 +3252,7 @@ app.get('/api/gmail/messages', async (req, res) => {
       return { id: d.data.id, subject: headers['Subject'] || '', from: headers['From'] || '', date: headers['Date'] || '', snippet: d.data.snippet || '' };
     }));
   } catch(e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e);
   }
 });
 
@@ -3237,7 +3273,7 @@ app.get('/api/gmail/messages/:id', async (req, res) => {
       body: body.slice(0, 20000)
     });
   } catch(e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e);
   }
 });
 
@@ -3280,7 +3316,7 @@ app.get('/api/scheduled-tasks', (req, res) => {
       ORDER BY st.created_at DESC
     `).all(req.user.email, req.user.email);
     res.json(rows);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { serverError(res, e); }
 });
 
 // POST /api/scheduled-tasks
@@ -3312,7 +3348,7 @@ app.post('/api/scheduled-tasks', (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`
     ).run(req.user.email, task_type, taskData.skill_id, taskData.skill_name, taskData.skill_title, taskData.description, taskData.steps, Number(interval_min), run_at || null, nextRunAt, schedule_type, schedule_hour ?? null, Number(schedule_minute), schedule_weekday ?? null, model);
     res.json({ ok: true, id: result.lastInsertRowid });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { serverError(res, e); }
 });
 
 // PUT /api/scheduled-tasks/:id
@@ -3363,7 +3399,7 @@ app.put('/api/scheduled-tasks/:id', (req, res) => {
     db.prepare(`UPDATE scheduled_tasks SET ${updates.join(',')} WHERE id=? AND owner_email=?`).run(...params);
     audit(req.user.email, req.user.name, 'scheduled_task.update', { id: req.params.id });
     res.json({ ok: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { serverError(res, e); }
 });
 
 // POST /api/scheduled-tasks/:id/run — 即時実行（自分のタスク or 共有タスク）
@@ -3385,7 +3421,7 @@ app.post('/api/scheduled-tasks/:id/run', (req, res) => {
     }).catch(() => {});
     audit(req.user.email, req.user.name, 'scheduled_task.run_now', { id: task.id, skill_name: task.skill_name });
     res.json({ ok: true, message: '実行を開始しました' });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { serverError(res, e); }
 });
 
 // DELETE /api/scheduled-tasks/:id
@@ -3396,7 +3432,7 @@ app.delete('/api/scheduled-tasks/:id', (req, res) => {
     db.prepare('DELETE FROM scheduled_tasks WHERE id=?').run(req.params.id);
     audit(req.user.email, req.user.name, 'scheduled_task.delete', { id: req.params.id });
     res.json({ ok: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { serverError(res, e); }
 });
 
 // ── モデル推薦 ──
@@ -3457,7 +3493,7 @@ ${modelList}
     res.json(parsed);
   } catch(e) {
     console.error('[recommend-model] error:', e.message);
-    res.status(500).json({ error: e.message });
+    serverError(res, e);
   }
 });
 
