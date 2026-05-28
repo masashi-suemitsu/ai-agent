@@ -750,12 +750,8 @@ app.use(express.json({ limit: '5mb' }));
 app.use(apiRateLimit);
 
 // ── ダッシュボードは管理者のみ ──
-app.get('/dashboard', (req, res) => {
-  const role = req.user.role || getUserRole(req.user.email);
-  if (role !== 'admin') return res.redirect('/');
-  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
-});
-app.get('/dashboard.html', (req, res) => res.redirect('/dashboard'));
+app.get('/dashboard', (req, res) => res.redirect('/manage#dashboard'));
+app.get('/dashboard.html', (req, res) => res.redirect('/manage#dashboard'));
 
 app.use(express.static(path.join(__dirname, 'public'), {
   extensions: ['html'],

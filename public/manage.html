@@ -1803,6 +1803,55 @@ async function loadUsage() {
     el.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`;
   }
 }
+
+// ─ ダッシュボード ─
+let _dashScope = 'me';
+
+async function loadDashStats() {
+  const d = await fetch('/api/dashboard?scope=' + _dashScope).then(r => r.json()).catch(() => ({}));
+  if (!d.today_chats && d.today_chats !== 0) return;
+  document.getElementById('dashStatsGrid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">今日のチャット</div><div class="stat-value">${d.today_chats}</div><div class="stat-sub">${_dashScope==='me'?'自分':'全社'}</div></div>
+    <div class="stat-card"><div class="stat-label">今月のチャット</div><div class="stat-value">${d.month_chats}</div></div>
+    <div class="stat-card"><div class="stat-label">連携サービス</div><div style="margin-top:8px;">${Object.entries(d.integrations||{}).map(([k,v])=>`<span class="dtag ${v?'ok':'ng'}" style="margin-right:4px;">${k} ${v?'✓':'－'}</span>`).join('')}</div></div>`;
+  const maxC = Math.max(...(d.top_tools||[]).map(t=>t.c), 1);
+  document.getElementById('dashTopTools').innerHTML = (d.top_tools||[]).length === 0
+    ? '<div style="color:#a0aec0;font-size:12px;padding:8px;">データなし</div>'
+    : `<table class="dash-ptable"><tr><th>ツール</th><th style="width:55%;">実行回数</th></tr>${(d.top_tools||[]).map(t=>`<tr><td>${esc(t.action)}</td><td><div style="display:flex;align-items:center;gap:8px;"><div class="dash-bar" style="flex:1;"><div class="dash-bar-fill" style="width:${(t.c/maxC)*100}%;"></div></div><span style="min-width:28px;text-align:right;font-weight:600;">${t.c}</span></div></td></tr>`).join('')}</table>`;
+  document.getElementById('dashRecentTasks').innerHTML = (d.recent_tasks||[]).length === 0
+    ? '<div style="color:#a0aec0;font-size:12px;padding:8px;">タスク実行なし</div>'
+    : `<table class="dash-ptable"><tr><th>ID</th><th>タスク</th><th>状態</th><th>実行者</th><th>開始時刻</th></tr>${(d.recent_tasks||[]).map(t=>{
+        const st = t.status==='done'?'<span class="dtag ok">完了</span>':t.status==='error'?'<span class="dtag ng">エラー</span>':'<span class="dtag warn">実行中</span>';
+        return `<tr><td>${t.id}</td><td>${esc(t.skill_title||'')}</td><td>${st}</td><td>${esc(t.user_email)}</td><td>${esc(t.started_at||'')}</td></tr>`;
+      }).join('')}</table>`;
+  const ap = document.getElementById('dashActiveUsersPanel');
+  if (d.active_users && d.active_users.length > 0) {
+    ap.style.display = '';
+    document.getElementById('dashActiveUsers').innerHTML = `<table class="dash-ptable"><tr><th>ユーザー</th><th>アクション数</th><th>最終アクション</th></tr>${d.active_users.map(u=>`<tr><td>${esc(u.name||u.email)}</td><td>${u.actions}</td><td>${esc(u.last_action)}</td></tr>`).join('')}</table>`;
+  } else { ap.style.display = 'none'; }
+}
+
+async function loadDashAudit() {
+  const email  = document.getElementById('dashAuditEmail').value.trim();
+  const action = document.getElementById('dashAuditAction').value.trim();
+  const since  = document.getElementById('dashAuditSince').value;
+  const limit  = document.getElementById('dashAuditLimit').value;
+  const qs = new URLSearchParams({ limit, scope: _dashScope });
+  if (email)  qs.set('email', email);
+  if (action) qs.set('action', action);
+  if (since)  qs.set('since', since + ' 00:00:00');
+  const d = await fetch('/api/audit-logs?' + qs).then(r => r.json()).catch(() => ({ rows: [] }));
+  document.getElementById('dashAuditTable').innerHTML = d.rows.length === 0
+    ? '<div style="color:#a0aec0;font-size:12px;padding:8px;">該当ログなし</div>'
+    : `<table class="dash-ptable"><tr><th>時刻</th><th>ユーザー</th><th>アクション</th><th>詳細</th></tr>${d.rows.map(r=>`<tr><td>${esc(r.ts)}</td><td>${esc(r.name||r.email)}</td><td><code style="font-size:11px;">${esc(r.action)}</code></td><td style="font-size:11px;color:#718096;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.details||'')}</td></tr>`).join('')}</table>`;
+}
+
+function switchDashScope(s) {
+  _dashScope = s;
+  document.querySelectorAll('#dashScopeToggle button').forEach(b => b.classList.toggle('active', b.dataset.scope === s));
+  loadDashStats();
+  loadDashAudit();
+}
 </script>
 </body>
 </html>
