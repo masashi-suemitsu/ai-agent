@@ -693,6 +693,22 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// MCP サーバー（localhost）へのリバースプロキシ（SSE ストリーム対応）
+function makeMcpProxy(port) {
+  return (req, res) => {
+    const proxyReq = http.request(
+      { hostname: '127.0.0.1', port, path: req.url || '/', method: req.method, headers: { ...req.headers, host: 'localhost' } },
+      (proxyRes) => {
+        res.writeHead(proxyRes.statusCode, proxyRes.headers);
+        proxyRes.pipe(res, { end: true });
+        res.on('close', () => { try { proxyReq.destroy(); } catch {} });
+      }
+    );
+    proxyReq.on('error', () => { if (!res.headersSent) res.status(502).json({ error: 'MCP server unavailable' }); });
+    req.pipe(proxyReq, { end: true });
+  };
+}
+
 // ── 認証不要ルート ──
 app.get('/login', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -1032,6 +1048,21 @@ app.get('/api/me', (req, res) => {
 
 // ── 公開アセット（ロゴ等。認証前にマウント） ──
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), { maxAge: '1d' }));
+
+// ── MCP サーバープロキシ（Anthropic API → CloudFront → ここ → localhost） ──
+// MCP_PROXY_TOKEN が設定されているときのみ有効（supergateway で動くローカルサーバーに転送）
+const MCP_PROXY_TOKEN = process.env.MCP_PROXY_TOKEN || '';
+if (MCP_PROXY_TOKEN) {
+  const mcpProxyAuth = (req, res, next) => {
+    if ((req.headers.authorization || '') !== `Bearer ${MCP_PROXY_TOKEN}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    next();
+  };
+  app.use('/mcp/notion', mcpProxyAuth, makeMcpProxy(parseInt(process.env.MCP_NOTION_PORT || '3011')));
+  app.use('/mcp/slack',  mcpProxyAuth, makeMcpProxy(parseInt(process.env.MCP_SLACK_PORT  || '3012')));
+  console.log('[mcp] proxy routes enabled: /mcp/notion, /mcp/slack');
+}
 
 // ── 認証必須ルート ──
 app.use(requireAuth);
@@ -3339,12 +3370,12 @@ async function executeTool(name, input, user) {
       return { ok: true, id: r.data.id, name: r.data.name, slide_count: slides.length, webViewLink: r.data.webViewLink };
     }
     case 'run_subagents': {
-      const tasks = (input.tasks || []).slice(0, 3);
+      const tasks = (input.tasks || []).slice(0, 5);
       if (tasks.length === 0) return { error: 'tasks が空です' };
       audit(user.email, user.name, 'tool.run_subagents', { count: tasks.length, titles: tasks.map(t => t.title) });
       const results = await Promise.allSettled(tasks.map(t =>
         runSkillBackground(
-          { skill_name: 'subagent', skill_title: t.title, description: '', steps: t.steps, model: 'sonnet' },
+          { skill_name: 'subagent', skill_title: t.title, description: t.description || '', steps: t.steps, model: t.model || 'sonnet' },
           user.email
         )
       ));
@@ -4050,10 +4081,11 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
 
       messages.push({ role: 'assistant', content: finalMsg.content });
 
-      const toolResults = [];
-      for (const block of finalMsg.content) {
-        if (block.type !== 'tool_use') continue;
+      const toolBlocks = finalMsg.content.filter(b => b.type === 'tool_use');
+      for (const block of toolBlocks) {
         res.write(`data: ${JSON.stringify({ tool: block.name, status: 'running' })}\n\n`);
+      }
+      const toolResults = await Promise.all(toolBlocks.map(async block => {
         try {
           const result = await executeTool(block.name, block.input, user);
           let toolContent;
@@ -4072,17 +4104,17 @@ app.post('/api/chat', chatRateLimit, async (req, res) => {
           } else {
             toolContent = JSON.stringify(result).slice(0, 80000);
           }
-          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: toolContent });
           const doneEvent = { tool: block.name, status: 'done' };
           if (block.name === 'register_task' && result?.ok && result?.id) {
             doneEvent.task = { id: result.id, title: block.input.skill_title || block.input.skill_name, task_type: block.input.task_type };
           }
           res.write(`data: ${JSON.stringify(doneEvent)}\n\n`);
+          return { type: 'tool_result', tool_use_id: block.id, content: toolContent };
         } catch(e) {
-          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
           res.write(`data: ${JSON.stringify({ tool: block.name, status: 'error', error: e.message })}\n\n`);
+          return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true };
         }
-      }
+      }));
       messages.push({ role: 'user', content: toolResults });
       toolRound++;
     }
@@ -4631,15 +4663,12 @@ app.post('/api/skills/:id/run', async (req, res) => {
 
         messages.push({ role: 'assistant', content: finalMsg.content });
 
-        for (const block of finalMsg.content) {
-          if (block.type === 'tool_use') {
-            res.write(`data: ${JSON.stringify({ tool: block.name, status: 'running' })}\n\n`);
-          }
+        const skillToolBlocks = finalMsg.content.filter(b => b.type === 'tool_use');
+        for (const block of skillToolBlocks) {
+          res.write(`data: ${JSON.stringify({ tool: block.name, status: 'running' })}\n\n`);
         }
 
-        const toolResults = [];
-        for (const block of finalMsg.content) {
-          if (block.type !== 'tool_use') continue;
+        const toolResults = await Promise.all(skillToolBlocks.map(async block => {
           try {
             const result = await executeTool(block.name, block.input, req.user);
             let toolContent;
@@ -4658,13 +4687,13 @@ app.post('/api/skills/:id/run', async (req, res) => {
             } else {
               toolContent = JSON.stringify(result).slice(0, 80000);
             }
-            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: toolContent });
             res.write(`data: ${JSON.stringify({ tool: block.name, status: 'done' })}\n\n`);
+            return { type: 'tool_result', tool_use_id: block.id, content: toolContent };
           } catch(e) {
-            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
             res.write(`data: ${JSON.stringify({ tool: block.name, status: 'error', error: e.message })}\n\n`);
+            return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true };
           }
-        }
+        }));
         messages.push({ role: 'user', content: toolResults });
         toolRound++;
       }
@@ -6564,15 +6593,16 @@ async function runWithOss(prompt, systemPrompt, activeTools, user) {
     if (choice.message?.content) resultBuffer += choice.message.content;
     if (!choice.message?.tool_calls?.length) break;
     messages.push({ role: 'assistant', content: choice.message.content || null, tool_calls: choice.message.tool_calls });
-    for (const tc of choice.message.tool_calls) {
-      let toolResultContent;
+    const ossToolMsgs2 = await Promise.all(choice.message.tool_calls.map(async tc => {
       try {
         const input = JSON.parse(tc.function.arguments);
         const result = await executeTool(tc.function.name, input, user);
-        toolResultContent = JSON.stringify(result).slice(0, 80000);
-      } catch(e) { toolResultContent = JSON.stringify({ error: e.message }); }
-      messages.push({ role: 'tool', tool_call_id: tc.id, content: toolResultContent });
-    }
+        return { role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result).slice(0, 80000) };
+      } catch(e) {
+        return { role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ error: e.message }) };
+      }
+    }));
+    messages.push(...ossToolMsgs2);
     toolRound++;
   }
   return { resultBuffer, totalInputTokens, totalOutputTokens };
@@ -6647,9 +6677,8 @@ async function runSkillBackground(task, ownerEmail) {
           }
           if (response.stop_reason !== 'tool_use') break;
           messages.push({ role: 'assistant', content: response.content });
-          const toolResults = [];
-          for (const block of response.content) {
-            if (block.type !== 'tool_use') continue;
+          const bgToolBlocks = response.content.filter(b => b.type === 'tool_use');
+          const toolResults = await Promise.all(bgToolBlocks.map(async block => {
             try {
               const result = await executeTool(block.name, block.input, user);
               let toolContent;
@@ -6668,11 +6697,11 @@ async function runSkillBackground(task, ownerEmail) {
               } else {
                 toolContent = JSON.stringify(result).slice(0, 80000);
               }
-              toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: toolContent });
+              return { type: 'tool_result', tool_use_id: block.id, content: toolContent };
             } catch(e) {
-              toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true });
+              return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: e.message }), is_error: true };
             }
-          }
+          }));
           messages.push({ role: 'user', content: toolResults });
           toolRound++;
         }
@@ -6734,17 +6763,16 @@ async function runSkillBackground(task, ownerEmail) {
 
         messages.push({ role: 'assistant', content: choice.message.content || null, tool_calls: choice.message.tool_calls });
 
-        for (const tc of choice.message.tool_calls) {
-          let toolResultContent;
+        const ossToolMsgs = await Promise.all(choice.message.tool_calls.map(async tc => {
           try {
             const input = JSON.parse(tc.function.arguments);
             const result = await executeTool(tc.function.name, input, user);
-            toolResultContent = JSON.stringify(result).slice(0, 80000);
+            return { role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result).slice(0, 80000) };
           } catch(e) {
-            toolResultContent = JSON.stringify({ error: e.message });
+            return { role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ error: e.message }) };
           }
-          messages.push({ role: 'tool', tool_call_id: tc.id, content: toolResultContent });
-        }
+        }));
+        messages.push(...ossToolMsgs);
         toolRound++;
       }
     }
@@ -6762,6 +6790,21 @@ async function runSkillBackground(task, ownerEmail) {
     executeHooks('post_run', skillInfo, ownerEmail, resultBuffer).catch(() => {});
     notifyTaskResult(ownerEmail, task.skill_title || task.skill_name, 'done', resultBuffer).catch(() => {});
     if (usedFallback) notifyFallback(ownerEmail, task.skill_title || task.skill_name).catch(() => {});
+    // パイプライン自動連鎖: chain_skill_id があれば前の結果を渡して次のスキルを実行
+    if (task.chain_skill_id) {
+      const chainSkill = db.prepare('SELECT * FROM user_skills WHERE id=?').get(task.chain_skill_id);
+      if (chainSkill) {
+        const chainContext = `\n\n## 前のスキル「${task.skill_title || task.skill_name}」の実行結果\n\n${resultBuffer.slice(0, 3000)}`;
+        runSkillBackground({
+          skill_name: chainSkill.name,
+          skill_title: chainSkill.title,
+          description: chainSkill.description,
+          steps: (chainSkill.steps || '') + chainContext,
+          model: chainSkill.model || task.model,
+          chain_skill_id: chainSkill.chain_skill_id
+        }, ownerEmail).catch(e => console.error('[chain] 連鎖実行エラー:', e.message));
+      }
+    }
     return { ok: true, runId, resultBuffer };
   } catch(e) {
     db.prepare(`UPDATE task_runs SET status=?, result=?, finished_at=datetime('now','localtime') WHERE id=?`)
