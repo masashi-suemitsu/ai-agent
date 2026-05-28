@@ -491,6 +491,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_batch_owner ON skill_batch_jobs(owner_email, id DESC);
 `);
 
+// システム設定テーブル（管理者が UI から設定するキー値ストア）
+db.exec(`
+  CREATE TABLE IF NOT EXISTS system_settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL DEFAULT '',
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+  );
+`);
+
 // マジックリンク認証テーブル
 db.exec(`
   CREATE TABLE IF NOT EXISTS magic_link_tokens (
@@ -2945,29 +2954,32 @@ async function executeTool(name, input, user) {
       return data;
     }
     case 'list_slack_channels': {
-      if (!process.env.SLACK_BOT_TOKEN) throw new Error('SLACK_BOT_TOKEN 未設定。Slack Botトークンを管理者に依頼してください');
+      const slackTok = getSlackToken();
+      if (!slackTok) throw new Error('Slack が未接続です。管理画面 > 権限・ルール > Slack から Bot Token を設定してください');
       audit(user.email, user.name, 'tool.slack_channels');
       const qs = new URLSearchParams({ types: input.types || 'public_channel', limit: String(input.limit || 200), exclude_archived: 'true' });
       const r = await fetch(`https://slack.com/api/conversations.list?${qs}`, {
-        headers: { 'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}` }
+        headers: { 'Authorization': `Bearer ${slackTok}` }
       });
       const d = await r.json();
       if (!d.ok) throw new Error(`Slack error: ${d.error}`);
       return (d.channels || []).map(c => ({ id: c.id, name: c.name, is_private: c.is_private, num_members: c.num_members }));
     }
     case 'get_slack_messages': {
-      if (!process.env.SLACK_BOT_TOKEN) throw new Error('SLACK_BOT_TOKEN 未設定');
+      const slackTok = getSlackToken();
+      if (!slackTok) throw new Error('Slack が未接続です。管理画面から設定してください');
       audit(user.email, user.name, 'tool.slack_messages', { channel: input.channel });
       const qs = new URLSearchParams({ channel: input.channel, limit: String(Math.min(input.limit || 20, 200)) });
       const r = await fetch(`https://slack.com/api/conversations.history?${qs}`, {
-        headers: { 'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}` }
+        headers: { 'Authorization': `Bearer ${slackTok}` }
       });
       const d = await r.json();
       if (!d.ok) throw new Error(`Slack error: ${d.error}`);
       return (d.messages || []).map(m => ({ ts: m.ts, user: m.user, text: m.text, thread_ts: m.thread_ts }));
     }
     case 'send_slack_message': {
-      if (!process.env.SLACK_BOT_TOKEN) throw new Error('SLACK_BOT_TOKEN 未設定');
+      const slackTok = getSlackToken();
+      if (!slackTok) throw new Error('Slack が未接続です。管理画面から設定してください');
       if (!input.confirmed) {
         audit(user.email, user.name, 'tool.slack_send.preview', { channel: input.channel });
         return {
@@ -2983,7 +2995,7 @@ async function executeTool(name, input, user) {
       if (input.thread_ts) body.thread_ts = input.thread_ts;
       const r = await fetch('https://slack.com/api/chat.postMessage', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`, 'Content-Type': 'application/json; charset=utf-8' },
+        headers: { 'Authorization': `Bearer ${slackTok}`, 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify(body)
       });
       const d = await r.json();
@@ -5494,6 +5506,50 @@ function extractGmailBody(payload) {
   return '';
 }
 
+// ── Slack Bot Token ヘルパー ──
+function getSlackToken() {
+  const row = db.prepare("SELECT value FROM system_settings WHERE key='slack_bot_token'").get();
+  return row?.value || process.env.SLACK_BOT_TOKEN || '';
+}
+
+// GET /api/settings/slack/status
+app.get('/api/settings/slack/status', (req, res) => {
+  const token = getSlackToken();
+  res.json({ connected: !!token });
+});
+
+// POST /api/settings/slack  body: { token }
+app.post('/api/settings/slack', async (req, res) => {
+  const role = req.user.role || getUserRole(req.user.email);
+  if (role !== 'admin') return res.status(403).json({ error: '管理者のみ設定できます' });
+  const token = String(req.body.token || '').trim();
+  if (!token) return res.status(400).json({ error: 'token は必須です' });
+  if (!token.startsWith('xoxb-') && !token.startsWith('xoxp-')) {
+    return res.status(400).json({ error: 'Bot Token は xoxb- または xoxp- で始まる必要があります' });
+  }
+  // Slack API で疎通確認
+  try {
+    const r = await fetch('https://slack.com/api/auth.test', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const d = await r.json();
+    if (!d.ok) return res.status(400).json({ error: `Slack 認証失敗: ${d.error}` });
+    db.prepare(`INSERT INTO system_settings(key,value,updated_at) VALUES('slack_bot_token',?,datetime('now','localtime'))
+      ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`).run(token);
+    audit(req.user.email, req.user.name, 'settings.slack.connect', { workspace: d.team });
+    res.json({ ok: true, workspace: d.team, bot: d.user });
+  } catch(e) { serverError(res, e); }
+});
+
+// DELETE /api/settings/slack
+app.delete('/api/settings/slack', (req, res) => {
+  const role = req.user.role || getUserRole(req.user.email);
+  if (role !== 'admin') return res.status(403).json({ error: '管理者のみ削除できます' });
+  db.prepare("DELETE FROM system_settings WHERE key='slack_bot_token'").run();
+  audit(req.user.email, req.user.name, 'settings.slack.disconnect');
+  res.json({ ok: true });
+});
+
 // GET /api/connectors/status — 全コネクタのステータスを一括返却
 app.get('/api/connectors/status', (req, res) => {
   const email = req.user.email;
@@ -5507,7 +5563,7 @@ app.get('/api/connectors/status', (req, res) => {
   const e = process.env;
   const system = {
     zoom:         !!(e.ZOOM_ACCOUNT_ID && e.ZOOM_CLIENT_ID && e.ZOOM_CLIENT_SECRET),
-    slack:        !!e.SLACK_BOT_TOKEN,
+    slack:        !!getSlackToken(),
     notion:       !!e.NOTION_TOKEN,
     wordpress:    !!e.WP_URL,
     kintone:      !!(e.KINTONE_DOMAIN && e.KINTONE_API_TOKEN),
@@ -6526,6 +6582,9 @@ async function notifyTaskResult(ownerEmail, taskName, status, result) {
 
   // ── メール通知 ──
   if (!process.env.SES_FROM) return;
+  const TASK_ALERT_MAIL = process.env.TASK_ALERT_MAIL || 'marketing@acrovision.co.jp';
+
+  // オーナー本人への通知（成功・失敗どちらも）
   try {
     await getSesTransport().sendMail({
       from: process.env.SES_FROM || 'info@acrovision.co.jp',
@@ -6534,7 +6593,21 @@ async function notifyTaskResult(ownerEmail, taskName, status, result) {
       text: `タスク実行結果のお知らせ\n\nタスク名: ${taskName}\nステータス: ${statusLabel}\n実行日時: ${jst} (JST)\n\n--- 結果 ---\n${shortResult}\n\n管理画面: https://d2jjp21sq86i80.cloudfront.net/manage`
     });
   } catch(e) {
-    console.error('[notify] メール送信失敗:', e.message);
+    console.error('[notify] オーナーへのメール送信失敗:', e.message);
+  }
+
+  // 失敗時は会社アドレスにも通知（オーナーと同一の場合は重複スキップ）
+  if (status === 'error' && ownerEmail !== TASK_ALERT_MAIL) {
+    try {
+      await getSesTransport().sendMail({
+        from: process.env.SES_FROM || 'info@acrovision.co.jp',
+        to: TASK_ALERT_MAIL,
+        subject: `❌ [AIエージェント] タスク失敗アラート: ${taskName}`,
+        text: `スケジュールタスクの失敗を検知しました。\n\nタスク名: ${taskName}\nオーナー: ${ownerEmail}\n実行日時: ${jst} (JST)\n\n--- エラー内容 ---\n${shortResult}\n\n管理画面: https://d2jjp21sq86i80.cloudfront.net/manage`
+      });
+    } catch(e) {
+      console.error('[notify] アラートメール送信失敗:', e.message);
+    }
   }
 }
 
@@ -6636,6 +6709,8 @@ function runScheduler() {
       }).catch(e => {
         db.prepare("UPDATE scheduled_tasks SET last_status='error', last_result=? WHERE id=?")
           .run(e.message.slice(0, 500), task.id);
+        // runSkillBackground 自体が予期せず throw した場合のフォールバック通知
+        notifyTaskResult(task.owner_email, task.skill_title || task.skill_name, 'error', e.message).catch(() => {});
       });
     }
   } catch(e) {

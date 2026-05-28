@@ -892,6 +892,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
           <div class="rs-status disconnected" id="rs-github-status">確認中...</div>
         </div>
       </div>
+      <div id="rsMcpList"></div>
     </div>
     <div class="rs-tasks-section" id="rsTasksSection">
       <div class="rs-tasks-header">
@@ -2653,6 +2654,28 @@ async function loadRightSidebarStatuses() {
       }
     } catch { el.textContent = '─'; }
   }));
+  // MCP サーバー一覧を動的に表示
+  loadMcpStatus();
+}
+
+async function loadMcpStatus() {
+  const el = document.getElementById('rsMcpList');
+  if (!el) return;
+  try {
+    const { servers } = await fetch('/api/mcp/status').then(r => r.json());
+    if (!servers.length) { el.innerHTML = ''; return; }
+    el.innerHTML = servers.map(s => {
+      const label = s.name.replace(/^mcp-?/i, '');
+      const domain = (() => { try { return new URL(s.url).hostname.replace(/^(mcp|api)\./, ''); } catch { return s.url; } })();
+      return `<div class="rs-item" style="cursor:default;" title="${esc(s.url)}">
+        <span class="rs-icon">🔌</span>
+        <div class="rs-info">
+          <div class="rs-name">${esc(label)}</div>
+          <div class="rs-status connected">✅ MCP 接続中${domain ? ' · ' + esc(domain) : ''}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch { el.innerHTML = ''; }
 }
 
 // ─ Google Drive ─
