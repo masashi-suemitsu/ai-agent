@@ -553,11 +553,21 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
         <span style="color:var(--text-light);">プランを読み込み中...</span>
       </div>
     </div>
-    <button id="planModeToggle" onclick="togglePlanMode()" style="font-size:11px;border:1px solid var(--border);color:var(--text-light);background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:5px;">📋 実行計画を確認する</button>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <button id="planModeToggle" onclick="togglePlanMode()" style="font-size:11px;border:1px solid var(--border);color:var(--text-light);background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;">📋 実行計画を確認する</button>
+      <button id="thinkingToggleSkill" onclick="toggleSkillThinking()" style="font-size:11px;border:1px solid var(--border);color:var(--text-light);background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;" title="拡張思考モード: 複雑なスキルをより深く考えて実行します">🧠 拡張思考モード</button>
+    </div>
     <!-- Step Display Area -->
     <div id="runStepArea" style="display:none;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:#f7f8fc;">
       <div style="font-size:11px;font-weight:700;color:var(--text-light);margin-bottom:6px;">実行ステップ</div>
       <div id="runStepList" style="font-size:12px;line-height:1.7;"></div>
+      <!-- Extended Thinking Display -->
+      <div id="skillThinkingBlock" style="display:none;margin-top:8px;">
+        <details style="border:1px solid #c3dafe;border-radius:8px;background:#ebf4ff;">
+          <summary style="padding:6px 10px;cursor:pointer;font-weight:600;color:#3182ce;font-size:11px;">🧠 思考プロセス（クリックで展開）</summary>
+          <pre id="skillThinkingPre" style="white-space:pre-wrap;padding:8px 12px;color:#2c5282;line-height:1.6;font-family:inherit;margin:0;font-size:11px;max-height:200px;overflow-y:auto;"></pre>
+        </details>
+      </div>
     </div>
     <div id="runEstimateArea" style="background:#f7f8fc;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:4px;font-size:13px;line-height:1.9;color:var(--text);">
       <span style="color:var(--text-light);">コスト算出中...</span>
@@ -1007,11 +1017,26 @@ function renderSkills(skills) {
 let _runConfirmSkillId = null;
 let _runConfirmBtn = null;
 let _planModeOn = false;
+let _skillThinkingOn = false;
+
+function toggleSkillThinking() {
+  _skillThinkingOn = !_skillThinkingOn;
+  const btn = document.getElementById('thinkingToggleSkill');
+  if (_skillThinkingOn) {
+    btn.style.cssText += ';border-color:var(--primary);color:var(--primary);background:var(--primary-light);';
+    btn.textContent = '🧠 拡張思考モード ON';
+  } else {
+    btn.style.cssText = btn.style.cssText.replace(/;?border-color[^;]+;?/g,'').replace(/;?color[^;]+;?/g,'').replace(/;?background[^;]+;?/g,'');
+    btn.textContent = '🧠 拡張思考モード';
+    btn.style.cssText = 'font-size:11px;border:1px solid var(--border);color:var(--text-light);background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;';
+  }
+}
 
 async function runSkillNow(id, title, btn) {
   _runConfirmSkillId = id;
   _runConfirmBtn = btn;
   _planModeOn = false;
+  _skillThinkingOn = false;
   document.getElementById('runConfirmTitle').textContent = title;
   document.getElementById('runConfirmBtn').disabled = true;
   document.getElementById('runEstimateArea').innerHTML = '<span style="color:var(--text-light);">コスト算出中...</span>';
@@ -1019,6 +1044,10 @@ async function runSkillNow(id, title, btn) {
   document.getElementById('planModeToggle').textContent = '📋 実行計画を確認する';
   document.getElementById('runStepArea').style.display = 'none';
   document.getElementById('runStepList').innerHTML = '';
+  document.getElementById('skillThinkingBlock').style.display = 'none';
+  document.getElementById('skillThinkingPre').textContent = '';
+  const thinkBtn = document.getElementById('thinkingToggleSkill');
+  if (thinkBtn) { thinkBtn.textContent = '🧠 拡張思考モード'; thinkBtn.style.cssText = 'font-size:11px;border:1px solid var(--border);color:var(--text-light);background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;'; }
   document.getElementById('runConfirmModal').classList.add('open');
 
   try {
@@ -1100,8 +1129,15 @@ async function doRunSkillNow() {
   const stepList = document.getElementById('runStepList');
   stepArea.style.display = '';
   stepList.innerHTML = '';
+  let skillThinkingText = '';
+  const thinkingBlock = document.getElementById('skillThinkingBlock');
+  const thinkingPre = document.getElementById('skillThinkingPre');
   try {
-    const resp = await fetch(`/api/skills/${id}/run`, { method: 'POST' });
+    const resp = await fetch(`/api/skills/${id}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ thinking: _skillThinkingOn })
+    });
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
@@ -1114,12 +1150,16 @@ async function doRunSkillNow() {
         if (!line.startsWith('data:')) continue;
         try {
           const d = JSON.parse(line.slice(5));
+          // 拡張思考ストリーム
+          if (d.thinking) {
+            skillThinkingText += d.thinking;
+            thinkingBlock.style.display = '';
+            thinkingPre.textContent = skillThinkingText;
+          }
           if (d.tool) {
             const label = TOOL_LABELS[d.tool] || d.tool;
-            const elId = `step-${d.tool}-${Date.now()}`;
             if (d.status === 'running') {
               const el = document.createElement('div');
-              el.id = elId;
               el.dataset.tool = d.tool;
               el.innerHTML = `<span style="display:inline-block;width:8px;height:8px;background:#f6ad55;border-radius:50%;margin-right:6px;animation:pulse .8s infinite;"></span>${label}`;
               el.style.cssText = 'padding:2px 0;color:var(--text);';

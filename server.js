@@ -3463,6 +3463,9 @@ app.post('/api/skills/:id/run', async (req, res) => {
     }
   }
 
+  // 拡張思考モード（Sonnet のみ対応）
+  const useSkillThinking = !!(req.body?.thinking);
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.flushHeaders();
@@ -3492,17 +3495,21 @@ app.post('/api/skills/:id/run', async (req, res) => {
       while (toolRound < 10) {
         const stream = anthropic.messages.stream({
           model: 'claude-sonnet-4-6',
-          max_tokens: 4096,
+          max_tokens: useSkillThinking ? 16000 : 4096,
           system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
           tools: cachedSkillTools,
           messages,
-          betas: ['prompt-caching-2024-07-31']
+          betas: ['prompt-caching-2024-07-31'],
+          ...(useSkillThinking ? { thinking: { type: 'enabled', budget_tokens: 8000 } } : {})
         });
 
         for await (const ev of stream) {
           if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') {
             resultBuffer += ev.delta.text;
             res.write(`data: ${JSON.stringify({ text: ev.delta.text })}\n\n`);
+          }
+          if (ev.type === 'content_block_delta' && ev.delta.type === 'thinking_delta') {
+            res.write(`data: ${JSON.stringify({ thinking: ev.delta.thinking })}\n\n`);
           }
         }
 
