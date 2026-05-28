@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const crypto = require('crypto');
 const helmet = require('helmet');
+const webpush = require('web-push');
 const rateLimit = require('express-rate-limit');
 const session = require('express-session');
 const SqliteStore = require('better-sqlite3-session-store')(session);
@@ -476,6 +477,57 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_versions_skill ON skill_versions(skill_id, version_num DESC);
 `);
+
+// Web Push・スキルI/E用テーブル
+db.exec(`
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    endpoint TEXT NOT NULL UNIQUE,
+    keys_auth TEXT,
+    keys_p256dh TEXT,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_push_email ON push_subscriptions(email);
+`);
+
+// VAPID鍵の初期化（初回起動時に自動生成・DB保存）
+let VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY;
+try {
+  const pub = db.prepare("SELECT value FROM app_settings WHERE key='vapid_public_key'").get();
+  if (pub) {
+    VAPID_PUBLIC_KEY = pub.value;
+    VAPID_PRIVATE_KEY = db.prepare("SELECT value FROM app_settings WHERE key='vapid_private_key'").get().value;
+  } else {
+    const keys = webpush.generateVAPIDKeys();
+    VAPID_PUBLIC_KEY = keys.publicKey;
+    VAPID_PRIVATE_KEY = keys.privateKey;
+    db.prepare("INSERT INTO app_settings (key,value) VALUES ('vapid_public_key',?)").run(VAPID_PUBLIC_KEY);
+    db.prepare("INSERT INTO app_settings (key,value) VALUES ('vapid_private_key',?)").run(VAPID_PRIVATE_KEY);
+    console.log('[push] VAPID keys generated');
+  }
+  webpush.setVapidDetails('mailto:info@acrovision.co.jp', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+} catch(e) { console.error('[push] VAPID init failed:', e.message); }
+
+async function sendPushNotifications(email, title, body) {
+  const subs = db.prepare('SELECT * FROM push_subscriptions WHERE email=?').all(email);
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { auth: sub.keys_auth, p256dh: sub.keys_p256dh } },
+        JSON.stringify({ title, body, url: 'https://d2jjp21sq86i80.cloudfront.net/manage' })
+      );
+    } catch(e) {
+      if (e.statusCode === 410 || e.statusCode === 404) {
+        db.prepare('DELETE FROM push_subscriptions WHERE endpoint=?').run(sub.endpoint);
+      }
+    }
+  }
+}
 
 // ループ・プランモード用カラム追加
 ['ALTER TABLE scheduled_tasks ADD COLUMN loop_enabled INTEGER DEFAULT 0',
@@ -3050,10 +3102,10 @@ async function executeTool(name, input, user) {
       if (include.has('seikyu'))   report.sections.seikyu   = await safeQuery('SELECT COUNT(*) as count FROM kintone_seikyu WHERE created_at >= ?', [firstDay]);
       if (include.has('customer')) report.sections.customer = await safeQuery('SELECT COUNT(*) as new_customers FROM kintone_customers WHERE created_at >= ?', [firstDay]);
       report.sections.employees = await safeQuery('SELECT COUNT(*) as total FROM kintone_employees');
-      if (input.notify_room_id && !process.env.SYSTEM_CHATWORK_TOKEN) {
-        report.notify_warning = 'SYSTEM_CHATWORK_TOKEN が未設定のため、Chatwork通知をスキップしました';
+      if (input.notify_room_id && !process.env.CHATWORK_SYSTEM_TOKEN) {
+        report.notify_warning = 'CHATWORK_SYSTEM_TOKEN が未設定のため、Chatwork通知をスキップしました';
       }
-      if (input.notify_room_id && process.env.SYSTEM_CHATWORK_TOKEN) {
+      if (input.notify_room_id && process.env.CHATWORK_SYSTEM_TOKEN) {
         const s = report.sections;
         const body = '[info][title]📊 週次レポート（' + firstDay + '月）[/title]' +
           (s.anken && !s.anken.error    ? '\n■ 案件総数: '           + s.anken.total         + '件' : '') +
@@ -3064,7 +3116,7 @@ async function executeTool(name, input, user) {
           '\n[/info]';
         await fetch(`https://api.chatwork.com/v2/rooms/${input.notify_room_id}/messages`, {
           method: 'POST',
-          headers: { 'X-ChatWorkToken': process.env.SYSTEM_CHATWORK_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
+          headers: { 'X-ChatWorkToken': process.env.CHATWORK_SYSTEM_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'body=' + encodeURIComponent(body)
         });
       }
@@ -3280,9 +3332,32 @@ ${(input.candidate_info || '').slice(0, 3000)}
 
       let rows = [];
       if (isXLS) {
-        const wb = xlsx.read(buf, { type: 'buffer' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        rows = xlsx.utils.sheet_to_json(ws, { defval: '' });
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buf);
+        const ws = wb.worksheets[0];
+        if (!ws) throw new Error('Excelファイルにシートが存在しません');
+        let xlsHeaders = [];
+        ws.eachRow({ includeEmpty: false }, (row, rowNum) => {
+          if (rowNum === 1) {
+            xlsHeaders = row.values.slice(1).map(v => String(v ?? '').trim());
+          } else {
+            const obj = {};
+            xlsHeaders.forEach((h, i) => {
+              const cell = row.getCell(i + 1);
+              let v = cell.value;
+              if (v !== null && v !== undefined) {
+                if (typeof v === 'object') {
+                  if (v.text !== undefined) v = String(v.text);
+                  else if (v.result !== undefined) v = String(v.result);
+                  else if (v instanceof Date) v = v.toISOString();
+                  else v = String(v);
+                } else v = String(v);
+              } else v = '';
+              obj[h] = v;
+            });
+            rows.push(obj);
+          }
+        });
       } else {
         const text = buf.toString('utf8');
         const lines = text.split(/\r?\n/).filter(l => l.trim());
