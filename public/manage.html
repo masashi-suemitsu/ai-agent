@@ -74,6 +74,9 @@ header h1 small { font-size: 11px; font-weight: 400; color: var(--text-light); d
 
 .steps-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--primary); cursor: pointer; background: var(--primary-light); border: none; border-radius: 6px; padding: 5px 12px; transition: background .12s; }
 .steps-btn:hover { background: #dde8ff; }
+.result-box { margin-top: 10px; background: var(--muted-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.result-box.json-box { background: #f0f4ff; border-color: #c3d0f5; }
+@media (prefers-color-scheme: dark) { .result-box.json-box { background: #1a1f35; border-color: #2d3660; } }
 .steps-body { margin-top: 10px; background: var(--muted-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 12px; line-height: 1.85; color: var(--text); white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow-y: auto; display: none; }
 .steps-body.open { display: block; }
 
@@ -1790,6 +1793,79 @@ function filterHistory(type, btn) {
   renderHistory(filtered);
 }
 
+// ─ 結果テキストのレンダリングヘルパー ─
+function renderResultBody(text, runId) {
+  if (!text) return '';
+  const PREVIEW_LEN = 300;
+  let parsed = null;
+  try { parsed = JSON.parse(text); } catch {}
+
+  // JSON整形表示
+  if (parsed && typeof parsed === 'object') {
+    const pretty = JSON.stringify(parsed, null, 2);
+    const previewLines = pretty.split('\n').slice(0, 12).join('\n');
+    const hasMore = pretty.split('\n').length > 12;
+    const previewHtml = `<pre style="font-size:11.5px;line-height:1.7;color:var(--text);white-space:pre-wrap;word-break:break-word;margin:0;">${esc(previewLines)}${hasMore ? '\n…' : ''}</pre>`;
+    if (!hasMore) {
+      return `<div class="result-box json-box">${previewHtml}</div>`;
+    }
+    const fullHtml = `<pre style="font-size:11.5px;line-height:1.7;color:var(--text);white-space:pre-wrap;word-break:break-word;margin:0;">${esc(pretty)}</pre>`;
+    return `
+      <div class="result-box json-box">
+        <div class="result-preview">${previewHtml}</div>
+        <div class="result-full" style="display:none;">${fullHtml}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <button class="steps-btn" onclick="toggleResultInline(this)">▼ 全文を展開</button>
+          <button class="steps-btn" onclick="copyResult(${runId})" title="コピー">📋 コピー</button>
+        </div>
+      </div>`;
+  }
+
+  // テキスト表示
+  const isLong = text.length > PREVIEW_LEN;
+  const preview = isLong ? text.slice(0, PREVIEW_LEN) + '…' : text;
+  const previewHtml = `<div style="font-size:12px;line-height:1.8;color:var(--text);white-space:pre-wrap;word-break:break-word;">${esc(preview)}</div>`;
+  if (!isLong) {
+    return `<div class="result-box">
+      ${previewHtml}
+      <div style="margin-top:6px;"><button class="steps-btn" onclick="copyResult(${runId})" title="コピー">📋 コピー</button></div>
+    </div>`;
+  }
+  const fullHtml = `<div style="font-size:12px;line-height:1.8;color:var(--text);white-space:pre-wrap;word-break:break-word;">${esc(text)}</div>`;
+  return `
+    <div class="result-box">
+      <div class="result-preview">${previewHtml}</div>
+      <div class="result-full" style="display:none;">${fullHtml}</div>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+        <button class="steps-btn" onclick="toggleResultInline(this)">▼ 全文を展開</button>
+        <button class="steps-btn" onclick="copyResult(${runId})" title="コピー">📋 コピー</button>
+      </div>
+    </div>`;
+}
+
+function toggleResultInline(btn) {
+  const box = btn.closest('.result-box');
+  const preview = box.querySelector('.result-preview');
+  const full    = box.querySelector('.result-full');
+  const isOpen  = full.style.display !== 'none';
+  preview.style.display = isOpen ? '' : 'none';
+  full.style.display    = isOpen ? 'none' : '';
+  btn.textContent = isOpen ? '▼ 全文を展開' : '▲ 閉じる';
+}
+
+function copyResult(runId) {
+  const r = _resultCache[runId] || {};
+  const text = r.result || r.last_result || '';
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const msg = document.createElement('span');
+    msg.textContent = '✓ コピー済み';
+    msg.style.cssText = 'font-size:11px;color:var(--primary);font-weight:600;';
+    const btn = document.querySelector(`[onclick="copyResult(${runId})"]`);
+    if (btn) { btn.after(msg); setTimeout(() => msg.remove(), 2000); }
+  });
+}
+
 function renderHistory(runs) {
   const el = document.getElementById('historyList');
   if (!runs.length) {
@@ -1806,6 +1882,10 @@ function renderHistory(runs) {
     const duration = r.started_at && r.finished_at
       ? Math.round((new Date(r.finished_at.replace(' ','T')+'Z') - new Date(r.started_at.replace(' ','T')+'Z')) / 1000) + '秒'
       : '─';
+    const errorBox = r.status === 'error' && r.result
+      ? `<div style="background:#fff5f5;border:1px solid #feb2b2;border-radius:8px;padding:10px 14px;font-size:12px;color:#c53030;white-space:pre-wrap;word-break:break-word;margin-top:8px;">⚠️ ${esc(r.result)}</div>`
+      : '';
+    const resultHtml = r.status !== 'error' ? renderResultBody(r.result, r.id) : '';
     return `<div class="card">
       <div class="card-header">
         <div class="card-title">${esc(r.skill_title || r.skill_name)}</div>
@@ -1818,17 +1898,12 @@ function renderHistory(runs) {
         ${(r.input_tokens || r.output_tokens) ? `<span>🔢 ${(r.input_tokens||0).toLocaleString()}入 / ${(r.output_tokens||0).toLocaleString()}出 tok</span>` : ''}
         <span style="font-size:11px;color:#a0aec0;">スキル: ${esc(r.skill_name)}</span>
       </div>
-      ${r.result ? (() => {
-        const preview = r.result.slice(0, 200);
-        const hasMore = r.result.length > 200;
-        return `<div style="background:#f7f8fc;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.75;color:var(--text);white-space:pre-wrap;word-break:break-word;">${esc(preview)}${hasMore ? '…' : ''}</div>
-        ${hasMore ? `<button class="steps-btn" style="margin-top:6px;" onclick="openResultModal_h(${r.id})">📄 全文を表示</button>` : ''}`;
-      })() : ''}
+      ${errorBox}${resultHtml}
     </div>`;
   }).join('');
 }
 
-// ─ 結果モーダル ─
+// ─ 結果モーダル（タスク一覧からの「最終結果を見る」用に残す） ─
 const _resultCache = {};
 function openResultModal(title, result) {
   document.getElementById('resultModalTitle').textContent = title || '実行結果';
