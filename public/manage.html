@@ -1285,7 +1285,7 @@ async function loadSkills() {
     allSkills = await apiFetch('/api/skills');
     renderSkills(allSkills);
   } catch(e) {
-    document.getElementById('skillList').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>${esc(e.message)}</p></div>`;
+    document.getElementById('myJobList').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>${esc(e.message)}</p></div>`;
   }
 }
 
