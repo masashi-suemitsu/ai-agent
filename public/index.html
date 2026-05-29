@@ -943,6 +943,9 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
       <button class="rs-footer-btn" id="rs-history-btn" onclick="toggleHistory()">
         <span>📋</span> 実行履歴
       </button>
+      <button class="rs-footer-btn" id="rs-workflows-btn" onclick="toggleWorkflowsPanel()">
+        <span>🔀</span> ワークフロー
+      </button>
     </div>
   </div>
 </div>
@@ -1062,6 +1065,20 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
     <button class="panel-close-btn" onclick="toggleSkillsPanel()">✕</button>
   </div>
   <div class="schedule-list" id="skillsPanelList">
+    <div style="color:#a0aec0;font-size:12px;padding:20px;text-align:center;">読み込み中...</div>
+  </div>
+</div>
+
+<!-- ─ Workflows Panel ─ -->
+<div class="schedule-panel" id="workflowsPanel">
+  <div class="schedule-panel-header">
+    <h3>🔀 ワークフロー一覧</h3>
+    <button class="panel-close-btn" onclick="toggleWorkflowsPanel()">✕</button>
+  </div>
+  <div style="padding:8px 12px 0;">
+    <a href="/manage" onclick="localStorage.setItem('manageTab','workflows')" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600;">＋ 新規作成 / 編集 →</a>
+  </div>
+  <div class="schedule-list" id="workflowsPanelList">
     <div style="color:#a0aec0;font-size:12px;padding:20px;text-align:center;">読み込み中...</div>
   </div>
 </div>
@@ -2590,8 +2607,8 @@ async function attachCwMessages() {
 }
 
 // ─ パネル共通クローズ ─
-const ALL_PANELS = ['cwPanel','drivePanel','calendarPanel','gmailPanel','githubPanel','historyPanel','schedulePanel','skillsPanel'];
-const ALL_BTNS   = ['rs-chatwork','rs-drive','rs-calendar','rs-gmail','rs-github','rs-history-btn','rs-schedule-btn','rs-skills-btn'];
+const ALL_PANELS = ['cwPanel','drivePanel','calendarPanel','gmailPanel','githubPanel','historyPanel','schedulePanel','skillsPanel','workflowsPanel'];
+const ALL_BTNS   = ['rs-chatwork','rs-drive','rs-calendar','rs-gmail','rs-github','rs-history-btn','rs-schedule-btn','rs-skills-btn','rs-workflows-btn'];
 function closeAllPanels(except) {
   ALL_PANELS.forEach((id, i) => { if (id !== except) { document.getElementById(id)?.classList.remove('open'); document.getElementById(ALL_BTNS[i])?.classList.remove('active'); } });
   syncBackdrop();
@@ -3265,6 +3282,57 @@ async function loadSkillsPanel() {
       </div>`).join('');
   } catch(e) {
     el.innerHTML = `<div class="history-empty">取得失敗: ${esc(e.message)}</div>`;
+  }
+}
+
+function toggleWorkflowsPanel() {
+  const panel = document.getElementById('workflowsPanel');
+  const btn = document.getElementById('rs-workflows-btn');
+  const isOpen = panel.classList.contains('open');
+  closeAllPanels('workflowsPanel');
+  panel.classList.toggle('open', !isOpen);
+  btn.classList.toggle('active', !isOpen);
+  syncBackdrop();
+  if (!isOpen) loadWorkflowsPanel();
+}
+
+async function loadWorkflowsPanel() {
+  const el = document.getElementById('workflowsPanelList');
+  try {
+    const wfs = await fetch('/api/workflows').then(r => r.json());
+    if (!wfs.length) {
+      el.innerHTML = '<div class="history-empty">ワークフローがありません<br><small style="opacity:.7;display:block;margin-top:6px;"><a href="/manage" onclick="localStorage.setItem(\'manageTab\',\'workflows\')" style="color:var(--primary);">管理画面</a>から作成できます</small></div>';
+      return;
+    }
+    el.innerHTML = wfs.map(wf => {
+      const statusColor = wf.last_status === 'done' ? '#48bb78' : wf.last_status === 'error' ? '#f56565' : '#a0aec0';
+      const lastRun = wf.last_run_at ? new Date(wf.last_run_at.replace(' ','T')).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '─';
+      return `<div class="sched-card">
+        <div class="sched-card-title">${esc(wf.name)}</div>
+        ${wf.description ? `<div class="sched-card-meta" style="margin-bottom:6px;">${esc(wf.description)}</div>` : ''}
+        <div class="sched-card-meta" style="margin-bottom:8px;">最終実行: ${lastRun} <span style="color:${statusColor};font-weight:600;">${wf.last_status || '─'}</span></div>
+        <div class="sched-card-actions">
+          <button class="skill-run-btn" data-id="${wf.id}" onclick="runWorkflowFromPanel(this.dataset.id, this)">実行</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="history-empty">取得失敗: ${esc(e.message)}</div>`;
+  }
+}
+
+async function runWorkflowFromPanel(id, btn) {
+  btn.disabled = true;
+  btn.textContent = '実行中…';
+  try {
+    const r = await fetch(`/api/workflows/${id}/run`, { method: 'POST' });
+    if (!r.ok) throw new Error((await r.json()).error || '実行失敗');
+    btn.textContent = '✓ 開始';
+    setTimeout(() => { btn.disabled = false; btn.textContent = '実行'; loadWorkflowsPanel(); }, 3000);
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '実行';
+    alert('実行に失敗しました: ' + e.message);
   }
 }
 
