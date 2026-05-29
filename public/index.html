@@ -841,7 +841,6 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
 
     <div class="messages" id="messages">
       <div class="empty-state" id="emptyState">
-        <div class="empty-icon">🤖</div>
         <h2>どんな仕事を任せますか？</h2>
         <p>日々の繰り返し業務を伝えてください。<br>一緒に自動化の仕組みを作ります。</p>
         <div class="examples">
@@ -1489,7 +1488,7 @@ async function exportConversation() {
 function createEmptyState() {
   const d = document.createElement('div');
   d.className = 'empty-state'; d.id = 'emptyState';
-  d.innerHTML = `<div class="empty-icon">🤖</div><h2>どんな仕事を任せますか？</h2><p>日々の繰り返し業務を伝えてください。<br>一緒に自動化の仕組みを作ります。</p>`;
+  d.innerHTML = `<h2>どんな仕事を任せますか？</h2><p>日々の繰り返し業務を伝えてください。<br>一緒に自動化の仕組みを作ります。</p>`;
   return d;
 }
 
