@@ -13,6 +13,24 @@
 [data-theme="dark"] {
   --bg:#1a1d2e; --border:#2d3748; --text:#e2e8f0; --text-light:#8a95a8;
   --panel-bg:#1a1d2e; --input-bg:#252840; --muted-bg:#252840;
+  --feedback-banner-bg: rgba(72,187,120,.12);
+  --feedback-banner-text: #68d391;
+  --user-msg-bg: rgba(72,187,120,.1);
+  --admin-panel-bg: rgba(237,137,54,.1);
+  --admin-panel-border: rgba(237,137,54,.3);
+  --admin-panel-h3: #f6ad55;
+  --admin-note-bg: rgba(237,137,54,.15);
+  --admin-note-border: rgba(237,137,54,.4);
+}
+:root {
+  --feedback-banner-bg: #e6f7e0;
+  --feedback-banner-text: #155013;
+  --user-msg-bg: #e6f7e0;
+  --admin-panel-bg: #fff8e1;
+  --admin-panel-border: #f1e2a8;
+  --admin-panel-h3: #7a5d00;
+  --admin-note-bg: #fff8e1;
+  --admin-note-border: #f59f00;
 }
 body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans',sans-serif; background:var(--bg); color:var(--text); }
 header { background:var(--panel-bg); border-bottom:1px solid var(--border); padding:0 20px; height:52px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 4px rgba(0,0,0,.05); }
@@ -21,7 +39,7 @@ header .h-right a, header .h-right button { color:var(--text-light); text-decora
 header .h-right a:hover, header .h-right button:hover { border-color:#5b6eff; color:#5b6eff; }
 
 .wrap { max-width:960px; margin:0 auto; padding:18px; }
-.banner { background:#e6f7e0; color:#155013; padding:14px 18px; border-radius:10px; margin-bottom:14px; font-size:13.5px; line-height:1.6; }
+.banner { background:var(--feedback-banner-bg); color:var(--feedback-banner-text); padding:14px 18px; border-radius:10px; margin-bottom:14px; font-size:13.5px; line-height:1.6; }
 .card { background:var(--panel-bg); border-radius:10px; padding:18px 20px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
 .card h2 { margin:0 0 14px; font-size:14px; font-weight:700; color:var(--text-light); border-bottom:1px solid var(--border); padding-bottom:8px; }
 .meta-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; font-size:12px; color:#718096; margin-bottom:10px; }
@@ -35,13 +53,13 @@ header .h-right a:hover, header .h-right button:hover { border-color:#5b6eff; co
 .log-list li { padding:6px 0; border-bottom:1px solid var(--border); color:var(--text); line-height:1.5; }
 .log-list li:last-child { border-bottom:none; }
 .chat-list .msg { padding:10px 14px; border-radius:10px; margin-bottom:8px; font-size:13.5px; line-height:1.55; }
-.chat-list .msg.user { background:#e6f7e0; }
+.chat-list .msg.user { background:var(--user-msg-bg); }
 .chat-list .msg.ai { background:var(--muted-bg); }
 .chat-list .who { font-size:11px; color:var(--text-light); margin-bottom:4px; }
 .empty { color:#a0aec0; font-size:13px; padding:14px; text-align:center; }
 
-.admin-panel { background:#fff8e1; border:1px solid #f1e2a8; border-radius:10px; padding:14px 16px; margin-bottom:14px; }
-.admin-panel h3 { margin:0 0 10px; font-size:13px; color:#7a5d00; }
+.admin-panel { background:var(--admin-panel-bg); border:1px solid var(--admin-panel-border); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+.admin-panel h3 { margin:0 0 10px; font-size:13px; color:var(--admin-panel-h3); }
 .admin-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
 .admin-row label { font-size:12px; color:#4a5568; font-weight:600; min-width:60px; }
 .admin-row select { padding:6px 10px; border:1px solid var(--border); border-radius:7px; font-size:13px; background:var(--input-bg); color:var(--text); }
@@ -125,7 +143,7 @@ function render(data) {
             ${r.reproduce_steps ? `<dt>再現手順</dt><dd>${escapeHtml(r.reproduce_steps)}</dd>` : ''}
             ${r.expected_behavior ? `<dt>期待動作</dt><dd>${escapeHtml(r.expected_behavior)}</dd>` : ''}
             ${r.actual_behavior ? `<dt>実際の動作</dt><dd>${escapeHtml(r.actual_behavior)}</dd>` : ''}
-            ${r.admin_note ? `<dt>管理メモ</dt><dd style="background:#fff8e1;padding:8px 12px;border-radius:6px;border-left:3px solid #f59f00;">${escapeHtml(r.admin_note)}</dd>` : ''}
+            ${r.admin_note ? `<dt>管理メモ</dt><dd style="background:var(--admin-note-bg);padding:8px 12px;border-radius:6px;border-left:3px solid var(--admin-note-border);color:var(--text);">${escapeHtml(r.admin_note)}</dd>` : ''}
         </dl>
     </div>`;
 

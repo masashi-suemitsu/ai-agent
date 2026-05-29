@@ -28,12 +28,42 @@
   --admin-banner-border: rgba(229,62,62,.35);
   --admin-banner-text: #fca5a5;
   --admin-banner-sub: #f87171;
+  --thinking-bg: rgba(49,82,179,.15);
+  --thinking-border: rgba(99,137,255,.3);
+  --thinking-text: #90b3f8;
+  --thinking-label: #7fa7f5;
+  --success-text: #68d391;
+  --success-badge-bg: rgba(72,187,120,.15);
+  --success-badge-text: #68d391;
+  --error-bg: rgba(229,62,62,.12);
+  --error-border: rgba(229,62,62,.35);
+  --error-text: #fc8181;
+  --warn-bg: rgba(237,137,54,.12);
+  --warn-border: rgba(237,137,54,.3);
+  --warn-text: #f6ad55;
+  --badge-blue-bg: rgba(66,153,225,.15);
+  --badge-blue-text: #7abfff;
 }
 :root {
   --admin-banner-bg: #fff5f5;
   --admin-banner-border: #feb2b2;
   --admin-banner-text: #742a2a;
   --admin-banner-sub: #742a2a;
+  --thinking-bg: #ebf4ff;
+  --thinking-border: #c3dafe;
+  --thinking-text: #2c5282;
+  --thinking-label: #3182ce;
+  --success-text: #276749;
+  --success-badge-bg: #c6f6d5;
+  --success-badge-text: #276749;
+  --error-bg: #fff5f5;
+  --error-border: #feb2b2;
+  --error-text: #c53030;
+  --warn-bg: #fff8e1;
+  --warn-border: #f1e2a8;
+  --warn-text: #7a5d00;
+  --badge-blue-bg: #bee3f8;
+  --badge-blue-text: #2b6cb0;
 }
 .usage-admin-banner {
   display: flex; align-items: center; gap: 8px;
@@ -730,7 +760,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
     </div>
     <div class="modal-field">
       <label>🔗 完了後に連鎖実行するジョブ（任意）</label>
-      <select id="editSkillChain" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;outline:none;background:#fff;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+      <select id="editSkillChain" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;outline:none;background:var(--input-bg);color:var(--text);" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
         <option value="">なし（チェーンしない）</option>
       </select>
       <div style="font-size:11px;color:var(--text-light);margin-top:4px;">このジョブが完了すると、選択したジョブが自動的に続けて実行されます。前のジョブの結果が引き継がれます。</div>
@@ -910,9 +940,9 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
       <div id="runStepList" style="font-size:12px;line-height:1.7;"></div>
       <!-- Extended Thinking Display -->
       <div id="skillThinkingBlock" style="display:none;margin-top:8px;">
-        <details style="border:1px solid #c3dafe;border-radius:8px;background:#ebf4ff;">
-          <summary style="padding:6px 10px;cursor:pointer;font-weight:600;color:#3182ce;font-size:11px;">🧠 思考プロセス（クリックで展開）</summary>
-          <pre id="skillThinkingPre" style="white-space:pre-wrap;padding:8px 12px;color:#2c5282;line-height:1.6;font-family:inherit;margin:0;font-size:11px;max-height:200px;overflow-y:auto;"></pre>
+        <details style="border:1px solid var(--thinking-border);border-radius:8px;background:var(--thinking-bg);">
+          <summary style="padding:6px 10px;cursor:pointer;font-weight:600;color:var(--thinking-label);font-size:11px;">🧠 思考プロセス（クリックで展開）</summary>
+          <pre id="skillThinkingPre" style="white-space:pre-wrap;padding:8px 12px;color:var(--thinking-text);line-height:1.6;font-family:inherit;margin:0;font-size:11px;max-height:200px;overflow-y:auto;"></pre>
         </details>
       </div>
     </div>
@@ -1212,7 +1242,7 @@ function renderMyTaskCard(t) {
   const statusBadge = t.last_status ? `<span class="badge ${statusColor(t.last_status)}">${statusLabel(t.last_status)}</span>` : '';
   const typeBadge = isOnce
     ? '<span class="badge" style="background:#e9d8fd;color:#6b46c1;">単発</span>'
-    : '<span class="badge" style="background:#bee3f8;color:#2b6cb0;">定期</span>';
+    : '<span class="badge" style="background:var(--badge-blue-bg);color:var(--badge-blue-text);">定期</span>';
   const enabledBadge = t.enabled
     ? '<span class="badge badge-green">▶ 有効</span>'
     : `<span class="badge badge-gray">${isOnce && t.last_status === 'done' ? '✓ 実行済' : '⏸ 停止中'}</span>`;
@@ -1252,7 +1282,7 @@ function renderTeamTaskCard(t) {
   const isOnce = t.task_type === 'once';
   const typeBadge = isOnce
     ? '<span class="badge" style="background:#e9d8fd;color:#6b46c1;">単発</span>'
-    : '<span class="badge" style="background:#bee3f8;color:#2b6cb0;">定期</span>';
+    : '<span class="badge" style="background:var(--badge-blue-bg);color:var(--badge-blue-text);">定期</span>';
   const ownerLabel = t.owner_name || (t.owner_email ? t.owner_email.split('@')[0] : '');
   const modelLabel = modelDisplayName(t.model);
   const scheduleMeta = isOnce
@@ -1493,7 +1523,7 @@ function toggleSkillThinking() {
   } else {
     btn.style.cssText = btn.style.cssText.replace(/;?border-color[^;]+;?/g,'').replace(/;?color[^;]+;?/g,'').replace(/;?background[^;]+;?/g,'');
     btn.textContent = '🧠 拡張思考モード';
-    btn.style.cssText = 'font-size:11px;border:1px solid var(--border);color:var(--text-light);background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;';
+    btn.style.cssText = 'font-size:11px;border:1px solid var(--border);color:var(--text-light);background:var(--panel-bg);border-radius:6px;padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;';
   }
 }
 
@@ -2216,7 +2246,7 @@ async function loadConnectors() {
   try { data = await apiFetch('/api/connectors/status'); } catch(e) { el.innerHTML = `<p style="color:var(--danger);">読み込みエラー</p>`; return; }
 
   const badge = (ok) => ok
-    ? `<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:#276749;background:#c6f6d5;padding:3px 10px;border-radius:20px;">● 接続済み</span>`
+    ? `<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:var(--success-badge-text);background:var(--success-badge-bg);padding:3px 10px;border-radius:20px;">● 接続済み</span>`
     : `<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--text-light);background:var(--muted-bg);border:1px solid var(--border);padding:3px 10px;border-radius:20px;">○ 未接続</span>`;
 
   const personalCards = PERSONAL_CONNECTORS.map(c => {
@@ -2265,7 +2295,7 @@ async function loadConnectors() {
   const systemCards = SYSTEM_CONNECTORS.map(c => {
     const ok = data.system[c.key];
     const badge = ok
-      ? `<span style="font-size:11px;font-weight:700;color:#276749;background:#c6f6d5;padding:2px 9px;border-radius:20px;white-space:nowrap;">● 設定済み</span>`
+      ? `<span style="font-size:11px;font-weight:700;color:var(--success-badge-text);background:var(--success-badge-bg);padding:2px 9px;border-radius:20px;white-space:nowrap;">● 設定済み</span>`
       : `<span style="font-size:11px;color:var(--text-light);background:var(--muted-bg);border:1px solid var(--border);padding:2px 9px;border-radius:20px;white-space:nowrap;">─ 未設定</span>`;
 
     // Slack は admin が UI から Bot Token を設定できる
@@ -2274,7 +2304,7 @@ async function loadConnectors() {
         <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
           ${ok ? `
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-              <span style="font-size:12px;color:#276749;">✓ Bot Token 設定済み</span>
+              <span style="font-size:12px;color:var(--success-text);">✓ Bot Token 設定済み</span>
               <button class="btn btn-danger" onclick="slackDisconnect()" style="font-size:12px;">接続を解除する</button>
             </div>` : `
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -2620,7 +2650,7 @@ function renderHistory(runs) {
       ? Math.round((new Date(r.finished_at.replace(' ','T')+'Z') - new Date(r.started_at.replace(' ','T')+'Z')) / 1000) + '秒'
       : '─';
     const errorBox = r.status === 'error' && r.result
-      ? `<div style="background:#fff5f5;border:1px solid #feb2b2;border-radius:8px;padding:10px 14px;font-size:12px;color:#c53030;white-space:pre-wrap;word-break:break-word;margin-top:8px;">⚠️ ${esc(r.result)}</div>`
+      ? `<div style="background:var(--error-bg);border:1px solid var(--error-border);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--error-text);white-space:pre-wrap;word-break:break-word;margin-top:8px;">⚠️ ${esc(r.result)}</div>`
       : '';
     const resultHtml = r.status !== 'error' ? renderResultBody(r.result, r.id) : '';
     return `<div class="card">
@@ -2762,7 +2792,7 @@ async function recommendModel(context) {
     }
     if (resultEl) {
       const modelName = MODEL_OPTIONS.find(m => m.key === data.model)?.name || data.model;
-      resultEl.innerHTML = `<strong>🤖 おすすめ：</strong>${esc(modelName)}<br>${esc(data.reason)}<br><span style="color:#276749;font-weight:600;">${esc(data.cost_note)}</span>`;
+      resultEl.innerHTML = `<strong>🤖 おすすめ：</strong>${esc(modelName)}<br>${esc(data.reason)}<br><span style="color:var(--success-text);font-weight:600;">${esc(data.cost_note)}</span>`;
       resultEl.style.display = 'block';
     }
   } catch(e) {
@@ -3259,7 +3289,7 @@ async function startBatch() {
   const d = await r.json();
   const area = document.getElementById('batchResultArea');
   if (r.ok) {
-    area.innerHTML = `<div style="background:var(--success-bg);border:1px solid #9ae6b4;border-radius:7px;padding:10px 12px;font-size:12px;color:#276749;">
+    area.innerHTML = `<div style="background:var(--success-bg);border:1px solid #9ae6b4;border-radius:7px;padding:10px 12px;font-size:12px;color:var(--success-text);">
       ✅ バッチ送信完了<br>Batch ID: <code>${d.batch_id}</code><br>ジョブ数: ${d.skill_count}件<br>
       <span style="color:var(--text-light);">処理完了まで数分かかります。</span>
     </div>`;
@@ -3528,7 +3558,7 @@ async function loadWorkflows() {
             <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
               <span style="font-size:11px;background:var(--muted-bg);padding:2px 8px;border-radius:10px;color:var(--text-light);">${wf.steps.length}ステップ</span>
               <span style="font-size:11px;background:var(--muted-bg);padding:2px 8px;border-radius:10px;color:var(--text-light);">${wf.trigger_type === 'scheduled' ? 'スケジュール' : '手動'}</span>
-              ${!wf.enabled ? '<span style="font-size:11px;background:#fff5f5;color:var(--danger);padding:2px 8px;border-radius:10px;">停止中</span>' : ''}
+              ${!wf.enabled ? '<span style="font-size:11px;background:var(--error-bg);color:var(--danger);padding:2px 8px;border-radius:10px;">停止中</span>' : ''}
               ${wf.last_run_at ? `<span style="font-size:11px;color:var(--text-light);">最終: ${fmtDt(wf.last_run_at)}</span>` : ''}
             </div>
           </div>
