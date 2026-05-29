@@ -6104,16 +6104,16 @@ app.get('/api/drive/read/:id', async (req, res) => {
 
 // ── Gmail API ──
 function getGmailClientForUser(user) {
-  // メインログイントークン（user_drive_tokens）が gmail.send/readonly を持つため優先。
-  // 旧 user_gmail_tokens は gmail.readonly のみで送信不可なのでフォールバック扱い。
-  let tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
-  let tableName = 'user_drive_tokens';
+  // Gmail専用トークンを優先（gmail.readonly/gmail.send スコープを含む）。
+  // Drive トークンは Gmail スコープを持たないためフォールバック扱い。
+  let tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_gmail_tokens WHERE email=?').get(user.email);
+  let tableName = 'user_gmail_tokens';
   if (!tokenRow?.refresh_token) {
-    tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_gmail_tokens WHERE email=?').get(user.email);
-    tableName = 'user_gmail_tokens';
+    tokenRow = db.prepare('SELECT access_token, refresh_token FROM user_drive_tokens WHERE email=?').get(user.email);
+    tableName = 'user_drive_tokens';
   }
   if (!tokenRow?.refresh_token) {
-    throw new Error('Gmail未連携。一度ログアウトして再ログインし、Gmail権限を許可してください');
+    throw new Error('Gmail未連携。/manage の「コネクタ」タブからGmail連携を行ってください');
   }
   const oauth2 = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
