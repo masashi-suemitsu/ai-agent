@@ -32,6 +32,19 @@
   --card-hover: #f4f6fb;
   --muted-bg: #f7f8fc;
   --success-bg: #f0fff4;
+  --thinking-bg: #ebf4ff;
+  --thinking-border: #c3dafe;
+  --thinking-text: #2c5282;
+  --thinking-label: #3182ce;
+  --success-text: #276749;
+  --success-badge-bg: #c6f6d5;
+  --success-badge-text: #276749;
+  --error-bg: #fff5f5;
+  --error-border: #feb2b2;
+  --error-text: #c53030;
+  --warn-bg: #fff8e1;
+  --warn-border: #f1e2a8;
+  --warn-text: #7a5d00;
 }
 [data-theme="dark"] {
   --sidebar-bg: #12141f;
@@ -52,6 +65,19 @@
   --card-hover: #1e2133;
   --muted-bg: #252840;
   --success-bg: rgba(72,187,120,.15);
+  --thinking-bg: rgba(49,82,179,.15);
+  --thinking-border: rgba(99,137,255,.3);
+  --thinking-text: #90b3f8;
+  --thinking-label: #7fa7f5;
+  --success-text: #68d391;
+  --success-badge-bg: rgba(72,187,120,.15);
+  --success-badge-text: #68d391;
+  --error-bg: rgba(229,62,62,.12);
+  --error-border: rgba(229,62,62,.35);
+  --error-text: #fc8181;
+  --warn-bg: rgba(237,137,54,.12);
+  --warn-border: rgba(237,137,54,.3);
+  --warn-text: #f6ad55;
 }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; background: var(--chat-bg); color: var(--text); }
 
@@ -824,7 +850,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
           <button class="example-btn" onclick="setExample(this.dataset.text)" data-text="Gmailの受信トレイから過去24時間以内に私のメールアドレス宛に届いたメールを一覧で教えてください"><span class="ex-icon">📧</span>24時間以内の受信メールを一覧で</button>
           <button class="example-btn" onclick="setExample(this.dataset.text)" data-text="hotprofile_business_cardsから過去1か月以内に登録された名刺を一覧で教えてください"><span class="ex-icon">🪪</span>1か月以内に登録した名刺を出して</button>
         </div>
-        <a href="/feedback" style="display:inline-flex;align-items:center;gap:8px;margin-top:24px;padding:10px 18px;background:#fff8e1;border:1px solid #f1e2a8;border-radius:10px;color:#7a5d00;text-decoration:none;font-size:13px;font-weight:600;transition:all .15s;" onmouseover="this.style.background='#fef3c7';this.style.borderColor='#f59f00';" onmouseout="this.style.background='#fff8e1';this.style.borderColor='#f1e2a8';">
+        <a href="/feedback" style="display:inline-flex;align-items:center;gap:8px;margin-top:24px;padding:10px 18px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:10px;color:var(--warn-text);text-decoration:none;font-size:13px;font-weight:600;transition:all .15s;">
           💡 不具合・改善要望はこちら → 改善提案ボックス
         </a>
       </div>
@@ -841,7 +867,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
         <button class="model-btn" id="modelBtnHaiku" onclick="setModel('haiku')">⚡ Haiku<span class="model-hint">速い・低コスト</span></button>
         <button class="model-btn active" id="modelBtnSonnet" onclick="setModel('sonnet')">✦ Sonnet<span class="model-hint">高精度・標準コスト</span></button>
         <button id="thinkingToggle" onclick="toggleThinking()" title="拡張思考モード: AIが深く考えてから回答します（Sonnet以上）"
-          style="border:1.5px solid var(--border);border-radius:10px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--text-light);transition:all .15s;white-space:nowrap;">🧠 深く考える</button>
+          style="border:1.5px solid var(--border);border-radius:10px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;background:var(--panel-bg);color:var(--text-light);transition:all .15s;white-space:nowrap;">🧠 深く考える</button>
       </div>
       <div class="input-row">
         <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" style="display:none;" onchange="onFilesPicked(event)">
@@ -1006,7 +1032,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
       </label>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
-      <button onclick="closeSidebarShareModal()" style="padding:9px 18px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;font-size:14px;cursor:pointer;">キャンセル</button>
+      <button onclick="closeSidebarShareModal()" style="padding:9px 18px;border:1.5px solid var(--border);border-radius:8px;background:var(--panel-bg);color:var(--text);font-size:14px;cursor:pointer;">キャンセル</button>
       <button onclick="saveSidebarShareSettings()" style="padding:9px 18px;background:#5b6eff;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">保存する</button>
     </div>
   </div>
@@ -1166,7 +1192,7 @@ async function runParallel() {
   const panelId = 'parallel-result-' + Date.now();
   const panel = document.createElement('div');
   panel.id = panelId;
-  panel.style.cssText = 'margin:12px 0;border:1.5px solid var(--border);border-radius:14px;overflow:hidden;background:#fff;';
+  panel.style.cssText = 'margin:12px 0;border:1.5px solid var(--border);border-radius:14px;overflow:hidden;background:var(--panel-bg);';
   panel.innerHTML = `
     <div style="padding:12px 16px;background:var(--primary-light);border-bottom:1px solid var(--border);font-size:13px;font-weight:700;color:var(--primary);">📊 並列実行中 — ${skill_ids.length}件</div>
     <div id="${panelId}-items" style="padding:8px;display:flex;flex-direction:column;gap:6px;"></div>`;
@@ -1367,7 +1393,7 @@ async function loadSidebar() {
 
   html += `<div class="sidebar-section-header" style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
     <span>マイスキル</span>
-    <button onclick="toggleParallelMode()" id="parallelModeBtn" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;color:var(--text-light);font-weight:600;">📊 並列実行</button>
+    <button onclick="toggleParallelMode()" id="parallelModeBtn" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--panel-bg);cursor:pointer;color:var(--text-light);font-weight:600;">📊 並列実行</button>
   </div>`;
   if (mySkills.length === 0) {
     html += `<div class="sidebar-empty">保存したスキルがここに表示されます</div>`;
@@ -1890,8 +1916,8 @@ async function send() {
           if (!thinkingEl) {
             thinkingEl = document.createElement('details');
             thinkingEl.className = 'thinking-block';
-            thinkingEl.style.cssText = 'margin-bottom:8px;border:1px solid #c3dafe;border-radius:8px;background:#ebf4ff;font-size:12px;';
-            thinkingEl.innerHTML = '<summary style="padding:6px 10px;cursor:pointer;font-weight:600;color:#3182ce;">🧠 思考プロセス（クリックで展開）</summary><pre id="thinking-pre" style="white-space:pre-wrap;padding:8px 12px;color:#2c5282;line-height:1.6;font-family:inherit;margin:0;"></pre>';
+            thinkingEl.style.cssText = 'margin-bottom:8px;border:1px solid var(--thinking-border);border-radius:8px;background:var(--thinking-bg);font-size:12px;';
+            thinkingEl.innerHTML = '<summary style="padding:6px 10px;cursor:pointer;font-weight:600;color:var(--thinking-label);">🧠 思考プロセス（クリックで展開）</summary><pre id="thinking-pre" style="white-space:pre-wrap;padding:8px 12px;color:var(--thinking-text);line-height:1.6;font-family:inherit;margin:0;"></pre>';
             aiBubble.insertBefore(thinkingEl, aiBubble.firstChild);
           }
           const pre = thinkingEl.querySelector('#thinking-pre');
@@ -1967,9 +1993,9 @@ async function send() {
             }
             if (d.tool === 'register_task' && d.status === 'done' && d.task) {
               const card = document.createElement('div');
-              card.style.cssText = 'margin:8px 0 4px;padding:10px 14px;background:#ebf8ff;border:1px solid #90cdf4;border-radius:10px;font-size:13px;color:#2b6cb0;line-height:1.6;';
+              card.style.cssText = 'margin:8px 0 4px;padding:10px 14px;background:var(--thinking-bg);border:1px solid var(--thinking-border);border-radius:10px;font-size:13px;color:var(--thinking-text);line-height:1.6;';
               const typeLabel = d.task.task_type === 'once' ? '単発タスク' : '定期タスク';
-              card.innerHTML = `<strong>✅ ${typeLabel}を登録しました</strong><br><span style="color:#2d3748;">${esc(d.task.title)}</span><br><a href="/manage" style="font-size:11px;color:#3182ce;">/manage で確認・変更できます</a>`;
+              card.innerHTML = `<strong>✅ ${typeLabel}を登録しました</strong><br><span style="color:var(--text);">${esc(d.task.title)}</span><br><a href="/manage" style="font-size:11px;color:var(--thinking-label);">/manage で確認・変更できます</a>`;
               toolCallsEl.appendChild(card);
             }
           }
@@ -2192,7 +2218,7 @@ async function runSkill(id, title) {
         <div style="margin-bottom:8px;">
           <label style="font-size:12px;font-weight:600;color:var(--text);">{{${esc(v)}}}</label>
           <input type="text" id="runvar_${i}" placeholder="${esc(v)}を入力..."
-            style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;">
+            style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:var(--input-bg);color:var(--text);">
         </div>`).join('')}
     </div>`;
   } else {
@@ -2618,7 +2644,7 @@ applyTheme(localStorage.getItem('theme') || 'light');
 function showShortcutHelp() {
   const html = `
     <div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;" onclick="if(event.target===this)this.remove()">
-      <div style="background:#fff;border-radius:12px;padding:24px;max-width:480px;width:90%;color:#2d3748;">
+      <div style="background:var(--panel-bg);border-radius:12px;padding:24px;max-width:480px;width:90%;color:var(--text);">
         <h3 style="margin-bottom:14px;font-size:16px;">⌨ キーボードショートカット</h3>
         <table style="width:100%;font-size:13px;">
           <tr><td style="padding:6px 0;"><kbd>Enter</kbd></td><td>送信</td></tr>
@@ -2729,7 +2755,7 @@ async function loadDriveStatus() {
           <div style="font-size:14px;font-weight:700;color:#276749;margin-bottom:4px;">Google Drive連携済み</div>
           <div style="font-size:11px;color:#718096;margin-bottom:14px;">最終更新: ${esc(status.updatedAt || '')}</div>
           <div style="font-size:12px;color:#4a5568;margin-bottom:16px;line-height:1.6;">AIエージェントがファイルを参照できます</div>
-          <button onclick="disconnectDrive()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
+          <button onclick="disconnectDrive()" style="background:var(--error-bg);border:1px solid var(--error-border);color:var(--error-text);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
           ${privacyNoteHtml('compact')}
         </div>`;
     } else {
@@ -2776,7 +2802,7 @@ async function loadCalendarStatus() {
           <div style="font-size:14px;font-weight:700;color:#276749;margin-bottom:4px;">カレンダー連携済み</div>
           <div style="font-size:11px;color:#718096;margin-bottom:14px;">最終更新: ${esc(status.updatedAt || '')}</div>
           <div style="font-size:12px;color:#4a5568;margin-bottom:16px;line-height:1.6;">AIエージェントが予定を確認できます</div>
-          <button onclick="disconnectCalendar()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
+          <button onclick="disconnectCalendar()" style="background:var(--error-bg);border:1px solid var(--error-border);color:var(--error-text);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
           ${privacyNoteHtml('compact')}
         </div>`;
     } else {
@@ -2849,7 +2875,7 @@ async function loadGmailStatus() {
           <div style="font-size:14px;font-weight:700;color:#276749;margin-bottom:4px;">Gmail連携済み</div>
           <div style="font-size:11px;color:#718096;margin-bottom:14px;">最終更新: ${esc(status.updatedAt || '')}</div>
           <div style="font-size:12px;color:#4a5568;margin-bottom:16px;line-height:1.6;">AIエージェントがメールを参照できます</div>
-          <button onclick="disconnectGmail()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
+          <button onclick="disconnectGmail()" style="background:var(--error-bg);border:1px solid var(--error-border);color:var(--error-text);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
           ${privacyNoteHtml('compact')}
         </div>`;
     } else {
@@ -2896,7 +2922,7 @@ async function loadGithubPanelStatus() {
           <div style="font-size:14px;font-weight:700;color:#276749;margin-bottom:4px;">GitHub 連携済み</div>
           ${status.login ? `<div style="font-size:13px;color:#4a5568;margin-bottom:14px;">@${esc(status.login)}</div>` : ''}
           <div style="font-size:12px;color:#4a5568;margin-bottom:16px;line-height:1.6;">AIエージェントが Issue・PR・リポジトリを操作できます</div>
-          <button onclick="disconnectGithubPanel()" style="background:#fff;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
+          <button onclick="disconnectGithubPanel()" style="background:var(--error-bg);border:1px solid var(--error-border);color:var(--error-text);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">連携を解除する</button>
         </div>`;
     } else {
       statusArea.innerHTML = `
@@ -2970,7 +2996,7 @@ async function loadGmailMessages() {
           </div>
         </div>
         <div style="font-size:11px;color:var(--text-light);padding-left:24px;line-height:1.5;">${esc(m.snippet)}</div>
-        <div class="gmail-body-area" style="display:none;margin-top:8px;padding:10px;background:#f7fafc;border-radius:8px;font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word;"></div>
+        <div class="gmail-body-area" style="display:none;margin-top:8px;padding:10px;background:var(--muted-bg);border-radius:8px;font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word;"></div>
       </div>`;
     }).join('');
   } catch(e) { content.innerHTML = `<div class="drive-error">${esc(e.message)}</div>`; }
