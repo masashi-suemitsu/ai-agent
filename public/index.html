@@ -795,7 +795,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
 <body>
 <header>
   <div class="header-left">
-    <button class="mobile-sidebar-btn" id="spSidebarBtn" type="button" onclick="toggleSpSidebar()" title="履歴・スキル">☰</button>
+    <button class="mobile-sidebar-btn" id="spSidebarBtn" type="button" onclick="toggleSpSidebar()" title="履歴・ジョブ">☰</button>
     <a href="/" style="display:contents;text-decoration:none;cursor:pointer;" title="ホームに戻る"><div class="header-logo"><img src="/assets/logo.png" alt="タスクAIエージェント"></div>
     <h1 style="color:var(--text);">タスクAIエージェント</h1></a>
   </div>
@@ -872,7 +872,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
         <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" style="display:none;" onchange="onFilesPicked(event)">
         <button class="attach-btn" type="button" onclick="document.getElementById('fileInput').click()" title="画像・PDFを添付">📎</button>
         <div class="input-wrapper">
-          <textarea id="input" placeholder="どんな仕事を任せますか？（/ でスキル検索）" rows="1"
+          <textarea id="input" placeholder="どんな仕事を任せますか？（/ でジョブ検索）" rows="1"
             onkeydown="handleKey(event)" oninput="onInputChange(this)"></textarea>
           <div id="slashMenu" class="slash-menu" style="display:none;"></div>
         </div>
@@ -935,7 +935,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
     </div>
     <div class="rs-footer">
       <button class="rs-footer-btn" id="rs-skills-btn" onclick="toggleSkillsPanel()">
-        <span>⚡</span> スキル
+        <span>⚡</span> ジョブ
       </button>
       <button class="rs-footer-btn" id="rs-schedule-btn" onclick="toggleSchedule()">
         <span>⏰</span> タスク
@@ -1040,7 +1040,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
 <!-- ─ Run Confirm Modal ─ -->
 <div class="modal-overlay" id="runConfirmModal" onclick="if(event.target===this)closeRunConfirmModal()">
   <div class="modal-box">
-    <div class="modal-title">▶ スキルを実行</div>
+    <div class="modal-title">▶ ジョブを実行</div>
     <div class="modal-subtitle" id="runConfirmTitle" style="margin-bottom:16px;"></div>
     <!-- 変数入力エリア（{{変数名}} がある場合のみ表示） -->
     <div id="runVarsArea"></div>
@@ -1058,7 +1058,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
 <!-- ─ Skills Panel ─ -->
 <div class="schedule-panel" id="skillsPanel">
   <div class="schedule-panel-header">
-    <h3>⚡ スキル一覧</h3>
+    <h3>⚡ ジョブ一覧</h3>
     <button class="panel-close-btn" onclick="toggleSkillsPanel()">✕</button>
   </div>
   <div class="schedule-list" id="skillsPanelList">
@@ -1391,11 +1391,11 @@ async function loadSidebar() {
   }
 
   html += `<div class="sidebar-section-header" style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-    <span>マイスキル</span>
+    <span>マイジョブ</span>
     <button onclick="toggleParallelMode()" id="parallelModeBtn" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--panel-bg);cursor:pointer;color:var(--text-light);font-weight:600;">📊 並列実行</button>
   </div>`;
   if (mySkills.length === 0) {
-    html += `<div class="sidebar-empty">保存したスキルがここに表示されます</div>`;
+    html += `<div class="sidebar-empty">保存したジョブがここに表示されます</div>`;
   } else {
     if (pinnedMySkills.length > 0) {
       html += `<div class="pin-section-label">📌 ピン止め</div>`;
@@ -1409,7 +1409,7 @@ async function loadSidebar() {
 
   // チームのスキル
   if (teamSkills.length > 0) {
-    html += `<div class="sidebar-section-header" style="margin-top:8px;">チームのスキル</div>`;
+    html += `<div class="sidebar-section-header" style="margin-top:8px;">チームのジョブ</div>`;
     html += teamSkills.map(s => {
       const ownerLabel = s.owner_name || s.owner_email.split('@')[0];
       return `
@@ -1511,7 +1511,7 @@ function appendMessage(role, content, skillData) {
       <div class="skill-card-header"><span class="skill-card-icon">⚙️</span><span class="skill-card-title">${esc(skillData.title)}</span></div>
       <div class="skill-card-desc">${esc(skillData.description || '')}</div>
       <div class="skill-card-actions">
-        <button class="save-btn" onclick="saveSkill(this)">このスキルを保存</button>
+        <button class="save-btn" onclick="saveSkill(this)">このジョブを保存</button>
       </div>
     </div>`;
   }
@@ -1572,7 +1572,7 @@ function renderSlashMenu() {
   if (!menu || _slashFiltered.length === 0) { hideSlashMenu(); return; }
   _slashActive = true;
   menu.style.display = 'block';
-  menu.innerHTML = '<div class="slash-header">⚡ スキル選択 — Enter で実行 / Esc で閉じる</div>' +
+  menu.innerHTML = '<div class="slash-header">⚡ ジョブ選択 — Enter で実行 / Esc で閉じる</div>' +
     _slashFiltered.map((s, i) => {
       const icon = esc(s.icon || '⚡');
       // [BUG4 fix] s.prompt は存在しない → s.description/steps を使う
@@ -1803,7 +1803,7 @@ function clearMode() {
   fi.setAttribute('accept', 'image/jpeg,image/png,image/gif,image/webp,application/pdf');
   fi.multiple = true;
   const ta = document.getElementById('input');
-  ta.placeholder = 'どんな仕事を任せますか？（/ でスキル検索）';
+  ta.placeholder = 'どんな仕事を任せますか？（/ でジョブ検索）';
   const btn = document.getElementById('featureBtn');
   btn.textContent   = '🎯 機能を選ぶ';
   btn.style.borderColor = '';
@@ -2032,7 +2032,7 @@ async function send() {
               <div class="skill-card-header"><span class="skill-card-icon">⚙️</span><span class="skill-card-title">${esc(skill.title)}</span></div>
               <div class="skill-card-desc">${esc(skill.description || '')}</div>
               <div class="skill-card-actions">
-                <button class="save-btn" onclick="saveSkill(this)">このスキルを保存</button>
+                <button class="save-btn" onclick="saveSkill(this)">このジョブを保存</button>
               </div>`;
             aiBubble.appendChild(card);
           }
@@ -2099,7 +2099,7 @@ async function saveSkill(btn) {
 
 // ─ スキル削除 ─
 async function deleteSkill(id) {
-  if (!confirm('このスキルを削除しますか？')) return;
+  if (!confirm('このジョブを削除しますか？')) return;
   const r = await fetch(`/api/skills/${id}`, { method: 'DELETE' });
   if (!r.ok) { alert('削除に失敗しました'); return; }
   await loadSidebar();
@@ -3253,7 +3253,7 @@ async function loadSkillsPanel() {
   const el = document.getElementById('skillsPanelList');
   try {
     const skills = await fetch('/api/skills').then(r => r.json());
-    if (!skills.length) { el.innerHTML = '<div class="history-empty">スキルがありません</div>'; return; }
+    if (!skills.length) { el.innerHTML = '<div class="history-empty">ジョブがありません</div>'; return; }
     el.innerHTML = skills.map(s => `
       <div class="sched-card">
         <div class="sched-card-title">${esc(s.title)}</div>
@@ -3285,7 +3285,7 @@ async function loadScheduledTasks() {
   try {
     const tasks = await fetch('/api/scheduled-tasks').then(r => r.json());
     if (!tasks.length) {
-      list.innerHTML = '<div class="history-empty">タスクがありません<br><small style="opacity:.7;display:block;margin-top:6px;">スキル一覧の ⏰ ボタンから登録、またはチャットで「〇〇して」と依頼できます</small></div>';
+      list.innerHTML = '<div class="history-empty">タスクがありません<br><small style="opacity:.7;display:block;margin-top:6px;">ジョブ一覧の ⏰ ボタンから登録、またはチャットで「〇〇して」と依頼できます</small></div>';
       return;
     }
     list.innerHTML = tasks.map(t => {
