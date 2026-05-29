@@ -165,10 +165,12 @@ app.use((req, res, next) => {
 });
 
 // ── レート制限 ──
+// セッション認証済みならメールアドレスでカウント（NAT環境での誤爆・VPN回避を防ぐ）
+const userKeyGenerator = (req) => req.session?.user?.email || ipKeyGenerator(req);
 const chatRateLimit = rateLimit({
   windowMs: 60 * 1000,         // 1分間
   max: 30,                      // 最大30リクエスト
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: userKeyGenerator,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }
@@ -176,7 +178,7 @@ const chatRateLimit = rateLimit({
 const apiRateLimit = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: userKeyGenerator,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }
@@ -7339,13 +7341,17 @@ async function runWorkflow(wf, ownerEmail) {
       prompt += '\n\n## 前のステップの結果\n' + Object.entries(ctx).map(([k, v]) => `**${k}**: ${String(v).slice(0, 2000)}`).join('\n\n');
     }
 
-    const result = await runSkillBackground({
-      skill_name: `wf${wf.id}_${step.id}`,
-      skill_title: `[${wf.name}] ${step.label}`,
-      description: '',
-      steps: prompt,
-      model: wf.model || 'sonnet'
-    }, ownerEmail);
+    const STEP_TIMEOUT_MS = 8 * 60 * 1000; // 8分でタイムアウト
+    const result = await Promise.race([
+      runSkillBackground({
+        skill_name: `wf${wf.id}_${step.id}`,
+        skill_title: `[${wf.name}] ${step.label}`,
+        description: '',
+        steps: prompt,
+        model: wf.model || 'sonnet'
+      }, ownerEmail),
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`ステップ「${step.label}」がタイムアウトしました（8分）`)), STEP_TIMEOUT_MS))
+    ]).catch(e => ({ ok: false, error: e.message }));
 
     const stepResult = result.ok ? (result.resultBuffer || '').slice(0, 3000) : (result.error || 'エラー');
     entry.status = result.ok ? 'done' : 'error';
