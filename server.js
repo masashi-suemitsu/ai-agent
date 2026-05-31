@@ -133,10 +133,10 @@ const CORP_API_ALLOWED = {
 // ロール別利用可能ツール名セット
 const TOOLS_FOR_ROLE = {
   admin:   null, // null = 全ツール
-  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_workflow','list_workflows','run_workflow','create_meeting_minutes','check_server_health','check_job_posting','generate_weekly_report','generate_presentation','summarize_document','draft_email_reply','screen_candidate','bulk_register_kintone','github_api']),
-  eigyo:   new Set(['list_wp_posts','create_wp_post','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_workflow','list_workflows','run_workflow','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply','github_api']),
-  recruit: new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_workflow','list_workflows','run_workflow','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply','screen_candidate','github_api']),
-  user:    new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_workflow','list_workflows','run_workflow','create_meeting_minutes','generate_presentation','summarize_document','draft_email_reply','github_api'])
+  gyoumu:  new Set(['query_corp_db','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_onedrive_files','read_onedrive_file','search_onedrive_files','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_workflow','list_workflows','run_workflow','create_meeting_minutes','check_server_health','check_job_posting','generate_weekly_report','generate_presentation','summarize_document','draft_email_reply','screen_candidate','bulk_register_kintone','github_api']),
+  eigyo:   new Set(['list_wp_posts','create_wp_post','call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_onedrive_files','read_onedrive_file','search_onedrive_files','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_workflow','list_workflows','run_workflow','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply','github_api']),
+  recruit: new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_chatwork_message','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_onedrive_files','read_onedrive_file','search_onedrive_files','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_workflow','list_workflows','run_workflow','create_meeting_minutes','check_job_posting','generate_presentation','summarize_document','draft_email_reply','screen_candidate','github_api']),
+  user:    new Set(['call_oss_ai','compare_models','extract_receipt','mask_pii','review_contract','transcribe_audio','list_zoom_meetings','create_zoom_meeting','call_freee_api','call_mfcloud_api','call_salesforce_api','call_hubspot_api','call_lineworks_api','list_chatwork_rooms','get_chatwork_messages','send_system_notification','list_drive_files','search_drive_files','read_drive_file','update_sheet_range','append_sheet_rows','create_drive_file','export_data_csv','export_data_excel','generate_chart','generate_pdf_report','create_pptx','call_ms_graph','list_onedrive_files','read_onedrive_file','search_onedrive_files','list_slack_channels','get_slack_messages','send_slack_message','list_notion_databases','query_notion_database','create_notion_page','update_notion_page','list_calendar_events','create_calendar_event','list_gmail_messages','send_gmail','fetch_url','register_task','create_workflow','list_workflows','run_workflow','create_meeting_minutes','generate_presentation','summarize_document','draft_email_reply','github_api'])
 };
 
 app.set('trust proxy', 1);
@@ -330,6 +330,13 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS user_gmail_tokens (
+    email TEXT PRIMARY KEY,
+    access_token TEXT,
+    refresh_token TEXT,
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+  );
+
+  CREATE TABLE IF NOT EXISTS user_onedrive_tokens (
     email TEXT PRIMARY KEY,
     access_token TEXT,
     refresh_token TEXT,
@@ -1038,6 +1045,69 @@ app.get('/auth/drive/callback', async (req, res) => {
   } catch(e) {
     console.error('[drive/callback] error:', e.message);
     res.redirect('/?drive_error=1');
+  }
+});
+
+// ── OneDrive 個人OAuth連携 ──
+app.get('/auth/onedrive', requireAuth, (req, res) => {
+  const { MS_TENANT_ID, MS_CLIENT_ID } = process.env;
+  if (!MS_TENANT_ID || !MS_CLIENT_ID) return res.status(503).send('MS_TENANT_ID / MS_CLIENT_ID が未設定です');
+  const redirectUri = (process.env.CALLBACK_URL || '').replace('/auth/google/callback', '/auth/onedrive/callback');
+  const csrf = crypto.randomBytes(16).toString('hex');
+  req.session.oauth_csrf_onedrive = csrf;
+  const state = csrf + '.' + Buffer.from(req.user.email).toString('base64url');
+  const params = new URLSearchParams({
+    client_id: MS_CLIENT_ID,
+    response_type: 'code',
+    redirect_uri: redirectUri,
+    response_mode: 'query',
+    scope: 'Files.Read offline_access User.Read',
+    state
+  });
+  res.redirect(`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/authorize?${params}`);
+});
+
+app.get('/auth/onedrive/callback', async (req, res) => {
+  const { code, error, state } = req.query;
+  if (error || !code) return res.redirect('/?onedrive_error=1');
+  const [csrfToken, emailB64] = (state || '').split('.');
+  const expectedCsrf = req.session.oauth_csrf_onedrive;
+  if (!csrfToken || !expectedCsrf || csrfToken !== expectedCsrf) return res.redirect('/?onedrive_error=csrf');
+  delete req.session.oauth_csrf_onedrive;
+  let userEmail = req.user?.email;
+  if (!userEmail && emailB64) {
+    try { userEmail = Buffer.from(emailB64, 'base64url').toString('utf8'); } catch(e) {}
+  }
+  if (!userEmail || !userEmail.endsWith('@' + ALLOWED_DOMAIN)) return res.redirect('/login');
+  try {
+    const { MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET } = process.env;
+    const redirectUri = (process.env.CALLBACK_URL || '').replace('/auth/google/callback', '/auth/onedrive/callback');
+    const r = await fetch(`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: MS_CLIENT_ID,
+        client_secret: MS_CLIENT_SECRET,
+        redirect_uri: redirectUri,
+        code
+      }).toString()
+    });
+    if (!r.ok) throw new Error(`トークン取得失敗 (${r.status})`);
+    const tokens = await r.json();
+    db.prepare(`
+      INSERT INTO user_onedrive_tokens (email, access_token, refresh_token, updated_at)
+      VALUES (?, ?, ?, datetime('now','localtime'))
+      ON CONFLICT(email) DO UPDATE SET
+        access_token = excluded.access_token,
+        refresh_token = COALESCE(excluded.refresh_token, refresh_token),
+        updated_at = excluded.updated_at
+    `).run(userEmail, tokens.access_token, tokens.refresh_token || null);
+    audit(userEmail, '', 'onedrive.oauth.connect');
+    res.redirect('/?onedrive_connected=1');
+  } catch(e) {
+    console.error('[onedrive/callback] error:', e.message);
+    res.redirect('/?onedrive_error=1');
   }
 });
 
@@ -2055,6 +2125,41 @@ const TOOLS = [
         confirmed: { type: 'boolean', description: 'GET以外で必須' }
       },
       required: ['method', 'path']
+    }
+  },
+  {
+    name: 'list_onedrive_files',
+    description: 'OneDrive のフォルダ内ファイル・フォルダ一覧を取得する。ユーザー個人のOneDriveに接続済みであること。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        folder_path: { type: 'string', description: 'フォルダパス（省略またはスラッシュのみでルート）例: /Documents, /Documents/2024' },
+        limit: { type: 'number', description: '取得件数（最大100、既定25）' }
+      }
+    }
+  },
+  {
+    name: 'read_onedrive_file',
+    description: 'OneDrive のファイルを読み取る。テキスト・Word（.docx）・Excel（.xlsx）・PDF対応。ユーザー個人のOneDriveに接続済みであること。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        item_id: { type: 'string', description: 'ファイルID（list_onedrive_files で取得）' },
+        file_name: { type: 'string', description: 'ファイル名（参考情報・任意）' }
+      },
+      required: ['item_id']
+    }
+  },
+  {
+    name: 'search_onedrive_files',
+    description: 'OneDrive 内のファイルをキーワード検索する。ユーザー個人のOneDriveに接続済みであること。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '検索キーワード' },
+        limit: { type: 'number', description: '取得件数（最大50、既定20）' }
+      },
+      required: ['query']
     }
   },
   {
@@ -3378,6 +3483,84 @@ async function executeTool(name, input, user) {
       const data = text ? (() => { try { return JSON.parse(text); } catch { return text; } })() : null;
       if (!r.ok) throw new Error(`Graph error ${r.status}: ${data?.error?.message || text}`);
       return data;
+    }
+    case 'list_onedrive_files': {
+      const odToken = await getOneDriveAccessToken(user);
+      audit(user.email, user.name, 'tool.onedrive.list', { folder: input.folder_path });
+      const limit = Math.min(input.limit || 25, 100);
+      const folderPath = (input.folder_path || '/').replace(/\/$/, '') || '/';
+      const endpoint = folderPath === '/'
+        ? `/me/drive/root/children`
+        : `/me/drive/root:${folderPath}:/children`;
+      const r = await fetch(`https://graph.microsoft.com/v1.0${endpoint}?$top=${limit}&$select=id,name,size,lastModifiedDateTime,file,folder,webUrl`, {
+        headers: { 'Authorization': `Bearer ${odToken}` }
+      });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(`OneDrive error ${r.status}: ${e?.error?.message || r.statusText}`); }
+      const d = await r.json();
+      return (d.value || []).map(i => ({
+        id: i.id, name: i.name, type: i.folder ? 'folder' : 'file',
+        size: i.size, lastModified: i.lastModifiedDateTime, webUrl: i.webUrl
+      }));
+    }
+    case 'read_onedrive_file': {
+      const odToken = await getOneDriveAccessToken(user);
+      audit(user.email, user.name, 'tool.onedrive.read', { item_id: input.item_id });
+      // メタ情報取得
+      const metaR = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${input.item_id}?$select=id,name,size,file`, {
+        headers: { 'Authorization': `Bearer ${odToken}` }
+      });
+      if (!metaR.ok) { const e = await metaR.json().catch(() => ({})); throw new Error(`OneDrive error ${metaR.status}: ${e?.error?.message || metaR.statusText}`); }
+      const meta = await metaR.json();
+      const mime = meta.file?.mimeType || '';
+      // Word → テキスト変換エンドポイント
+      if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || (input.file_name || '').endsWith('.docx')) {
+        const convR = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${input.item_id}/content`, {
+          headers: { 'Authorization': `Bearer ${odToken}` }
+        });
+        if (!convR.ok) throw new Error(`OneDrive download error ${convR.status}`);
+        const buf = Buffer.from(await convR.arrayBuffer());
+        const mammoth = require('mammoth');
+        const result = await mammoth.extractRawText({ buffer: buf });
+        return { name: meta.name, type: 'docx', content: result.value.slice(0, 30000) };
+      }
+      // Excel → テキスト
+      if (mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || (input.file_name || '').endsWith('.xlsx')) {
+        const xlsR = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${input.item_id}/content`, {
+          headers: { 'Authorization': `Bearer ${odToken}` }
+        });
+        if (!xlsR.ok) throw new Error(`OneDrive download error ${xlsR.status}`);
+        const buf = Buffer.from(await xlsR.arrayBuffer());
+        const ExcelJS = require('exceljs');
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buf);
+        const lines = [];
+        wb.eachSheet(sheet => {
+          lines.push(`=== ${sheet.name} ===`);
+          sheet.eachRow(row => { lines.push(row.values.slice(1).join('\t')); });
+        });
+        return { name: meta.name, type: 'xlsx', content: lines.join('\n').slice(0, 30000) };
+      }
+      // テキスト系（プレーンテキスト・CSV等）
+      const dlR = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${input.item_id}/content`, {
+        headers: { 'Authorization': `Bearer ${odToken}` }
+      });
+      if (!dlR.ok) throw new Error(`OneDrive download error ${dlR.status}`);
+      const text = await dlR.text();
+      return { name: meta.name, type: mime || 'text', content: text.slice(0, 30000) };
+    }
+    case 'search_onedrive_files': {
+      const odToken = await getOneDriveAccessToken(user);
+      audit(user.email, user.name, 'tool.onedrive.search', { query: input.query });
+      const limit = Math.min(input.limit || 20, 50);
+      const r = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root/search(q='${encodeURIComponent(input.query)}')?$top=${limit}&$select=id,name,size,lastModifiedDateTime,file,folder,webUrl`, {
+        headers: { 'Authorization': `Bearer ${odToken}` }
+      });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(`OneDrive error ${r.status}: ${e?.error?.message || r.statusText}`); }
+      const d = await r.json();
+      return (d.value || []).map(i => ({
+        id: i.id, name: i.name, type: i.folder ? 'folder' : 'file',
+        size: i.size, lastModified: i.lastModifiedDateTime, webUrl: i.webUrl
+      }));
     }
     case 'list_slack_channels': {
       const slackTok = getSlackToken();
@@ -5803,6 +5986,37 @@ app.post('/api/wp/posts', async (req, res) => {
   } catch(e) { serverError(res, e); }
 });
 
+// ── OneDrive ユーザートークン管理 ──
+async function getOneDriveAccessToken(user) {
+  const row = db.prepare('SELECT access_token, refresh_token FROM user_onedrive_tokens WHERE email=?').get(user.email);
+  if (!row?.refresh_token) throw new Error('OneDrive が未接続です。管理画面 > コネクタ から接続してください');
+  const { MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET } = process.env;
+  if (!MS_TENANT_ID || !MS_CLIENT_ID || !MS_CLIENT_SECRET) throw new Error('MS_TENANT_ID / MS_CLIENT_ID / MS_CLIENT_SECRET が未設定です');
+  // まず現トークンを試行（簡易: 常にrefreshして確実性を高める）
+  const r = await fetch(`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: MS_CLIENT_ID,
+      client_secret: MS_CLIENT_SECRET,
+      refresh_token: row.refresh_token,
+      scope: 'Files.Read offline_access User.Read'
+    }).toString()
+  });
+  if (!r.ok) {
+    const err = await r.text();
+    throw new Error(`OneDrive トークン更新失敗 (${r.status}): ${err}`);
+  }
+  const tokens = await r.json();
+  db.prepare(`
+    UPDATE user_onedrive_tokens SET
+      access_token = ?, refresh_token = COALESCE(?, refresh_token), updated_at = datetime('now','localtime')
+    WHERE email = ?
+  `).run(tokens.access_token, tokens.refresh_token || null, user.email);
+  return tokens.access_token;
+}
+
 // ── Microsoft 365 Graph API ──
 let _msGraphToken = null;
 let _msGraphTokenExpiry = 0;
@@ -6047,6 +6261,13 @@ app.get('/api/mcp/status', (req, res) => {
   res.json({ servers });
 });
 
+// DELETE /api/onedrive/disconnect
+app.delete('/api/onedrive/disconnect', (req, res) => {
+  db.prepare('DELETE FROM user_onedrive_tokens WHERE email=?').run(req.user.email);
+  audit(req.user.email, req.user.name, 'onedrive.oauth.disconnect');
+  res.json({ ok: true });
+});
+
 // DELETE /api/drive/disconnect
 app.delete('/api/drive/disconnect', (req, res) => {
   db.prepare('DELETE FROM user_drive_tokens WHERE email=?').run(req.user.email);
@@ -6198,6 +6419,7 @@ app.get('/api/connectors/status', (req, res) => {
     calendar:  { connected: !!db.prepare('SELECT 1 FROM user_calendar_tokens WHERE email=?').get(email) },
     gmail:     { connected: !!db.prepare('SELECT 1 FROM user_gmail_tokens WHERE email=?').get(email) },
     chatwork:  { connected: !!db.prepare('SELECT 1 FROM user_chatwork_tokens WHERE email=?').get(email) },
+    onedrive:  { connected: !!db.prepare('SELECT 1 FROM user_onedrive_tokens WHERE email=?').get(email) },
     github:    (() => { const r = db.prepare('SELECT github_token, github_login FROM user_settings WHERE email=?').get(email); return { connected: !!(r?.github_token), login: r?.github_login || '' }; })(),
   };
   const e = process.env;
