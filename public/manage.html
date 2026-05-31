@@ -275,6 +275,7 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   .tab-btn { white-space: nowrap; width: auto; padding: 7px 12px; gap: 6px; }
   .tab-btn .nav-label { flex: none; }
   .sidebar-sep, .sidebar-label { display: none; }
+  .admin-tab-btn { display: none; }
   .content { width: 100%; }
   .filter-bar { flex-wrap: wrap; }
 }
@@ -2231,6 +2232,7 @@ const PERSONAL_CONNECTORS = [
   { key:'calendar', icon:'📅', name:'Google Calendar', desc:'予定の参照・作成・更新',                               authUrl:'/auth/calendar', discUrl:'/api/calendar/disconnect' },
   { key:'gmail',    icon:'✉️',  name:'Gmail',           desc:'メール受信トレイの参照・送信',                        authUrl:'/auth/gmail',    discUrl:'/api/gmail/disconnect' },
   { key:'chatwork', icon:'💬', name:'Chatwork',        desc:'ルーム一覧・メッセージ取得・送信',                    authUrl:'/auth/chatwork', discUrl:'/api/chatwork/disconnect' },
+  { key:'onedrive', icon:'☁️',  name:'OneDrive',        desc:'ファイル・フォルダ一覧取得・検索・読み取り（Word/Excel対応）', authUrl:'/auth/onedrive', discUrl:'/api/onedrive/disconnect' },
   { key:'github',   icon:'🐙', name:'GitHub',          desc:'リポジトリ・Issue・PR の参照と作成',                 authUrl:null,             discUrl:'/api/settings/github' },
 ];
 const SYSTEM_CONNECTORS = [
