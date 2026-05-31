@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>タスク管理 — AI エージェント</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -276,10 +276,25 @@ input:checked + .toggle-slider:before { transform: translateX(18px); }
   .tab-btn .nav-label { flex: none; }
   .sidebar-sep, .sidebar-label { display: none; }
   .content { width: 100%; }
+  .filter-bar { flex-wrap: wrap; }
 }
 @media (max-width: 600px) {
-  .page { padding: 16px 12px; }
-  .tab-btn { font-size: 12px; }
+  .page { padding: 12px 10px; }
+  header { padding: 0 12px; }
+  header h1 small { display: none; }
+  .header-logo { display: none; }
+  .tab-btn { font-size: 12px; padding: 7px 10px; }
+}
+@media (max-width: 480px) {
+  .tab-btn .nav-label { display: none; }
+  .tab-btn { padding: 8px; gap: 0; font-size: 17px; }
+  .tab-btn .nav-icon { font-size: 18px; }
+  .header-right .user-badge { display: none; }
+  .header-right .role-chip { display: none !important; }
+  .header-right a.back-link { font-size: 0; padding: 4px 8px; }
+  .header-right a.back-link::after { content: '💡'; font-size: 16px; }
+  .card { padding: 12px 14px; }
+  .modal-box { padding: 20px 16px; }
 }
 /* ── ワークフロービルダー ── */
 .wf-builder { display: flex; gap: 16px; height: calc(100vh - 200px); min-height: 500px; }
