@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>タスクAIエージェント — 仕事を任せる</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -79,7 +79,7 @@
   --warn-border: rgba(237,137,54,.3);
   --warn-text: #f6ad55;
 }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; background: var(--chat-bg); color: var(--text); }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; height: 100vh; height: 100dvh; display: flex; flex-direction: column; background: var(--chat-bg); color: var(--text); }
 
 /* ─ Header ─ */
 header {
@@ -707,7 +707,17 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
 .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 150; opacity: 0; transition: opacity .25s; }
 .sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
 
+/* ─ Mobile Bottom Nav ─ */
+.mobile-bottom-nav { display: none; }
+
 @media (max-width: 768px) {
+  /* Viewport: use dvh + safe-area for iOS */
+  body {
+    height: 100vh;
+    height: 100dvh;
+    padding-bottom: calc(56px + env(safe-area-inset-bottom));
+  }
+
   /* Header */
   header { padding: 0 10px; gap: 6px; }
   header h1 small { display: none; }
@@ -736,7 +746,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
     top: 52px;
     left: -260px;
     width: 256px;
-    height: calc(100vh - 52px);
+    height: calc(100dvh - 52px - 56px - env(safe-area-inset-bottom));
     z-index: 200;
     transition: left .25s ease;
     box-shadow: 2px 0 20px rgba(0,0,0,.15);
@@ -750,7 +760,7 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
     top: 52px;
     right: -260px;
     width: 256px;
-    height: calc(100vh - 52px);
+    height: calc(100dvh - 52px - 56px - env(safe-area-inset-bottom));
     z-index: 200;
     transition: right .25s ease;
     box-shadow: -2px 0 20px rgba(0,0,0,.15);
@@ -775,19 +785,62 @@ label.selected { border-color: var(--primary) !important; background: var(--prim
   .send-btn { padding: 10px 14px; font-size: 13px; }
   .attach-btn { width: 36px; height: 36px; font-size: 16px; }
 
-  /* Empty state */
-  .empty-state { padding: 24px 16px; }
-  .empty-state h2 { font-size: 17px; }
-  .examples { max-width: 100%; }
+  /* Empty state: compact so it fits without scrolling */
+  .empty-state { padding: 12px 14px; }
+  .empty-icon { width: 44px; height: 44px; font-size: 22px; margin-bottom: 10px; }
+  .empty-state h2 { font-size: 15px; margin-bottom: 4px; }
+  .empty-state p { font-size: 12px; line-height: 1.5; }
+  .examples { gap: 5px; margin-top: 10px; }
+  .example-btn { padding: 8px 12px; font-size: 12px; }
+  .empty-state > a { margin-top: 12px; padding: 8px 14px; font-size: 12px; }
 
   /* Feature menu popup full-width on mobile */
   .feature-menu-popup { width: calc(100vw - 24px); left: 0; right: 0; grid-template-columns: 1fr; }
 
-  /* Fixed panels full-width on mobile */
+  /* Fixed panels full-width on mobile, end above bottom nav */
   .cw-panel, .drive-panel, .history-panel, .schedule-panel {
     width: 100%; right: -100%;
+    bottom: calc(56px + env(safe-area-inset-bottom));
   }
   .cw-panel.open, .drive-panel.open, .history-panel.open, .schedule-panel.open { right: 0; }
+
+  /* Bottom navigation bar */
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--panel-bg);
+    border-top: 1px solid var(--border);
+    z-index: 98;
+    align-items: stretch;
+    box-shadow: 0 -2px 8px rgba(0,0,0,.06);
+  }
+  .mobile-bottom-nav button {
+    flex: 1;
+    background: none;
+    border: none;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    font-size: 9px;
+    color: var(--text-light);
+    cursor: pointer;
+    padding: 4px 0;
+    transition: color .15s, background .12s;
+    font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-bottom-nav button:last-child { border-right: none; }
+  .mobile-bottom-nav button:active { background: var(--primary-light); color: var(--primary); }
+  .mobile-bottom-nav button.active { color: var(--primary); }
+  .mobile-bottom-nav .nav-icon { font-size: 19px; line-height: 1.2; }
 }
 
 </style>
@@ -2617,6 +2670,9 @@ function closeAllPanels(except) {
 function syncBackdrop() {
   const anyOpen = ALL_PANELS.some(id => document.getElementById(id)?.classList.contains('open'));
   document.getElementById('panelBackdrop')?.classList.toggle('open', anyOpen);
+  // sync mobile bottom nav active states
+  [['schedulePanel','mbnTask'],['skillsPanel','mbnJob'],['workflowsPanel','mbnWorkflow'],['historyPanel','mbnHistory']]
+    .forEach(([pid, bid]) => document.getElementById(bid)?.classList.toggle('active', !!document.getElementById(pid)?.classList.contains('open')));
 }
 
 // ─ モバイル サイドバー ─
@@ -3484,5 +3540,21 @@ function formatDate(dt) {
   return `${m}/${day}`;
 }
 </script>
+
+<!-- ─ Mobile Bottom Nav ─ -->
+<nav class="mobile-bottom-nav" id="mobileBottomNav">
+  <button onclick="toggleSchedule()" id="mbnTask">
+    <span class="nav-icon">⏰</span>タスク
+  </button>
+  <button onclick="toggleSkillsPanel()" id="mbnJob">
+    <span class="nav-icon">⚡</span>ジョブ
+  </button>
+  <button onclick="toggleWorkflowsPanel()" id="mbnWorkflow">
+    <span class="nav-icon">🔀</span>ワークフロー
+  </button>
+  <button onclick="toggleHistory()" id="mbnHistory">
+    <span class="nav-icon">📋</span>実行履歴
+  </button>
+</nav>
 </body>
 </html>
